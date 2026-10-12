@@ -1,0 +1,28 @@
+flowchart TB
+  classDef svc fill:#a5d8ff
+  classDef db fill:#b2f2bb
+  classDef bus fill:#ffec99
+  classDef ext fill:#ffc9c9
+  classDef cache fill:#d0bfff
+  classDef grey fill:#e9ecef
+  ILB["Internal load balancer<br/>GKE Gateway"]:::grey
+  subgraph GKE["GKE Standard: regional, private nodes, Dataplane V2"]
+    direction TB
+    API["kairos-api<br/>HPA on CPU"]:::svc
+    W["kairos-watcher<br/>3 replicas"]:::svc
+    E["kairos-executor<br/>KEDA on lag"]:::svc
+    S["kairos-state<br/>KEDA on lag"]:::svc
+    PGB["PgBouncer<br/>per cell"]:::grey
+  end
+  subgraph MANAGED["Managed services, private access"]
+    direction TB
+    SQL[("Cloud SQL PostgreSQL<br/>control + N cells<br/>HA, read replicas")]:::db
+    MK[["Managed Service<br/>for Apache Kafka"]]:::bus
+    RD[("Memorystore for<br/>Redis Cluster")]:::cache
+    SEC["Secret Manager,<br/>Cloud KMS"]:::grey
+    OBS["Managed Prometheus,<br/>Cloud Logging, Cloud Trace"]:::grey
+  end
+  TGT["Internal target services<br/>same VPC or peered"]:::ext
+  ILB --> GKE
+  GKE --> MANAGED
+  GKE -->|"HTTPS, egress allowlist"| TGT
