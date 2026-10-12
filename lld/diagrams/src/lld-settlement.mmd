@@ -1,0 +1,44 @@
+classDiagram
+  class SettlementPlanner {
+    +plan(locked, results, policies, now) SettlementPlan
+  }
+  class SettlementPlan {
+    +deletes
+    +delays
+    +history
+    +deadLetters
+    +outputs
+    +dagUpdates
+    +health
+    +jobStatus
+    +workflowRuns
+    +outbox
+  }
+  class Decision {
+    <<sealed>>
+  }
+  Decision <|-- Succeed
+  Decision <|-- RetryAt
+  Decision <|-- Defer
+  Decision <|-- DeadLetter
+  Decision <|-- Cancel
+  Decision <|-- Skip
+  Decision <|-- RequeueInfra
+  class RetryPolicy {
+    +maxRetries
+    +strategy
+    +maxDelay
+    +maxAge
+    +nextAttemptAt(attempt, now, retryAfter, seriesStart)
+  }
+  class BackoffStrategy {
+    <<sealed interface>>
+    +delay(attempt, rnd)
+  }
+  BackoffStrategy <|-- ExponentialJitter
+  BackoffStrategy <|-- FullJitter
+  BackoffStrategy <|-- Fixed
+  SettlementPlanner --> Decision
+  SettlementPlanner --> RetryPolicy
+  SettlementPlanner --> SettlementPlan
+  RetryPolicy --> BackoffStrategy

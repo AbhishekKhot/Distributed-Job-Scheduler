@@ -1,0 +1,22 @@
+flowchart TB
+  classDef svc fill:#a5d8ff
+  classDef db fill:#b2f2bb
+  classDef bus fill:#ffec99
+  classDef ext fill:#ffc9c9
+  classDef cache fill:#d0bfff
+  classDef grey fill:#e9ecef
+  subgraph IN["Intake, per poll batch"]
+    direction LR
+    C["Tier consumers x3<br/>poll + offset tracker"]:::bus --> LK["RunLockService<br/>Redis, pipelined"]:::cache --> CL["ClaimService<br/>one statement per cell"]:::db
+  end
+  subgraph PREP["Prepare, per run"]
+    direction LR
+    P1["Prepare<br/>endpoint, status, lateness"]:::svc --> P2["Render<br/>templates + DAG inputs"]:::svc --> P3["Authorize"]:::svc --> P4["Endpoint permit<br/>bulkhead, rate, breaker"]:::svc
+  end
+  subgraph CALL["Call and report"]
+    direction LR
+    G["SendGuard"]:::svc --> SM["Sent marker"]:::cache --> H["HTTPS call<br/>validating resolver"]:::ext --> P6["Classify, read body,<br/>extract + seal outputs"]:::svc --> RP["ResultPublisher"]:::bus --> UL["Release lock,<br/>complete offset"]:::cache
+    CAN["CancelListener"]:::grey -.->|"abort"| H
+  end
+  IN -->|"claimed runs"| PREP
+  PREP --> CALL

@@ -1,0 +1,17 @@
+flowchart TB
+  classDef svc fill:#a5d8ff
+  classDef db fill:#b2f2bb
+  classDef bus fill:#ffec99
+  classDef ext fill:#ffc9c9
+  classDef cache fill:#d0bfff
+  classDef grey fill:#e9ecef
+  subgraph ALO["At least once: transactional outbox"]
+    direction LR
+    SC["state change<br/>run becomes QUEUED"]:::db --- OB["outbox row<br/>same transaction"]:::db
+    OB --> RL["outbox relay<br/>publish, wait for ack,<br/>then delete the row"]:::svc --> K[["Kafka"]]:::bus
+  end
+  subgraph NOD["No duplicate execution: four gates before the call"]
+    direction LR
+    G1["1. Redis run lock<br/>fence-aware"]:::cache --> G2["2. fenced claim<br/>in the cell DB"]:::db --> G3["3. send-time guard<br/>enough lease left"]:::svc --> G4["4. sent marker<br/>in Redis"]:::cache --> H["HTTPS call<br/>Idempotency-Key = run id"]:::ext
+  end
+  ALO --> NOD

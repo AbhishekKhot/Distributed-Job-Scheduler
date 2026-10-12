@@ -1,0 +1,16 @@
+stateDiagram-v2
+  [*] --> WAITING: workflow task
+  [*] --> QUEUED: fire, run-now, redrive
+  WAITING --> QUEUED: upstream tasks succeeded
+  WAITING --> UPSTREAM_FAILED: upstream failed
+  QUEUED --> RUNNING: lock and claim
+  QUEUED --> SKIPPED: too late
+  RUNNING --> SUCCEEDED
+  RUNNING --> DELAYED: retryable failure
+  DELAYED --> QUEUED: due again
+  RUNNING --> QUEUED: lease expired, not sent
+  RUNNING --> DEAD_LETTERED: retries exhausted
+  SUCCEEDED --> [*]
+  DEAD_LETTERED --> [*]
+  SKIPPED --> [*]
+  UPSTREAM_FAILED --> [*]
