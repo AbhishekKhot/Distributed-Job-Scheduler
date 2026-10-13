@@ -4,10 +4,10 @@ Back to [LLD index](../LLD.md).
 
 ## 1. Conventions
 
-- **Databases.** One control database and N cell databases (HLD §6). Both use schema `scheduler`. Every object is created by the `sched_migrator` role through Flyway.
+- **Databases.** One control database and N cell databases (HLD §7). Both use schema `scheduler`. Every object is created by the `sched_migrator` role through Flyway.
 - **Identifiers.** UUIDv7 (time-ordered) is generated in the application by `Uuid7`, so a batch knows its run ids before it inserts them.
-  - **Shard-embedded ids:** `run_id`, `workflow_run_id`, `dlq_id` and `outbox_id` carry the `shard_id` in the low 8 bits of `rand_b`, leaving 66 random bits. `Shards.of(id)` routes any of them to its cell with no lookup.
-  - Job and workflow ids are plain UUIDv7, and their shard is `murmur3(id) mod 256`.
+  - **Shard-embedded ids:** `job_id`, `workflow_id`, `run_id`, `workflow_run_id`, `dlq_id` and `outbox_id` carry the `shard_id` in the low 8 bits of `rand_b`, leaving 66 random bits. `Shards.of(id)` routes any of them to its cell with no lookup.
+  - A job's or workflow's shard is `murmur3(tenant_id ‖ name) mod 256`, computed before its id is generated. Names are immutable after creation, so `UNIQUE (tenant_id, name)` in one cell is a global guarantee, and a retried create with the same `Idempotency-Key` always reaches the same cell.
   - Control-plane tables default to `uuidv7()` for rows the API creates.
 - **Timestamps.** `timestamptz`, always UTC. **Database `now()` is the clock** for every scheduling comparison.
 - **Enumerations.** Hot and huge tables store `smallint` codes (fixed in §2, mirrored by Java enums with explicit codes and tested both ways). Control tables use `text` with `CHECK` constraints.
@@ -49,7 +49,7 @@ Back to [LLD index](../LLD.md).
 
 ## 3. DDL
 
-Two Flyway locations, applied to different databases (HLD §6):
+Two Flyway locations, applied to different databases (HLD §7):
 
 | Location | Applied to | Contents |
 |---|---|---|
@@ -70,17 +70,118 @@ CREATE OR REPLACE FUNCTION ts(micros bigint) RETURNS timestamptz
   LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
   RETURN timestamptz 'epoch' + micros * interval '1 microsecond';
 
--- ===================== tenants, keys, crypto =====================
-CREATE TABLE tenants (
-  tenant_id        uuid PRIMARY KEY DEFAULT uuidv7(),
-  name             text NOT NULL UNIQUE CHECK (name ~ '^[a-z][a-z0-9-]{2,62}$'),
+-- ===================== accounts =====================
+CREATE TABLE users (
+  user_id          uuid PRIMARY KEY DEFAULT uuidv7(),
+  email            text NOT NULL CHECK (length(email) <= 254 AND email = lower(email)),
+  display_name     text NOT NULL CHECK (length(display_name) BETWEEN 1 AND 100),
+  password_hash    text NOT NULL CHECK (password_hash LIKE '$argon2id$%'),   -- PHC string: params + salt + hash
+  email_verified_at timestamptz,
   status           text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','DISABLED')),
-  quotas           jsonb NOT NULL,          -- {maxJobs, maxExecPerSec, maxInflight, backfillPerSec, redrivePerSec}
-  egress_policy    jsonb NOT NULL,          -- {hosts:[], suffixes:[], cidrs:[], ports:[443,8443]}
-  retry_default    jsonb,                   -- tenant-level RetryPolicy override (nullable)
+  platform_role    text CHECK (platform_role IN ('PLATFORM_ADMIN')),
+  failed_logins    smallint NOT NULL DEFAULT 0,
+  locked_until     timestamptz,
+  password_changed_at timestamptz NOT NULL DEFAULT now(),
+  last_login_at    timestamptz,
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX users_email ON users (email);
+
+-- refresh-token sessions; every refresh rotates the token inside the same family
+CREATE TABLE user_sessions (
+  session_id       uuid PRIMARY KEY DEFAULT uuidv7(),
+  user_id          uuid NOT NULL REFERENCES users,
+  family_id        uuid NOT NULL,
+  token_hash       bytea NOT NULL UNIQUE CHECK (octet_length(token_hash) = 32),   -- SHA-256 of the refresh token
+  status           text NOT NULL CHECK (status IN ('ACTIVE','ROTATED','REVOKED')),
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  expires_at       timestamptz NOT NULL,
+  last_used_at     timestamptz,
+  user_agent       text CHECK (length(user_agent) <= 256),
+  ip_address       inet
+);
+CREATE INDEX user_sessions_user   ON user_sessions (user_id) WHERE status = 'ACTIVE';
+CREATE INDEX user_sessions_family ON user_sessions (family_id);
+CREATE INDEX user_sessions_expiry ON user_sessions (expires_at);
+
+-- single-use tokens for email verification and password reset (only hashes are stored)
+CREATE TABLE auth_tokens (
+  token_hash       bytea PRIMARY KEY CHECK (octet_length(token_hash) = 32),
+  user_id          uuid NOT NULL REFERENCES users,
+  purpose          text NOT NULL CHECK (purpose IN ('VERIFY_EMAIL','RESET_PASSWORD')),
+  expires_at       timestamptz NOT NULL,
+  used_at          timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX auth_tokens_user ON auth_tokens (user_id, purpose);
+
+-- token-signing keys and other platform-wide keysets, sealed by the KMS key
+CREATE TABLE platform_keysets (
+  purpose          text PRIMARY KEY CHECK (purpose IN ('JWT_SIGNING')),
+  encrypted_keyset bytea NOT NULL,
+  kek_uri          text NOT NULL,
+  rotated_at       timestamptz NOT NULL DEFAULT now()
+);
+
+-- ===================== organizations (tenants), members, invitations =====================
+CREATE TABLE tenants (
+  tenant_id        uuid PRIMARY KEY DEFAULT uuidv7(),
+  slug             text NOT NULL UNIQUE CHECK (slug ~ '^[a-z][a-z0-9-]{2,62}$'),
+  display_name     text NOT NULL CHECK (length(display_name) BETWEEN 1 AND 100),
+  status           text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','DELETED')),
+  quotas           jsonb NOT NULL,          -- {maxJobs, maxExecPerSec, maxInflight, maxWorkflowTasks, backfillPerSec, redrivePerSec}
+  retry_default    jsonb,                   -- organization-level RetryPolicy override (nullable)
+  created_by       uuid NOT NULL REFERENCES users,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  deleted_at       timestamptz
+);
+
+CREATE TABLE memberships (
+  tenant_id        uuid NOT NULL REFERENCES tenants,
+  user_id          uuid NOT NULL REFERENCES users,
+  role             text NOT NULL CHECK (role IN ('OWNER','ADMIN','DEVELOPER','OPERATOR','VIEWER')),
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, user_id)
+);
+CREATE INDEX memberships_user ON memberships (user_id);
+
+CREATE TABLE invitations (
+  invitation_id    uuid PRIMARY KEY DEFAULT uuidv7(),
+  tenant_id        uuid NOT NULL REFERENCES tenants,
+  email            text NOT NULL CHECK (length(email) <= 254 AND email = lower(email)),
+  role             text NOT NULL CHECK (role IN ('ADMIN','DEVELOPER','OPERATOR','VIEWER')),
+  token_hash       bytea NOT NULL UNIQUE CHECK (octet_length(token_hash) = 32),
+  status           text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','ACCEPTED','REVOKED','EXPIRED')),
+  invited_by       uuid NOT NULL REFERENCES users,
+  accepted_by      uuid REFERENCES users,
+  expires_at       timestamptz NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX invitations_pending ON invitations (tenant_id, email) WHERE status = 'PENDING';
+
+-- what an organization's jobs may call; only ACTIVE rules are enforced
+CREATE TABLE egress_rules (
+  rule_id          uuid PRIMARY KEY DEFAULT uuidv7(),
+  tenant_id        uuid NOT NULL REFERENCES tenants,
+  rule_type        text NOT NULL CHECK (rule_type IN ('HOST','SUFFIX','CIDR')),
+  value            text NOT NULL CHECK (length(value) BETWEEN 1 AND 253),
+  ports            int[] NOT NULL DEFAULT '{443}' CHECK (cardinality(ports) BETWEEN 1 AND 8),
+  status           text NOT NULL CHECK (status IN ('PENDING_VERIFICATION','PENDING_APPROVAL','ACTIVE','REJECTED','REVOKED')),
+  verification_token text,                  -- HOST rules: public challenge served at /.well-known/kairos-verification
+  verified_at      timestamptz,
+  reviewed_by      uuid REFERENCES users,   -- platform admin for SUFFIX and CIDR rules
+  review_note      text CHECK (length(review_note) <= 500),
+  created_by       uuid NOT NULL REFERENCES users,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX egress_rules_open   ON egress_rules (tenant_id, rule_type, value)
+  WHERE status IN ('PENDING_VERIFICATION','PENDING_APPROVAL','ACTIVE');
+CREATE INDEX egress_rules_review ON egress_rules (created_at) WHERE status = 'PENDING_APPROVAL';
+CREATE INDEX egress_rules_active ON egress_rules (tenant_id) WHERE status = 'ACTIVE';
 
 CREATE TABLE api_keys (
   key_id           text PRIMARY KEY CHECK (key_id ~ '^[A-Za-z0-9]{16}$'),
@@ -89,7 +190,7 @@ CREATE TABLE api_keys (
   secret_hash      bytea NOT NULL CHECK (octet_length(secret_hash) = 32),  -- HMAC-SHA256(pepper, secret)
   pepper_version   smallint NOT NULL,
   scopes           text[] NOT NULL CHECK (cardinality(scopes) BETWEEN 1 AND 16),
-  created_by       text NOT NULL,           -- key_id of creator or 'platform-admin'
+  created_by       uuid NOT NULL REFERENCES users,   -- the member who created it; scopes never exceed their permissions
   created_at       timestamptz NOT NULL DEFAULT now(),
   expires_at       timestamptz,
   revoked_at       timestamptz,
@@ -257,6 +358,19 @@ CREATE TABLE workflow_versions (
   created_at       timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (workflow_id, version)
 );
+
+-- ===================== idempotent creates for cell-owned resources =====================
+CREATE TABLE IF NOT EXISTS api_idempotency (   -- same shape as the control table; IF NOT EXISTS for single-database dev mode
+  tenant_id        uuid NOT NULL,
+  idem_key         text NOT NULL CHECK (idem_key ~ '^[A-Za-z0-9_-]{1,64}$'),
+  request_hash     bytea NOT NULL,               -- SHA-256 of method + path + canonical body
+  status           smallint NOT NULL,            -- 1 IN_PROGRESS, 2 DONE
+  http_status      smallint,
+  response_body    jsonb,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, idem_key)
+);
+CREATE INDEX IF NOT EXISTS api_idempotency_created ON api_idempotency (created_at);
 
 -- ===================== schedules (narrow, hot) =====================
 CREATE TABLE schedules (
@@ -520,11 +634,11 @@ Passwords are never in migrations. Roles are created `NOLOGIN` here. Login and p
 | Role | Used by | Privileges (summary) | Session settings |
 |---|---|---|---|
 | `sched_migrator` | Flyway job only | Owns the schema (DDL) | — |
-| `sched_maintainer` | `maintenance` CronJob | Member of `sched_migrator` for partition DDL; `DELETE` on purge tables | `statement_timeout = 10min` |
-| `sched_api` | api | <ul><li>CRUD on definitions, keys, secrets, idempotency, DLQ</li><li>`INSERT/UPDATE/DELETE` on `run_inflight` (immediate runs, cancel, redrive)</li><li>`INSERT`, `DELETE` on `outbox` (immediate runs, cancels)</li><li>`SELECT` on history and stats</li><li>`INSERT` on audit and history</li></ul> | `statement_timeout = 5s` |
-| `sched_watcher` | watcher | <ul><li>`SELECT/UPDATE/DELETE` on `schedules`</li><li>`SELECT/INSERT/UPDATE/DELETE` on `run_inflight`</li><li>`SELECT/INSERT/DELETE` on `outbox` (fire, delayed, recovery, and the **relay**)</li><li>`INSERT` on `workflow_runs`, `run_history`, `dead_letters`, `audit_log`</li><li>`UPDATE` on `shard_leases`, `api_endpoints(status, status_reason, status_changed_at)`, `workflow_runs`</li><li>`SELECT` on definitions and stats</li></ul> | `statement_timeout = 5s` |
-| `sched_executor` | executor | <ul><li>`SELECT` on `run_inflight`</li><li>**Column-level** `UPDATE (state, owner_node, lease_until, fence)` on `run_inflight`</li><li>`SELECT` on `task_outputs`, `api_endpoint_versions`, `api_endpoints(endpoint_id, status, version)`, `tenants`, `tenant_keysets`, `tenant_secrets`, `tenant_ca_bundles`</li><li>`INSERT/UPDATE` on its own `scheduler_nodes` row</li></ul> | `statement_timeout = 2s` |
-| `sched_state` | state | <ul><li>`SELECT/UPDATE/DELETE` on `run_inflight`</li><li>`INSERT` on `outbox`, `run_history`, `dead_letters`, `task_outputs`, `audit_log`</li><li>`ALL` on `job_health` and stats tables</li><li>`UPDATE (status, updated_at)` on `jobs`; `UPDATE (status)` on `schedules`</li><li>`UPDATE` on `workflow_runs`</li></ul> | `statement_timeout = 10s` |
+| `sched_maintainer` | kairos-maintenance (CronJob) | Member of `sched_migrator` for partition DDL; `DELETE` on purge tables | `statement_timeout = 10min` |
+| `sched_api` | kairos-api | <ul><li>CRUD on accounts, sessions, auth tokens, organizations, memberships, invitations, egress rules, keys, secrets, endpoints and idempotency records</li><li>CRUD on definitions and DLQ entries in the cells</li><li>`INSERT/UPDATE/DELETE` on `run_inflight` (immediate runs, cancel, redrive)</li><li>`INSERT`, `DELETE` on `outbox` (immediate runs, cancels)</li><li>`SELECT` on history and stats</li><li>`INSERT` on audit and history</li></ul> | `statement_timeout = 5s` |
+| `sched_watcher` | kairos-watcher | <ul><li>`UPDATE (status, verified_at, updated_at)` on `egress_rules` (ownership verification)</li><li>`SELECT/UPDATE/DELETE` on `schedules`</li><li>`SELECT/INSERT/UPDATE/DELETE` on `run_inflight`</li><li>`SELECT/INSERT/DELETE` on `outbox` (fire, delayed, recovery, and the **relay**)</li><li>`INSERT` on `workflow_runs`, `run_history`, `dead_letters`, `audit_log`</li><li>`UPDATE` on `shard_leases`, `api_endpoints(status, status_reason, status_changed_at)`, `workflow_runs`</li><li>`SELECT` on definitions and stats</li></ul> | `statement_timeout = 5s` |
+| `sched_executor` | kairos-executor | <ul><li>`SELECT` on `egress_rules` and `tenants` (status)</li><li>`SELECT` on `run_inflight`</li><li>**Column-level** `UPDATE (state, owner_node, lease_until, fence)` on `run_inflight`</li><li>`SELECT` on `task_outputs`, `api_endpoint_versions`, `api_endpoints(endpoint_id, status, version)`, `tenants`, `tenant_keysets`, `tenant_secrets`, `tenant_ca_bundles`</li><li>`INSERT/UPDATE` on its own `scheduler_nodes` row</li></ul> | `statement_timeout = 2s` |
+| `sched_state` | kairos-state | <ul><li>`SELECT/UPDATE/DELETE` on `run_inflight`</li><li>`INSERT` on `outbox`, `run_history`, `dead_letters`, `task_outputs`, `audit_log`</li><li>`ALL` on `job_health` and stats tables</li><li>`UPDATE (status, updated_at)` on `jobs`; `UPDATE (status)` on `schedules`</li><li>`UPDATE` on `workflow_runs`</li></ul> | `statement_timeout = 10s` |
 | `sched_bench` | bench-cli (test only) | `COPY` into definitions for fast seeding; `SELECT` on history | test environments only |
 
 All runtime roles also get `idle_in_transaction_session_timeout = 10s` and `lock_timeout = 2s` (set with `ALTER ROLE … SET`).
@@ -570,5 +684,8 @@ All runtime roles also get `idle_in_transaction_session_timeout = 10s` and `lock
 |---|---|
 | `dead_letters` | Resolved more than **7 days** ago. OPEN and ACKNOWLEDGED entries are never purged. |
 | `api_idempotency` | Older than 24h |
+| `user_sessions` | Expired or revoked more than 7 days ago |
+| `auth_tokens` | Used or expired more than 1 day ago |
+| `invitations` | Pending past `expires_at` → `EXPIRED`; removed 30 days later |
 | `endpoint_health_minute`, `tenant_stats_minute` | Older than 7 days |
 | `scheduler_nodes` | Heartbeat older than 1 day |

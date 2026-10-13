@@ -8,14 +8,18 @@ The Compose stack is the default development environment. Container resource lim
 
 | Service | Image (pinned by digest in M1) | Default limit (CPU / memory) | Notes |
 |---|---|---|---|
-| `postgres` | `postgres:18` | from `.env` | Tuned `postgresql.conf` (part 01 §5); `pg_stat_statements`. Hosts **three databases**: `kairos_control`, `kairos_cell0` (shards 0–127) and `kairos_cell1` (shards 128–255), so cell routing runs for real locally. |
+| `postgres` | `postgres:18` | from `.env` | Tuned `postgresql.conf` (part 01 §5); `pg_stat_statements`. Hosts **three databases**: `kairos_control`, `kairos_cell0` (shards 0–127) and `kairos_cell1` (shards 128–255), matching the production layout. |
 | `pgbouncer` | A PgBouncer 1.21+ image, chosen and pinned by digest in M1 | 0.5 / 128 MB | Transaction mode, `max_prepared_statements = 200` |
 | `kafka` | `apache/kafka:4.x` (KRaft, single broker) | 2 / 2 GB | Topics created by the init container |
 | `kafka-init` | same image | one-shot | Creates topics (part 03 §2, local partition counts) |
 | `redis` | `redis:8` (pinned by digest) | 1 / 512 MB | TLS port with the dev CA, per-role ACL users from `.env`, `appendonly yes`, `appendfsync everysec` |
-| `migrate` | scheduler image, `KAIROS_ROLES=migrate` | one-shot | Flyway as `sched_migrator`, then V2 role grants |
-| `maintenance` | scheduler image, `KAIROS_ROLES=maintenance` | one-shot at start, then a daily loop | Partitions |
-| `scheduler` | scheduler image, all roles | 3 CPU / 3 GB | Or `--profile split` for one container per role (api, watcher×2, executor×2, state) |
+| `kairos-migrations` | its own image | one-shot | Flyway as `sched_migrator` for `db/control` and each cell, then role grants |
+| `kairos-maintenance` | its own image | one-shot at start, then a daily loop | Partitions and purges |
+| `kairos-api` | service image | 1 / 768 MB | Port 8080 (API), 8081 (management) |
+| `kairos-watcher` | service image | 1 / 768 MB | 2 replicas, to exercise shard rebalancing |
+| `kairos-executor` | service image | 2 / 1 GB | 2 replicas |
+| `kairos-state` | service image | 1 / 768 MB | |
+| `mailpit` | `axllent/mailpit` (pinned) | 0.25 / 128 MB | Catches verification, reset and invitation emails; web UI on localhost only |
 | `mock-target` | built from the repo | 1 / 512 MB | HTTPS with the dev CA |
 | `prometheus`, `grafana` | official images | 0.5 / 1 GB in total | Provisioned scrape configs and dashboards |
 | `postgres-exporter`, `kafka-exporter` | official images | 0.25 / 128 MB each | |
@@ -43,14 +47,14 @@ The Compose stack is the default development environment. Container resource lim
 Chart.yaml  values.yaml  values-local.yaml  values-gcp.yaml  values.schema.json
 templates/
   _helpers.tpl
-  deployment.yaml          # rendered once per enabled role (api, watcher, executor, state) from .Values.roles
+  deployment.yaml          # rendered once per service in .Values.services (api, watcher, executor, state), each with its own image
   service-api.yaml         # ClusterIP :8080
   gateway-httproute.yaml   # GKE Gateway (internal ALB) — gcp only
   hpa-api.yaml
   keda-scaledobject.yaml   # executor (lag on run.* topics), state (lag on run.result)
-  pdb.yaml                 # per role, minAvailable 1 (watcher: maxUnavailable 1)
+  pdb.yaml                 # per service, minAvailable 1 (watcher: maxUnavailable 1)
   networkpolicy.yaml       # default deny + per-role allow rules (below)
-  serviceaccount.yaml      # per role; GCP Workload Identity annotation
+  serviceaccount.yaml      # per service; GCP Workload Identity annotation
   configmap.yaml           # non-secret config
   externalsecret.yaml      # gcp: Secret Manager -> Secret; local: references a pre-created Secret
   job-migrate.yaml         # helm hook pre-install, pre-upgrade (Flyway)
@@ -61,11 +65,11 @@ templates/
   mock-target.yaml         # only when .Values.bench.enabled
 ```
 
-**Per-role pod specification:**
+**Per-service pod specification:**
 
-| Setting | api | watcher | executor | state |
+| Setting | kairos-api | kairos-watcher | kairos-executor | kairos-state |
 |---|---|---|---|---|
-| Replicas | HPA 2–6 (CPU 70%) | 3 (fixed) | KEDA 2–20 (lag) | KEDA 2–12 (lag) |
+| Replicas | HPA 2–6 (CPU 70%) | 3 (fixed) | KEDA 2–12 (lag) | KEDA 2–8 (lag) |
 | Requests (gcp) | 1 CPU / 1.5 GiB | 2 CPU / 2 GiB | 4 CPU / 4 GiB | 2 CPU / 2 GiB |
 | `terminationGracePeriodSeconds` | 30 | 30 | 75 | 30 |
 | `preStop` | sleep 5 (LB deregistration) | none | `curl` the management `/drain` endpoint, then sleep | none |
@@ -97,7 +101,7 @@ modules/
   network/           VPC, subnets (+ secondary ranges for pods and services), Private Service Access, firewall
   gke/               regional private cluster, Dataplane V2, Workload Identity, Gateway API, node pools
                      (control: e2-standard-8, executor: c3-standard-8, platform: e2-standard-4, bench: optional)
-  cloudsql/          PostgreSQL 18 Enterprise Plus; instantiated per cell (for_each over var.cells) + one control instance;
+  cloudsql/          PostgreSQL 18 Enterprise Plus; one control instance + one instance per cell (for_each over var.cells, 2 by default);
                      HA (REGIONAL), private IP, flags (part 01 §5), read replica,
                      automated backups + PITR, deletion protection, database users without passwords (set via Secret Manager)
   kafka/             google_managed_kafka_cluster (vCPU and memory sized), google_managed_kafka_topic per part 03 §2
@@ -106,8 +110,8 @@ modules/
                      state as a sensitive attribute, so the state bucket is CMEK-encrypted and access-restricted. Pods read it
                      through Secret Manager.
   kms/               key ring + "tenant-keysets" key (rotation 90 days), IAM: executor/state/api decrypt only
-  secrets/           Secret Manager secrets (DB passwords per role, pepper, admin key hash); values are not in TF state
-  iam/               one GSA per role, Workload Identity bindings, least-privilege roles
+  secrets/           Secret Manager secrets (DB passwords per service, API-key pepper, bootstrap admin, SMTP); values are not in TF state
+  iam/               one GSA per service, Workload Identity bindings, least-privilege IAM roles
   artifact_registry/ docker repository, immutable tags
 envs/gcp-reference/  main.tf (composes modules), variables.tf, versions.tf (provider versions pinned), backend.tf (GCS, commented)
 ```

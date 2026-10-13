@@ -2,11 +2,11 @@
 
 Back to [LLD index](../LLD.md).
 
-## 1. Common to all roles
+## 1. Common to all services
 
 | Concern | Design |
 |---|---|
-| **Node identity** | `node_id = {roles}-{POD_NAME or hostname}-{startEpochMillis}`. A new id is created on every process start, so a restarted pod never reuses the identity of the one that crashed. |
+| **Node identity** | `node_id = {service}-{POD_NAME or hostname}-{startEpochMillis}`, for example `kairos-executor-7c9f-1739…`. A new id is created on every process start, so a restarted pod never reuses the identity of the one that crashed. |
 | **Heartbeat** | `NodeRegistryHeartbeat` upserts `scheduler_nodes` every 5s. A node counts as live while `heartbeat_at > now() − 15s`. The live set is cached for 2s and used by the sweepers and the per-endpoint limit split. |
 | **Lifecycle** | Every long-running loop is a Spring `SmartLifecycle` with a phase. Start order: heartbeat → consumers and pollers. Stop order is the reverse. |
 | **Threads** | Poll and loop threads are dedicated platform threads, named `kairos-{component}-{n}`. JDBC calls run on **virtual threads** (`Executors.newVirtualThreadPerTaskExecutor()`), bounded by Hikari pool size and a semaphore. CPU-bound work (rendering, protobuf encoding, sealing) runs on a bounded `ForkJoinPool` sized to the core count. |
@@ -66,7 +66,7 @@ loop per shard group (8 shards), cadence = pollInterval (1s) ± 20% jitter, or i
 
   - For `INTERVAL`, the number of missed occurrences is computed arithmetically, never in a loop.
   - For `CRON`, the planner iterates at most `max_catchup + 1` times.
-- **`spread_ms`.** `due_at = scheduled_at + spread_ms`. The value is fixed per job, computed at create time as `murmur3(job_id) mod spreadSeconds` (HLD §10.2).
+- **`spread_ms`.** `due_at = scheduled_at + spread_ms`. The value is fixed per job, computed at create time as `murmur3(job_id) mod spreadSeconds` (HLD §11.2).
 - **Workflow fire.** One `workflow_runs` row, plus one in-flight row per task. Roots are QUEUED with `remaining_deps = 0`; every other task is WAITING with `remaining_deps = indegree`. All tasks share the workflow's `shard_id` and `scheduled_at`. The current endpoint version of each task is pinned.
 
 ### 2.3 Next fire and DST (`NextFireCalculator`)
@@ -92,7 +92,7 @@ nextCron(expr, zone, lastFiredLocal, dbNowInstant):
 
 Property tests (part 08) check, for every zone in `ZoneId.getAvailableZoneIds()` and the DST transitions from 2020 to 2035, that a daily job fires exactly once per local day under `ONCE` and `SHIFT`.
 
-### 2.4 `OutboxRelay` (transactional outbox, HLD §8)
+### 2.4 `OutboxRelay` (transactional outbox, HLD §9)
 
 - **One relay loop per owned shard group, on a virtual thread.** The algorithm is in part 03 §5 and the SQL in part 02 §4c.
 - **Precision.** The relay polls every 100 ms. It loops again at once if a batch came back full, and it can be nudged by the fire poller when it inserts rows due within 100 ms. The dispatch delay is therefore about 0–100 ms plus the publish time.
@@ -110,7 +110,7 @@ Property tests (part 08) check, for every zone in `ZoneId.getAvailableZoneIds()`
   3. It applies the outcome through `SettlementPlanner` and `SettlementService` in one transaction, together with the resulting outbox rows. **This is the same code path as the state processor.**
   4. Infra requeues are capped at `maxInfraAttempts` (3), then the run goes to `POISON`.
   5. If Redis is unreachable, the sweep is skipped.
-- **`RedisFailoverMonitor`** polls `INFO replication` every 2s and records `master_replid`. When it changes (a failover), it sets `quarantineUntil = now + maxLease` (310s), stored in Postgres (`scheduler_flags`) so every watcher sees it. While it is set, a missing sent marker counts as **unknown**, not "never sent" (HLD §8).
+- **`RedisFailoverMonitor`** polls `INFO replication` every 2s and records `master_replid`. When it changes (a failover), it sets `quarantineUntil = now + maxLease` (310s), stored in Postgres (`scheduler_flags`) so every watcher sees it. While it is set, a missing sent marker counts as **unknown**, not "never sent" (HLD §9).
 
 ### 2.6 `SingletonTasks` (each in a transaction guarded by `pg_try_advisory_xact_lock(taskKey)`)
 
@@ -123,7 +123,7 @@ Property tests (part 08) check, for every zone in `ZoneId.getAvailableZoneIds()`
 | Purges | 1h | Part 01 §6 |
 | Partition check | 1h | Alerts if tomorrow's partitions are missing (the CronJob may have failed) |
 
-**`AutoSuspendRule`** (default thresholds from the endpoint's `suspendPolicy`, HLD §10.4). Suspend when `enabled = true` **and** either:
+**`AutoSuspendRule`** (default thresholds from the endpoint's `suspendPolicy`, HLD §11.4). Suspend when `enabled = true` **and** either:
 - `dead_lettered (5 min) ≥ 50`, **or**
 - `attempts (5 min) ≥ 200` **and** `failures / attempts ≥ 0.8`, where failures = retryable + non-retryable.
 
@@ -138,7 +138,7 @@ An endpoint that was resumed less than 10 minutes ago is not suspended again unl
 ### 3.1 `TierConsumerRunner`
 
 - There are three runners, one per tier topic, each with its own `KafkaConsumer` and poll thread.
-- **Weighted share.** All three poll at the same cadence with `max.poll.records` of 250, 150 and 100. When the pod is saturated, the shares are therefore about 50/30/20 (HLD §10.2 priority). When some tiers are idle, the busy ones use all the capacity.
+- **Weighted share.** All three poll at the same cadence with `max.poll.records` of 250, 150 and 100. When the pod is saturated, the shares are therefore about 50/30/20 (HLD §11.2 priority). When some tiers are idle, the busy ones use all the capacity.
 - **Poll loop:**
   1. pause or resume against the shared `InflightGauge`;
   2. `poll(50 ms)`;
@@ -210,7 +210,7 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) 
 | **Authorize** | <ul><li>An `AuthHeaderProvider` strategy per `AuthSpec`. Secrets are resolved from `tenant_secrets` and decrypted with the SECRETS keyset, then cached in memory for 5 minutes.</li><li>OAuth2 tokens are cached until `exp − 60s`, with a single-flight refresh. The token endpoint goes through the same egress checks.</li><li>Adds the `X-Kairos-*` headers, `Idempotency-Key` and the HMAC signature (part 05 §5).</li></ul> | Secret missing → `CONFIG_ERROR`; KMS or keyset unavailable → `INFRA (DEPENDENCY_UNAVAILABLE)` |
 | **Permit** | `EndpointLimiterRegistry`, per endpoint id: <ul><li>Resilience4j `Bulkhead` (limit = `maxConcurrency / liveExecutors`, at least 1)</li><li>`RateLimiter` (`ratePerSec / liveExecutors`)</li><li>`CircuitBreaker` (sliding window of 100 calls, opens at a 50% failure rate, open for 30s)</li></ul>The wait for a permit is at most 200 ms. | `DEFERRED (DEFERRED_RATE_LIMIT / DEFERRED_BREAKER_OPEN)`, with `retry_after_ms` set to the breaker's remaining open time or 1–2s plus jitter |
 | **Guard + marker** | `SendGuard` check, then the sent marker (§3.2) | Guard fails → `DEFERRED (SEND_GUARD_ABORT)`; marker write fails → `DEFERRED (DEFERRED_LOCK_UNAVAILABLE)`. Nothing is sent in either case. |
-| **HTTP** | <ul><li>`TargetHttpClientRegistry.forTenant(t)` returns a Reactor Netty client with the tenant's TLS context, its `ValidatingAddressResolverGroup` (part 05 §4) and a shared connection provider.</li><li>`responseTimeout = endpoint timeout`, connect timeout 3s, `followRedirect(false)`.</li></ul> | Exception mapping per HLD §12.2. The classifier separates failures **before** the request was written (connect, DNS, TLS handshake, pool acquire: safe to retry) from failures **after** it (response timeout, reset or premature close: `UNKNOWN_OUTCOME`, handled by `unknownOutcomePolicy`). Reactor Netty's `doAfterRequest` hook marks the boundary. |
+| **HTTP** | <ul><li>`TargetHttpClientRegistry.forTenant(t)` returns a Reactor Netty client with the tenant's TLS context, its `ValidatingAddressResolverGroup` (part 05 §4) and a shared connection provider.</li><li>`responseTimeout = endpoint timeout`, connect timeout 3s, `followRedirect(false)`.</li></ul> | Exception mapping per HLD §14.2. The classifier separates failures **before** the request was written (connect, DNS, TLS handshake, pool acquire: safe to retry) from failures **after** it (response timeout, reset or premature close: `UNKNOWN_OUTCOME`, handled by `unknownOutcomePolicy`). Reactor Netty's `doAfterRequest` hook marks the boundary. |
 | **Read** | Reads the body up to `maxResponseBytes` (default 256 KB), counting bytes, and closes the connection if the limit is exceeded. The body is buffered only when outputs or a failure snippet are needed. | Too large and outputs required → `CONTRACT_ERROR` |
 | **Classify** | `OutcomeClassifier`: status code and endpoint `statusOverrides`; `Retry-After` parsed (seconds or HTTP-date, capped) | — |
 | **Extract** | Only if `extract_outputs`. `JsonPathLite` on the body and named headers. Each value is at most 4 KB and the total at most 16 KB. Sensitive values are sealed with the OUTPUTS keyset. | Required output missing → `NON_RETRYABLE (CONTRACT_ERROR)` |
@@ -313,7 +313,13 @@ If the process crashes after the commit but before the acknowledgement, the batc
 
 | Flow | Steps |
 |---|---|
-| Create job | <ul><li>Authenticate (filter) → authorise scope → rate limit → idempotency check</li><li>Validate the DTO strictly: unknown fields rejected, then domain validation</li><li>One transaction: `jobs`, `job_versions`, `schedules`, `api_idempotency` DONE; `NOTIFY kairos_wakeup` if due within the lookahead</li><li>Respond `201`</li></ul> |
+| Sign up and verify | Rate limit → validate (domain allowlist, password policy) → Argon2id hash → insert the user and a hashed `VERIFY_EMAIL` token in one transaction → email through `NotificationPort` after commit → uniform `202`. Verification marks the token used and sets `email_verified_at` atomically. |
+| Log in and refresh | Part 05 §2.1 and §2.2: equal-time checks for unknown emails, progressive lockout, a session family per login, refresh rotation with reuse detection under `SELECT … FOR UPDATE` |
+| Create organization | One control-database transaction: tenant (default quotas), the creator's `OWNER` membership, `api_idempotency`; then create the organization's Tink keysets; audit `ORG_CREATED` |
+| Invite and accept | An invitation row with a hashed token and an email after commit. Accepting checks the logged-in user's verified email, inserts the membership and marks the invitation `ACCEPTED` in one transaction. |
+| Egress rule | `HOST` rules start `PENDING_VERIFICATION` with a token. `…/verify` asks `kairos-watcher`'s `EgressVerifier` (through an outbox event) to fetch the well-known URL through the egress guard. `SUFFIX` and `CIDR` rules wait in the platform approval queue. |
+| Suspend organization (admin) | Set the tenant `SUSPENDED` in the control database, then fan out `UPDATE schedules SET status = 2 WHERE tenant_id = :t AND status = 1` to every cell (idempotent, retried until every cell succeeds); audit |
+| Create job | <ul><li>Authenticate (filter) → authorise scope → rate limit → idempotency check</li><li>Validate the DTO strictly: unknown fields rejected, then domain validation</li><li>Compute the shard from (organization, name) and pick the cell. One transaction **in that cell**: `api_idempotency`, `jobs`, `job_versions`, `schedules` (a duplicate name returns `409`); `NOTIFY kairos_wakeup` if due within the lookahead</li><li>Respond `201`</li></ul> |
 | Immediate / run-now | As above, plus the in-flight insert and its dispatch outbox row (part 02 §7a) in the same transaction. The relay publishes it within about 100 ms, even if Kafka is briefly down. |
 | Update job | New `job_versions` row; `jobs.version + 1`; the `schedules` row is updated (`definition_version`, timing fields, and `next_fire_at` recomputed if the schedule changed). Runs in flight keep their pinned version. |
 | Cancel | Part 02 §7b and §7c; the `CancelMessage` is an outbox row in the same transaction |

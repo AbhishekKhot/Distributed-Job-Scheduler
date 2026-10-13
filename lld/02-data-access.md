@@ -4,14 +4,14 @@ Back to [LLD index](../LLD.md).
 
 ## Conventions
 
-- **Cell routing (HLD §6).** Every statement below runs against **one cell database**, chosen by `CellRouter.cellOf(shard_id)`.
+- **Cell routing (HLD §7).** Every statement below runs against **one cell database**, chosen by `CellRouter.cellOf(shard_id)`.
   - Batches that span shards (executor claims, state settles) are **grouped by cell**, with one statement or transaction per cell, run in parallel.
   - The watcher's shard leases, fire polls, relay loops and sweepers all work on the cell that owns those shards.
   - Control-database statements (tenants, keys, endpoints, audit, idempotency) are marked **[control]**.
 
 - **Every statement is parameterised.** Named parameters go through Spring `JdbcClient`; arrays use `Connection.createArrayOf`. Statements live as `static final String` constants in the repository classes and are covered by integration tests (part 08). There is no string concatenation of values.
 - **Batches use parallel arrays with `unnest(...)`**, so N rows cost one statement and one round trip.
-- `:me` is the caller's `node_id`. `:now` is never passed in; SQL uses `now()` (the database clock, HLD §10.7).
+- `:me` is the caller's `node_id`. `:now` is never passed in; SQL uses `now()` (the database clock, HLD §11.7).
 - **Each numbered block below is one transaction.**
 - **Transactional outbox.** No transaction publishes to Kafka. Each one writes `outbox` rows (§0) next to its state change, and only the `OutboxRelay` (§4c) publishes them.
 
@@ -187,7 +187,7 @@ LIMIT :batch
 FOR UPDATE SKIP LOCKED;
 ```
 
-**4b decision per locked run** (Java, `LeaseSweeper` together with `RunLockService`; HLD §8):
+**4b decision per locked run** (Java, `LeaseSweeper` together with `RunLockService`; HLD §9):
 
 1. `EXISTS kairos:lock:run:{run_id}` → **skip**, because the holder is still alive and slow. Re-check on the next sweep.
 2. `GET kairos:sent:{run_id}:{attempt}:{infra}`:
@@ -400,4 +400,4 @@ SELECT workflow_run_id FROM workflow_runs WHERE status = 2 AND blocked_until < n
 | `schedules.next_fire_at` churn at 50K updates/s | Autovacuum keeps up on a narrow table | Raise `max_catchup` pacing; spread shards across 2 databases (HLD §13) |
 | Parameterised join of `unnest` arrays to the hash-partitioned table | Runtime partition pruning inside nested loops | Group the batch by partition in Java and issue one statement per partition |
 | Claim `SELECT` with `LATERAL … FOR UPDATE SKIP LOCKED` | Index-ordered per shard | One query per shard |
-| Outbox insert and delete churn (about 100K rows/s) | Small table, parallel vacuum across 16 partitions | Larger relay batches; one statement per partition |
+| Outbox insert and delete churn (about 50K rows/s at peak) | Small table, parallel vacuum across 16 partitions | Larger relay batches; one statement per partition |

@@ -5,10 +5,10 @@ flowchart LR
   classDef ext fill:#ffc9c9
   classDef cache fill:#d0bfff
   classDef grey fill:#e9ecef
-  CL["Internal clients"]:::grey --> GW["Internal gateway<br/>TLS, rate limits"]:::grey
-  subgraph SVC["Kairos services: one image, four roles"]
+  U["Users and API clients<br/>of each organization"]:::grey --> GW["Internal gateway<br/>TLS, rate limits"]:::grey
+  subgraph SVC["Kairos microservices: one monorepo, four images"]
     direction TB
-    API["kairos-api<br/>endpoints, jobs, workflows,<br/>runs, DLQ, stats"]:::svc
+    API["kairos-api<br/>accounts, organizations,<br/>endpoints, jobs, workflows,<br/>runs, DLQ"]:::svc
     W["kairos-watcher<br/>shard leases, fire poller,<br/>outbox relay, sweepers"]:::svc
     E["kairos-executor<br/>run lock, fenced claim,<br/>HTTP calls"]:::svc
     S["kairos-state<br/>settle, retries, DLQ,<br/>workflows, protection"]:::svc
@@ -16,11 +16,11 @@ flowchart LR
   GW --> API
   subgraph DATA["State"]
     direction TB
-    PG[("PostgreSQL<br/>control DB + cells<br/>state and outbox")]:::db
+    PG[("PostgreSQL<br/>control DB + cells")]:::db
     R[("Redis<br/>run locks, sent markers,<br/>rate limits")]:::cache
   end
   K[["Kafka<br/>run.high / medium / low<br/>run.result, cancel, events"]]:::bus
-  T["Internal target APIs"]:::ext
+  T["Organizations'<br/>internal APIs"]:::ext
   SVC <-->|"transactions"| PG
   SVC <-->|"locks"| R
   W -->|"outbox relay"| K
