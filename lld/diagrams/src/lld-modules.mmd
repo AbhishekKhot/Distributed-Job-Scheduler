@@ -5,24 +5,21 @@ flowchart BT
   classDef ext fill:#ffc9c9
   classDef cache fill:#d0bfff
   classDef grey fill:#e9ecef
-  domain["kairos-domain<br/>pure Java"]:::db
-  proto["kairos-proto"]:::grey
-  persistence["kairos-persistence"]:::svc
-  messaging["kairos-messaging"]:::svc
-  security["kairos-security"]:::svc
-  http["kairos-http"]:::svc
-  app["kairos-app<br/>api, watcher, executor, state"]:::bus
-  bench["bench-cli"]:::grey
-  mock["mock-target"]:::grey
-  persistence --> domain
-  messaging --> domain
-  messaging --> proto
-  security --> domain
-  http --> domain
-  http --> security
-  app --> persistence
-  app --> messaging
-  app --> security
-  app --> http
-  app --> domain
-  bench --> proto
+  subgraph SERVICES["services/ (one image each)"]
+    direction TB
+    api["kairos-api"]:::bus
+    watcher["kairos-watcher"]:::bus
+    executor["kairos-executor"]:::bus
+    state["kairos-state"]:::bus
+  end
+  subgraph LIBS["libs/"]
+    direction TB
+    engine["kairos-engine<br/>settlement, outbox,<br/>cell routing"]:::svc
+    persistence["kairos-persistence"]:::svc
+    messaging["kairos-messaging"]:::svc
+    security["kairos-security"]:::svc
+    http["kairos-http"]:::svc
+    proto["kairos-proto"]:::grey
+    domain["kairos-domain<br/>pure Java"]:::db
+  end
+  SERVICES --> LIBS

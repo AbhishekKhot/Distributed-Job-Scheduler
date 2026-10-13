@@ -5,19 +5,15 @@ flowchart LR
   classDef ext fill:#ffc9c9
   classDef cache fill:#d0bfff
   classDef grey fill:#e9ecef
-  subgraph SVC["Stateless services: any pod serves any cell"]
-    API["api"]:::svc
-    W["watchers"]:::svc
-    E["executors"]:::svc
-    S["state processors"]:::svc
+  subgraph SVC["Services: any pod can serve any cell"]
+    API["kairos-api"]:::svc
+    W["kairos-watcher"]:::svc
+    E["kairos-executor"]:::svc
+    S["kairos-state"]:::svc
   end
-  CTRL[("control DB<br/>tenants, API keys, endpoints<br/>secrets, audit, cell map")]:::grey
-  C0[("cell 0<br/>shards 0-63")]:::db
-  C1[("cell 1<br/>shards 64-127")]:::db
-  C2[("cell 2<br/>shards 128-191")]:::db
-  C3[("cell 3<br/>shards 192-255")]:::db
+  CTRL[("control DB<br/>users, organizations, keys,<br/>endpoints, secrets, cell map")]:::grey
+  C0[("cell 0<br/>shards 0-127")]:::db
+  C1[("cell 1<br/>shards 128-255")]:::db
   SVC -->|"cached reads"| CTRL
   SVC -->|"route by shard"| C0
-  SVC --> C1
-  SVC --> C2
-  SVC --> C3
+  SVC -->|"route by shard"| C1

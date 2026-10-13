@@ -6,18 +6,30 @@ Back to [LLD index](../LLD.md).
 
 | Concern | Rule |
 |---|---|
-| Base path | `/v1/api`, JSON only (`application/json`). Other content types → `415`. |
+| Base path | `/v1`. Organization-owned resources live under `/v1/orgs/{orgId}/…`. JSON only (`application/json`); other content types → `415`. |
 | Binding | Java `record` DTOs. Jackson runs with `FAIL_ON_UNKNOWN_PROPERTIES = true`, `FAIL_ON_NULL_FOR_PRIMITIVES = true` and `FAIL_ON_TRAILING_TOKENS = true`, plus nesting depth, string length and document size limits through `StreamReadConstraints`. **No payload is spread into entities.** Mappers copy named fields only (mass-assignment safe). |
 | Validation | Bean Validation on DTO shape (size, pattern, range), then domain constructors validate semantics (cron, zone, template, DAG). Fails closed with `400`. |
 | Errors | RFC 9457 `application/problem+json`: `type`, `title`, `status`, `detail` (generic), `instance`, `traceId`, `errors[]` (field path and code). **Rejected values, stack traces and SQL errors are never echoed back.** `5xx` responses carry only a generic message and the `traceId`. |
 | Pagination | `?limit` (1–200, default 50) and `?cursor`. The cursor is base64url of `(sortKey, id)`, strictly validated on decode. |
 | Request size | Body ≤ 1 MB (8 MB for `/jobs:batch`). Header and URL limits are set in the server configuration. |
 | Concurrency | `PUT` requires `If-Match: <version>` (optimistic locking via `version`); a mismatch returns `412`. |
-| Idempotency | `Idempotency-Key` on `POST /jobs`, `POST /jobs:batch`, `POST /workflows`, `POST /dlq:redrive` and `/runnow` (part 01 `api_idempotency`) |
+| Idempotency | `Idempotency-Key` on `POST …/jobs`, `…/jobs:batch`, `…/workflows`, `…/dlq:redrive`, `…/runnow` and `POST /v1/orgs`. The record lives in the database that owns the resource (the cell chosen by the job's name, or the control database) and is written in the same transaction (part 01 `api_idempotency`). `jobs:batch` groups items by cell and commits per cell. |
 
 ### 1.1 Resources (DTO outlines)
 
 ```
+SignupRequest      { email: ≤ 254, lower-cased, domain in kairos.auth.signup-domains;
+                     displayName: 1..100; password: 12..128 chars, not on the common-password list }
+LoginRequest       { email, password }                         → { accessToken, expiresIn, refreshToken }
+RefreshRequest     { refreshToken }                            → a new token pair (rotation)
+PasswordReset      { token, newPassword }
+OrgRequest         { slug: ^[a-z][a-z0-9-]{2,62}$, displayName: 1..100 }
+InvitationRequest  { email, role: ADMIN|DEVELOPER|OPERATOR|VIEWER }
+MemberUpdate       { role }                                    (OWNER only through transfer-ownership)
+ApiKeyRequest      { name: 1..64, scopes: [scope] ⊆ creator's permissions, expiresAt? }
+EgressRuleRequest  { type: HOST|SUFFIX|CIDR, value, ports: [1..65535] ⊆ kairos.egress.allowed-ports }
+SecretRequest      { name: ^[a-z][a-z0-9-]{1,62}$, kind: BASIC|BEARER|API_KEY|OAUTH2_CLIENT, value (write-only) }
+
 EndpointRequest {
   name: string                           ^[a-z][a-z0-9-]{1,62}$
   method: enum GET|POST|PUT|PATCH|DELETE|HEAD
@@ -68,7 +80,87 @@ WorkflowRequest {
 | Credential names: `Authorization`, `Proxy-Authorization`, `Cookie`, `X-Api-Key`, and any name matching `(?i)(token|secret|password|api[-_]?key)` | Allowed **only** when the whole value is a single placeholder that references a **sensitive** DAG output. A literal credential value is rejected (`400`); credentials must go through `auth.secretRef`. |
 | All values | Visible ASCII plus space and tab; no CR, LF or NUL; ≤ 8 KB each; ≤ 16 KB in total |
 
-## 2. Authentication: API keys (HLD §15)
+## 2. Identity and access
+
+### 2.1 Accounts
+
+**Sign up** (`POST /v1/auth/signup`):
+1. Validate the DTO. The email domain must be in `kairos.auth.signup-domains`. The password must be 12–128 characters, not on the bundled common-password list (top 100K) and not equal to the email address.
+2. Hash the password with **Argon2id** (`m = 64 MiB, t = 3, p = 1`, 16-byte salt from `SecureRandom`, 32-byte output), stored as a PHC string.
+3. Insert the user (`email_verified_at = NULL`). Create a `VERIFY_EMAIL` token: 32 bytes from `SecureRandom`, base64url in the link, SHA-256 in `auth_tokens`, valid for 24 hours. Email the link through `NotificationPort`.
+4. **Always** respond `202 Accepted` with the same body, whether or not the email already exists, so the endpoint cannot be used to discover accounts. An existing account is sent an "account already exists" email instead.
+
+**Verify email** (`POST /v1/auth/verify-email {token}`): hash the token, then in one transaction set `used_at` on the matching unexpired `VERIFY_EMAIL` row and set `email_verified_at`. Unverified users can only call resend and log out.
+
+**Log in** (`POST /v1/auth/login`):
+
+```
+1. Rate limits (§3): per IP and per email. Exceeded → 429.
+2. user = findByEmail(lower(email))
+3. if user is null: run Argon2id against a fixed dummy hash (equal time), then respond 401 "invalid email or password"
+4. if user.locked_until > now() or user.status != ACTIVE: respond with the same generic 401
+5. if !argon2.verify(user.password_hash, password):
+     failed_logins + 1; after 5 failures locked_until = now() + 15 min × 2^(lockouts so far), at most 24h → generic 401
+6. reset failed_logins; rehash if the Argon2 parameters have changed
+7. create a session: family_id = new UUID, refresh token = 32 random bytes, store SHA-256 + expiry (30 days)
+8. issue the access token (§2.2); update last_login_at; audit LOGIN_SUCCEEDED
+```
+
+**Password reset.** `POST /v1/auth/password/forgot` always answers `202`. If the user exists, a `RESET_PASSWORD` token (30 minutes, single-use) is emailed. `POST /v1/auth/password/reset` verifies the token, sets the new hash, marks the token used, and **revokes every session** of the user, all in one transaction.
+
+**Password change** (`POST /v1/me/password`) requires the current password and also revokes every other session.
+
+### 2.2 Access and refresh tokens
+
+| Token | Format | Lifetime | Storage |
+|---|---|---|---|
+| Access | JWT, ES256. Claims: `iss`, `aud = kairos-api`, `sub` (user id), `sid` (session id), `iat`, `exp`, `jti`, `pa` (present only for platform admins). Organization roles are **not** in the token; they are checked per request. | 15 minutes | Not stored |
+| Refresh | 32 random bytes, base64url, opaque | 30 days (sliding, capped by the family's absolute limit of 90 days) | SHA-256 in `user_sessions` |
+
+- **Signing keys.** An ES256 keyset (Tink) is sealed by the KMS key and stored in `platform_keysets`. Each key has a `kid`, and keys rotate every 30 days. Public keys are published at `/.well-known/jwks.json`, and validation accepts the current and the previous key.
+- **Validation.** Signature, `iss`, `aud`, `exp` (with 30s leeway), then a session check: `sid` must refer to an `ACTIVE` session family. That check is cached for 30s, so a revocation takes effect within 30s.
+- **Refresh rotation** (`POST /v1/auth/refresh`), in one transaction:
+
+```sql
+-- lock the presented token's row
+SELECT session_id, user_id, family_id, status, expires_at
+FROM user_sessions WHERE token_hash = :hash FOR UPDATE;
+-- ACTIVE and not expired  -> mark it ROTATED, insert a new ACTIVE row in the same family, return the new pair
+-- ROTATED (already used)  -> token reuse: revoke the whole family and audit REFRESH_TOKEN_REUSE; respond 401
+UPDATE user_sessions SET status = 'REVOKED' WHERE family_id = :family AND status <> 'REVOKED';
+-- REVOKED or expired      -> 401
+```
+
+- **Log out** revokes the family. `DELETE /v1/me/sessions/{id}` revokes one chosen family.
+
+### 2.3 Organizations, roles and invitations
+
+**Permission model** (`dev.kairos.domain.identity.PermissionMatrix`):
+
+| Permission | Roles that have it |
+|---|---|
+| `org:read`, `jobs:read`, `runs:read`, `endpoints:read`, `workflows:read`, `dlq:read`, `stats:read` | OWNER, ADMIN, DEVELOPER, OPERATOR, VIEWER |
+| `runs:operate` (run-now, pause, resume, cancel), `dlq:manage` | OWNER, ADMIN, DEVELOPER, OPERATOR |
+| `endpoints:write`, `jobs:write`, `workflows:write` | OWNER, ADMIN, DEVELOPER |
+| `secrets:manage`, `egress:manage`, `members:manage`, `keys:manage`, `audit:read` | OWNER, ADMIN |
+| `org:admin` (rename, transfer ownership, delete) | OWNER |
+
+- **Per-request authorization** (`OrgAccessEvaluator`, used from `@PreAuthorize("@org.can(#orgId, 'jobs:write')")`):
+  1. Resolve the principal.
+  2. For a **user**, load the membership `(orgId, userId)` from a Caffeine cache with a 30s TTL. The cache is invalidated on role changes in the same pod; other pods catch up within the TTL.
+  3. For an **API key**, require `key.tenantId == orgId` and the scope.
+  4. Require the organization to be `ACTIVE`; suspended organizations are read-only.
+  5. On any mismatch, respond `404`, so outsiders cannot probe whether an organization exists.
+- **Ownership safeguards.** Role changes and member removals run in a transaction that locks the organization's memberships (`SELECT … FOR UPDATE`). They are refused if the organization would be left without an `OWNER`. Admins cannot grant `OWNER` or modify an owner.
+- **Invitations.**
+  - Creating one generates a 32-byte token (stored as SHA-256) with a 7-day expiry, and emails a link.
+  - `POST /v1/invitations/accept {token}` requires a logged-in user whose **verified** email equals the invitation email. In one transaction it inserts the membership and marks the invitation `ACCEPTED`.
+- **Creating an organization.**
+  - `POST /v1/orgs` inserts the tenant (with default quotas from configuration) and the creator's `OWNER` membership in one transaction.
+  - It also creates the organization's Tink keysets (`SECRETS`, `OUTPUTS`, `SIGNING`).
+  - A user can create at most `kairos.org.max-per-user` organizations (default 10).
+
+### 2.4 API keys
 
 ```
 Key text:   sk_{env}_{keyId}_{secret}
@@ -78,68 +170,85 @@ Key text:   sk_{env}_{keyId}_{secret}
 Stored:     secret_hash = HMAC-SHA256(pepper[pepper_version], secret)   -- 32 bytes
 ```
 
-**Generation** (`ApiKeyService.create`):
-- `SecureRandom.getInstanceStrong()` is not used, because it can block. The default `SecureRandom` (DRBG/NativePRNG) is a CSPRNG and is used for both parts.
-- The plaintext is returned once in the `201` response body, with `Cache-Control: no-store`.
+- Created by an OWNER or ADMIN, through `POST /v1/orgs/{orgId}/api-keys`. The requested scopes must be a subset of the creator's permissions.
+- The plaintext is returned once, with `Cache-Control: no-store`.
+- The pepper (32 random bytes, versioned for rotation) comes from Secret Manager, or from the generated `.env` locally. It is never logged.
+- **Verification:**
+  1. Check the exact `Bearer sk_…` shape with a fixed-field split (no regex).
+  2. Load the row from a 60s cache (negative results cached for 10s).
+  3. Check revocation and expiry.
+  4. Compare `HMAC(pepper[version], secret)` with `MessageDigest.isEqual`, which is constant time.
+  5. Build `ApiKeyAuthentication(tenantId, keyId, scopes)`.
+  6. Record `last_used_at` in a batch update.
 
-**Pepper:**
-- 32 random bytes, stored in Secret Manager (local: the `.env` file generated by `scripts/dev-keys.sh`, which is gitignored).
-- Loaded at startup into a `PepperProvider` that supports several versions, for rotation.
-- Never logged.
+### 2.5 Request authentication pipeline
 
-**Verification** (`ApiKeyAuthenticationFilter`, a `OncePerRequestFilter` placed before Spring Security's authorization filter):
+`BearerAuthenticationFilter` (a `OncePerRequestFilter`) reads `Authorization: Bearer <token>`:
+- a token starting with `sk_` is an **API key** (§2.4);
+- any other token is validated as a **JWT** (§2.2).
 
-```
-1. header = request.getHeader("Authorization"); must be exactly "Bearer " + token; token length must be exactly
-   3 + 1 + len(env) + 1 + 16 + 1 + 43. Otherwise -> 401 (generic body).
-2. Split on '_' with a fixed field count (no regex); validate the character class of each field with a simple loop.
-3. row = apiKeyCache.get(keyId)       // Caffeine, 60s TTL, negative results cached for 10s; loads from the primary DB
-4. if row absent, revoked or expired -> 401
-5. expected = row.secret_hash; actual = HMAC(pepper[row.pepper_version], secret)
-   if !MessageDigest.isEqual(expected, actual) -> 401         // constant time
-6. SecurityContext = ApiKeyAuthentication(tenantId, keyId, scopes → authorities "SCOPE_x")
-7. lastUsedRecorder.mark(keyId)        // batched UPDATE every 60s
-```
+The principal is `UserPrincipal(userId, sessionId, platformAdmin)` or `ApiKeyPrincipal(tenantId, keyId, scopes)`. Routes are restricted as follows:
 
-- The cache stores rows, never the secret, so a revocation takes effect within 60s.
-- Failures add to the `auth_failures_total{reason}` metric and the per-IP failure bucket (§3). Every 100th failure per key id is sampled into `audit_log`, so an attack cannot flood the log.
+| Route group | Who can call it |
+|---|---|
+| `/v1/auth/**` | Unauthenticated (rate-limited) |
+| `/v1/me/**`, `POST /v1/orgs`, `/v1/invitations/accept` | Users only |
+| `/v1/orgs/{orgId}/**` | Users or API keys, through `OrgAccessEvaluator` |
+| `/v1/admin/**` | Users with `platform_role = PLATFORM_ADMIN` |
 
 **Spring Security configuration:**
 
 | Setting | Value |
 |---|---|
 | Sessions | `STATELESS`; no cookies are issued |
-| CSRF | **Disabled. This is safe because there are no ambient credentials:** the API accepts only the `Authorization` header and never cookies. Browsers cannot attach the credential cross-site. |
-| Authorization | `authorizeHttpRequests`: `/actuator/health/**` is permitted on the **management port only**; everything else requires authentication. Method security uses `@PreAuthorize("hasAuthority('SCOPE_jobs:write')")` and so on. |
+| CSRF | Disabled. Credentials travel only in the `Authorization` header and never in cookies, so a browser cannot attach them cross-site. A future browser console must switch to `Secure; HttpOnly; SameSite=Strict` cookies and add CSRF tokens. |
+| Authorization | Health endpoints only on the management port; route rules as above; method security with `OrgAccessEvaluator` |
 | Security headers | `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` |
-| CORS | Disabled (there is no browser client) |
-| Platform admin key | <ul><li>Same format. It is verified against a hash read from Secret Manager at startup.</li><li>It grants only the `platform:admin` authority, used by `POST /admin/tenants`.</li><li>Every use is audited.</li></ul> |
+| CORS | Disabled |
 
-**Object-level authorization.** Every service method takes the `TenantId` from the `SecurityContext`, never from the request. Every repository query includes `tenant_id = :tenant` (ArchUnit-enforced, LLD index §3). A resource owned by another tenant returns `404`.
+**Object-level authorization.** Every service method takes the `TenantId` from the authorized path variable after `OrgAccessEvaluator` has approved it. Every repository query includes `tenant_id = :tenant`, which ArchUnit enforces. Cross-organization ids return `404`.
+
+### 2.6 Platform administration
+
+- **Bootstrap.** At first start, `kairos-api` creates the bootstrap administrator from `KAIROS_BOOTSTRAP_ADMIN_EMAIL` and a one-time password hash, both read from Secret Manager. The account must change its password on first login. Later administrators are promoted by an existing administrator, and every promotion is audited.
+- **Responsibilities.** Administrators approve or reject `SUFFIX` and `CIDR` egress rules, set quotas, suspend or reactivate organizations, and disable users. Suspending an organization sets every `schedules.status` in its cells to `PAUSED`, through a fan-out to the cells.
 
 ## 3. Rate limiting (fail closed)
 
 | Bucket | Key | Default limit | Applied |
 |---|---|---|---|
-| Per IP, before authentication | `ip:{client IP}` | 50 requests/s; 20 failed authentications per minute | Before key verification (limits brute force) |
+| Per IP, before authentication | `ip:{client IP}` | 50 requests/s; 20 failed authentications per minute | Before token or key verification |
+| Sign up | `signup:ip:{ip}` | 5 per hour | `POST /v1/auth/signup` |
+| Log in | `login:ip:{ip}` and `login:email:{sha256(email)}` | 20/min per IP; 10 per 15 min per email | `POST /v1/auth/login` (in addition to account lockout) |
+| Email-sending endpoints | `mail:email:{sha256(email)}` | 3 per hour | Resend verification, forgot password, invitations |
 | Per API key and route class | `key:{keyId}:{read\|write\|redrive}` | read 500/s, write 200/s, redrive 5/s | After authentication |
-| Per tenant | `tenant:{id}` | from `tenants.quotas` | After authentication |
+| Per organization | `tenant:{id}` | from `tenants.quotas` | After authentication |
 
 - **Implementation.** Bucket4j with its Lettuce-based Redis proxy manager (compare-and-swap), keys `kairos:rl:{bucket}` with expiry. Using Redis keeps rate limiting off Postgres.
 - **Client IP.** Taken from the gateway's `X-Forwarded-For` header, but only when the request comes from a trusted proxy CIDR (configured). Otherwise the socket address is used.
 - **If the limiter store is unreachable,** the request gets `503`. It fails closed.
 - `429` responses carry `Retry-After`.
 
-## 4. Egress guard: SSRF defence for internal targets (HLD §15)
+## 4. Egress guard: SSRF defence for internal targets (HLD §16)
 
-**At save time** (`EgressPolicy.check(urlTemplate, tenant)`):
+**Egress rules lifecycle** (`egress_rules`, managed by OWNER and ADMIN):
+
+| Rule type | On creation | Becomes `ACTIVE` when |
+|---|---|---|
+| `HOST` | `PENDING_VERIFICATION`, with a random `verification_token` returned to the caller | `POST …/egress-rules/{id}/verify` makes `kairos-watcher`'s `EgressVerifier` fetch `https://{host}:{port}/.well-known/kairos-verification` through the egress guard (deny list applied, no redirects, 2 KB limit, 5s timeout). The body must equal the token (constant-time comparison). |
+| `SUFFIX`, `CIDR` | `PENDING_APPROVAL` | A platform administrator approves it (`POST /v1/admin/egress-rules/{id}/approve`), with a mandatory note |
+
+- `REJECTED` and `REVOKED` rules are terminal. Revoking a rule is immediate: the executor's `EgressRuleCatalog` refreshes every 5s, and the next call is blocked as `POLICY_BLOCKED`.
+- A suffix must have at least three labels (for example `*.payments.svc.cluster.local`, never `*.local`). A CIDR must be within `kairos.egress.internal-cidrs` and no wider than `/16`.
+
+**At save time** (`EgressPolicy.check(urlTemplate, activeRules)`):
 
 | Check | Rule |
 |---|---|
 | Scheme | `https` |
-| Port | Must be in `tenant.egress_policy.ports` (default `[443, 8443]`) |
+| Port | Must be in the matching rule's `ports` |
 | URL shape | No userinfo, no fragment. The host is a literal: a DNS name or an IP literal, never a template. |
-| Host | Must match `egress_policy.hosts` (exact), `egress_policy.suffixes` (label-boundary suffix match, e.g. `.orders.svc.cluster.local`), or, for IP literals, `egress_policy.cidrs` |
+| Host | Must match an **ACTIVE** `HOST` rule (exact) or `SUFFIX` rule (label-boundary suffix match), or, for an IP literal, an ACTIVE `CIDR` rule |
 | Global deny names | `localhost`, `metadata.google.internal`, `*.internal` metadata aliases, and the scheduler's own service names (configuration) |
 
 **At connect time** (`ValidatingAddressResolverGroup`, a Netty `AddressResolverGroup` used by Reactor Netty):
@@ -152,7 +261,9 @@ resolve(host):
     deny if ip in GLOBAL_DENY: 0.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 224.0.0.0/4, 240.0.0.0/4,
                                255.255.255.255/32, ::/128, ::1/128, fe80::/10, ff00::/8,
                                + configured control-plane CIDRs (Kubernetes API, PgBouncer, Kafka, pod CIDR of the scheduler namespace)
-    deny unless ip in tenant.egress_policy.cidrs
+    allow if host matched an ACTIVE HOST/SUFFIX rule and ip in kairos.egress.internal-cidrs
+    allow if ip in an ACTIVE CIDR rule of the organization
+    otherwise deny
   if no address is allowed → fail with EgressBlockedException → NON_RETRYABLE (POLICY_BLOCKED)
   return the allowed addresses only
 ```
@@ -259,13 +370,16 @@ quoted   := up to 64 chars, no quote or backslash
 | Parameterised SQL only | `JdbcClient` named parameters and arrays (part 02); an ArchUnit rule forbids `Statement.execute*` and string-built SQL in repositories |
 | Allow-list validation, fail closed | DTO constraints + domain constructors (§1); egress allowlist (§4); header rules (§1.2) |
 | Explicit schema, no mass assignment | Records, `FAIL_ON_UNKNOWN_PROPERTIES`, field-by-field mappers |
-| Bearer secrets hashed, constant-time comparison | API keys: HMAC with pepper + `MessageDigest.isEqual` (§2); target signature guidance (§5) |
+| Password storage | Argon2id (64 MiB, t = 3), per-user salt, rehash on parameter change (§2.1) |
+| Bearer secrets hashed, constant-time comparison | API keys (HMAC with pepper), refresh tokens, verification, reset and invitation tokens (SHA-256); `MessageDigest.isEqual` (§2) |
+| Session management | Short-lived access tokens; refresh rotation with reuse detection; revoke on logout, password change and reset (§2.2) |
+| Account enumeration and brute force | Uniform signup and forgot-password responses; dummy-hash timing on unknown emails; rate limits and progressive lockout (§2.1, §3) |
 | CSPRNG | `SecureRandom` for keys and secrets. Tink does its own nonces. Backoff jitter uses `RandomGenerator` on purpose, because it is not a security value. |
 | No hardcoded secrets | §7, `gitleaks` in CI, `.env` and dev keys gitignored |
-| AuthN and object-level AuthZ on every request | §2 filter, scopes, tenant-scoped repositories, `404` across tenants |
+| AuthN and object-level AuthZ on every request | §2.5 filter, `OrgAccessEvaluator`, role permissions and key scopes, organization-scoped repositories, `404` across organizations |
 | Rate limiting (distributed, fail closed) | §3 |
 | Security headers; generic errors; redacted logs | §2 configuration; RFC 9457 advice; `Redactor` (part 04 §3.3); logging allow-list (part 06) |
-| CSRF and cookies | Not applicable: stateless bearer-header API with no cookies (§2) |
+| CSRF and cookies | Not applicable to a header-only API; the rules for a future browser console are fixed in §2.5 |
 | TLS 1.2+ with verification; no automatic redirects | §4 |
 | AEAD with unique nonces | Tink XChaCha20-Poly1305 (192-bit random nonces) (§5) |
 | No dangerous deserialisation | Protobuf and Jackson trees only; no `ObjectInputStream`; Jackson default typing **off** |

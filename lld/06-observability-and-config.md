@@ -37,6 +37,9 @@ Back to [LLD index](../LLD.md).
 | `kairos_jobs_auto_paused_total` / `kairos_jobs_unhealthy` | counter / gauge | `tenant` | state / watcher |
 | `kairos_endpoint_suspended` | gauge (0/1) | `tenant`, `endpoint` | watcher singleton |
 | `kairos_auth_failures_total` | counter | `reason` | api |
+| `kairos_signups_total` / `kairos_logins_total` | counter | `result` | api |
+| `kairos_account_lockouts_total` / `kairos_refresh_reuse_detected_total` | counter | — | api |
+| `kairos_egress_rules_pending` | gauge | `status` | api |
 | `kairos_rate_limited_total` | counter | `bucket_class` | api |
 | Kafka client, JVM, Hikari, Reactor Netty pool, HTTP server | built-in binders | — | all |
 | Postgres | `postgres_exporter` (+ `pg_stat_statements`) | — | sidecar / exporter |
@@ -103,6 +106,13 @@ groups:
   - alert: PostgresLongTransaction
     expr: max(pg_stat_activity_max_tx_duration{state="active"}) > 300
     labels: {severity: warning}
+  - alert: LoginFailureSpike
+    expr: sum(rate(kairos_auth_failures_total[5m])) > 50
+    for: 5m
+    labels: {severity: warning}
+  - alert: RefreshTokenReuse
+    expr: increase(kairos_refresh_reuse_detected_total[15m]) > 0
+    labels: {severity: warning}
   - alert: CanaryMissing                    # dead-man's switch: the canary job increments this every minute
     expr: absent_over_time(kairos_canary_heartbeat_total[3m]) or increase(kairos_canary_heartbeat_total[3m]) == 0
     labels: {severity: critical}
@@ -137,10 +147,20 @@ groups:
 
 | Property | Default | Notes |
 |---|---|---|
-| `kairos.roles` | `api,watcher,executor,state` | `KAIROS_ROLES`; `maintenance` runs alone |
 | `kairos.node.heartbeat-interval` / `dead-after` | `5s` / `15s` | |
 | `kairos.shards.count` | `256` | Fixed after the first deploy |
-| `kairos.cells[n].id` / `shard-from` / `shard-to` / `datasource` | 1 cell `0–255` locally; reference: 4 cells × 64 shards | Validated at startup against `cell_map`; startup fails on a mismatch |
+| `kairos.auth.signup-domains` | from env (for example `company.com`) | Only these email domains can sign up |
+| `kairos.auth.password.min-length` / `max-length` | `12` / `128` | Plus the common-password list |
+| `kairos.auth.argon2.memory-kib` / `iterations` / `parallelism` | `65536` / `3` / `1` | Rehash on login when changed |
+| `kairos.auth.access-token-ttl` / `refresh-token-ttl` / `session-max-age` | `15m` / `30d` / `90d` | |
+| `kairos.auth.lockout.threshold` / `base-duration` / `max-duration` | `5` / `15m` / `24h` | Doubles per lockout |
+| `kairos.auth.verification-ttl` / `reset-ttl` / `invitation-ttl` | `24h` / `30m` / `7d` | |
+| `kairos.auth.jwt.issuer` / `audience` / `key-rotation` | `kairos` / `kairos-api` / `30d` | ES256 keys in `platform_keysets` |
+| `kairos.org.max-per-user` / `default-quotas.*` | `10` / plan defaults | |
+| `kairos.egress.internal-cidrs` | env-specific (for example `10.0.0.0/8`) | Resolved addresses for HOST and SUFFIX rules must fall inside |
+| `kairos.egress.allowed-ports` | `443, 8443` | |
+| `kairos.mail.from` / SMTP settings | from env | Through `NotificationPort` |
+| `kairos.cells[n].id` / `shard-from` / `shard-to` / `datasource` | 2 cells locally (`0–127`, `128–255`); reference production: 2 cells × 128 shards | Validated at startup against `cell_map`; startup fails on a mismatch |
 | `kairos.control.datasource` | from env | Control database |
 | `kairos.shards.lease-ttl` / `renew-interval` | `15s` / `5s` | |
 | `kairos.watcher.poll-interval` / `jitter` | `1s` / `0.2` | |
@@ -170,7 +190,7 @@ groups:
 | `kairos.executor.breaker.window` / `failure-rate` / `open-duration` | `100` / `50` / `30s` | |
 | `kairos.state.max-poll-records` | `1000` | |
 | `kairos.state.stats-flush-interval` | `10s` | |
-| `kairos.retry.default.*` | 5 retries, `EXPONENTIAL_JITTER`, base `30s`, max `10m`, max-age `24h` | HLD §10.3 |
+| `kairos.retry.default.*` | 5 retries, `EXPONENTIAL_JITTER`, base `30s`, max `10m`, max-age `24h` | HLD §11.3 |
 | `kairos.retry.max-infra-attempts` | `3` | |
 | `kairos.defer.rate-limit-delay` / `suspended-recheck` | `1s..2s` / `60s` | |
 | `kairos.protection.auto-pause-after` | `3` | **On by default** |
@@ -183,7 +203,7 @@ groups:
 | `kairos.ratelimit.*` | see part 05 §3 | |
 | `kairos.egress.global-deny-cidrs` / `control-plane-cidrs` / `deny-hostnames` | built-in list / env-specific / built-in list | |
 | `kairos.crypto.kek-uri` | `${KAIROS_KEK_URI}` | `gcp-kms://…` or `local-dev:` |
-| `spring.datasource.*` / `kairos.datasource.replica.*` | from env | One datasource per role user |
+| `spring.datasource.*` / `kairos.datasource.replica.*` | from env | One database user per service |
 | `spring.kafka.bootstrap-servers` | `${KAFKA_BOOTSTRAP}` | |
 | `management.server.port` | `8081` | Probes and metrics, never exposed through the gateway |
 | `otel.traces.sampler.arg` | `0.01` | |

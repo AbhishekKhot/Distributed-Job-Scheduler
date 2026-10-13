@@ -120,16 +120,16 @@ Topics are created by an `AdminClient` init step at application start, guarded b
 
 | Topic | Partitions (local / perf) | Retention | Notable config |
 |---|---|---|---|
-| `kairos.run.high` | 6 / **48** | 24h | `min.insync.replicas = 2` (perf), `segment.ms = 1h` |
-| `kairos.run.medium` | 12 / **96** | 24h | same |
-| `kairos.run.low` | 6 / **48** | 24h | same |
-| `kairos.run.result` | 12 / **96** | 24h | same |
+| `kairos.run.high` | 6 / **24** | 24h | `min.insync.replicas = 2` (perf), `segment.ms = 1h` |
+| `kairos.run.medium` | 12 / **48** | 24h | same |
+| `kairos.run.low` | 6 / **24** | 24h | same |
+| `kairos.run.result` | 12 / **48** | 24h | same |
 | `kairos.run.cancel` | 1 / 6 | 1h | |
-| `kairos.run.completed` | 6 / 24 | 3 days | |
+| `kairos.run.completed` | 6 / 12 | 3 days | |
 | `kairos.run.dead` | 1 / 6 | 14 days | |
 | `kairos.internal.poison` | 1 / 3 | 14 days | Records that cannot be decoded (quarantined, alerted) |
 
-**Who produces:** every topic except `run.result` is written **only by the `OutboxRelay`** (transactional outbox, HLD §8). `run.result` is written by executors directly, because no database transaction produces a result.
+**Who produces:** every topic except `run.result` is written **only by the `OutboxRelay`** (transactional outbox, HLD §9). `run.result` is written by executors directly, because no database transaction produces a result.
 
 All topics use `cleanup.policy = delete`, `compression.type = producer` and `max.message.bytes = 1048576`. Replication factor is 1 locally and 3 in perf and GCP.
 
