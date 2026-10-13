@@ -3,7 +3,7 @@
 This document surveys how distributed job schedulers, delayed-job queues and workflow orchestrators are built and operated in production. It draws on company engineering blogs, open-source code and documentation, foundational papers, managed cloud service documentation and published incident reports. The findings informed the design of Kairos, described in the [HLD](HLD.md).
 
 - **Compiled:** October 2026.
-- **Attribution:** every claim is attributed to a source (full index in §10). Statements marked *(inference)* are interpretation rather than something a source states directly.
+- **Attribution:** every claim is attributed to a source (full index in section 10). Statements marked *(inference)* are interpretation rather than something a source states directly.
 
 ---
 
@@ -97,7 +97,7 @@ A typical first design for a job scheduler has the right overall shape: a relati
   - Retry policy is set per client (drop, or exponential backoff with jitter), followed by a DLQ.
 - **Scale:** 2B+ callbacks/day, 100K+ schedules/s, p99 lag capped at 1 min.
 - **Lesson:** a fast producer feeding a slow consumer destabilised RabbitMQ through flow control.
-- **Implication:** this is the closest match to the shape described in §0. Add backpressure on broker depth and a relevancy (TTL) window.
+- **Implication:** this is the closest match to the shape described in section 0. Add backpressure on broker depth and a relevancy (TTL) window.
 
 **4. Meta FOQS.** "FOQS: Scaling a distributed priority queue", Feb 2021. https://engineering.fb.com/2021/02/22/production-engineering/foqs-scaling-a-distributed-priority-queue/
 - **Store:** sharded MySQL, with one owner host per shard assigned by Shard Manager.
@@ -247,7 +247,7 @@ A typical first design for a job scheduler has the right overall shape: a relati
 
 **Coverage gaps:**
 - **No primary engineering post found:** Robinhood, Stripe, Coinbase, Grab, Zomato, Flipkart, a Shopify scheduler post, or LinkedIn's Azkaban internals.
-- **Pages blocked:** DoorDash, Razorpay and Swiggy (see §14).
+- **Pages blocked:** DoorDash, Razorpay and Swiggy (see section 14).
 
 ---
 
@@ -849,19 +849,19 @@ Tag all of these by tenant, job type and priority.
 
 | Finding | Kairos design | HLD |
 |---|---|---|
-| Exclusivity must come from the store, not from a cache lock | Watchers claim with `FOR UPDATE SKIP LOCKED` inside leased shards, and every run write is fenced. Redis is used as an execution lock, but always together with the fenced database claim. | §8.2 |
-| Runs need a deterministic identity | A unique key on (target, task, scheduled time); the run id is sent to targets as the `Idempotency-Key` | §8, §12.1 |
-| Avoid dual writes between the store and the broker | A transactional outbox for every state-driven message | §8.1 |
-| Retries belong in the store, in one layer | Retries are `DELAYED` runs with a due time and jittered exponential backoff; infrastructure retries are counted separately | §10.3 |
-| A DLQ is a state with tooling, not just a topic | DLQ entries with triage states, bulk redrive and discard | §10.4 |
-| Dead workers are detected with leases and fencing | Per-run leases, fenced writes, a send-time guard and sent markers | §8.2, §8.3 |
-| Cancellation is cooperative state | `cancel_requested` plus a cancel broadcast; claims refuse cancelled runs | §10.5 |
-| Precision needs short polls or a lookahead | A 1s poll with a 5s lookahead, an outbox relay every 100 ms, and `NOTIFY` wake-ups | §10.2 |
-| Fairness needs more than a priority integer | Weighted priority tiers, per-endpoint limits and tenant quotas | §10.2, §15 |
-| Misfire, overlap and DST rules are per job | `misfirePolicy`, DST handling and `spreadSeconds` | §10.7 |
-| Orchestration is a separate concern | Workflows are versioned DAG resources with bounded size and paced backfill | §10.6 |
-| Job tables need storage hygiene | A small live table, day-partitioned append-only history, partition drops, autovacuum tuning, transaction ID age alerts | §7, §16 |
-| Backlogs need backpressure and canaries | Admission control on the outbox backlog, lag-based autoscaling and a dead man's switch canary | §13, §16 |
+| Exclusivity must come from the store, not from a cache lock | Watchers claim with `FOR UPDATE SKIP LOCKED` inside leased shards, and every run write is fenced. Redis is used as an execution lock, but always together with the fenced database claim. | Section 8.2 |
+| Runs need a deterministic identity | A unique key on (target, task, scheduled time); the run id is sent to targets as the `Idempotency-Key` | Sections 8, 12.1 |
+| Avoid dual writes between the store and the broker | A transactional outbox for every state-driven message | Section 8.1 |
+| Retries belong in the store, in one layer | Retries are `DELAYED` runs with a due time and jittered exponential backoff; infrastructure retries are counted separately | Section 10.3 |
+| A DLQ is a state with tooling, not just a topic | DLQ entries with triage states, bulk redrive and discard | Section 10.4 |
+| Dead workers are detected with leases and fencing | Per-run leases, fenced writes, a send-time guard and sent markers | Sections 8.2, 8.3 |
+| Cancellation is cooperative state | `cancel_requested` plus a cancel broadcast; claims refuse cancelled runs | Section 10.5 |
+| Precision needs short polls or a lookahead | A 1s poll with a 5s lookahead, an outbox relay every 100 ms, and `NOTIFY` wake-ups | Section 10.2 |
+| Fairness needs more than a priority integer | Weighted priority tiers, per-endpoint limits and tenant quotas | Sections 10.2, 15 |
+| Misfire, overlap and DST rules are per job | `misfirePolicy`, DST handling and `spreadSeconds` | Section 10.7 |
+| Orchestration is a separate concern | Workflows are versioned DAG resources with bounded size and paced backfill | Section 10.6 |
+| Job tables need storage hygiene | A small live table, day-partitioned append-only history, partition drops, autovacuum tuning, transaction ID age alerts | Sections 7, 16 |
+| Backlogs need backpressure and canaries | Admission control on the outbox backlog, lag-based autoscaling and a dead man's switch canary | Sections 13, 16 |
 
 ---
 
