@@ -185,7 +185,7 @@ Above the provisioned rate nothing is dropped: work waits in the outbox and Kafk
 | Risk | Mitigation |
 |---|---|
 | A cell cannot hold its share of peak writes | Per-cell load test before anything else is built; move to 4 cells |
-| Outbox churn of 50K inserts and deletes per second | Hash-partitioned table, batched deletes, tuned autovacuum |
+| Outbox churn of 50K inserts and deletes per second | The delete is how the relay records that a row was published; a "published" flag would cost the same update, and a read cursor is unsafe because transactions commit out of order. Deletes are batched (up to 2K rows per statement) on a hash-partitioned table with tuned autovacuum. |
 | Redis on the execution path | Replica with failover, fail-closed executors, fence as the backstop |
 | One team starves others | Quotas, per-endpoint limits, priority tiers |
 | A job targets a sensitive internal service | Deny list, NetworkPolicies, request signing, audit of endpoint changes |

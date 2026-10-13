@@ -1,7 +1,5 @@
 # Kairos: Low-Level Design
 
-This document covers the database design, the API contracts and the background processing jobs. Architecture, guarantees and the end-to-end flow are in the [HLD](HLD.md).
-
 ## 1. Conventions
 
 | Topic | Rule |
