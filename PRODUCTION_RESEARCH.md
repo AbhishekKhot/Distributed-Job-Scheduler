@@ -1008,3 +1008,42 @@ Tag all of these by tenant, job type and priority.
 - GitHub Actions security hardening: https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions
 - Firecracker: https://www.usenix.org/conference/nsdi20/presentation/agache
 - Heroku Scheduler: https://devcenter.heroku.com/articles/scheduler
+
+## 11. Sharding strategies for write-heavy systems
+
+### 11.1 Strategies used in production
+
+| Strategy | How it works | Used by | Strengths | Weaknesses |
+|---|---|---|---|---|
+| **Range** | Each shard owns a contiguous key range; ranges split when they grow | Bigtable, HBase, Spanner, CockroachDB, MongoDB (ranged) | Efficient range scans; automatic splitting | Hot spots when keys increase steadily, such as timestamps or sequential ids |
+| **Hash mod N** | `hash(key) mod N` picks the shard | Simple application-level sharding | Even spread, trivial routing | Changing N moves almost every key |
+| **Consistent hashing** | Keys and nodes sit on a hash ring, with virtual nodes | Cassandra, DynamoDB, Riak, ScyllaDB | Adding a node moves only a slice of the data | No cross-shard transactions; range queries are hard |
+| **Fixed logical shards mapped to physical databases** | Many fixed logical shards; a map assigns each to a physical database; ids carry the shard number | Instagram (thousands of logical shards on PostgreSQL), Notion (480 logical shards on PostgreSQL), Temporal (history shard count fixed at cluster creation), Vitess, Citus | Growth by moving whole shards, never rehashing; routing from the id alone | The shard count is fixed up front; cross-shard queries need scatter-gather |
+| **Directory (lookup) based** | A lookup service maps each key or tenant to a shard | Many multi-tenant SaaS products | Any key can move anywhere; good for very large tenants | The lookup service is on every request path and must never fail |
+| **Tenant / cell based** | Each tenant lives wholly in one "cell" or "pod" (a full stack); cells are independent | Shopify pods, Salesforce instances, AWS cell-based architecture, Slack's cellular design | Limits the blast radius of an outage; per-tenant isolation | One very large tenant can overload its cell |
+| **Time-bucket** | Data partitioned by time bucket × N shards | OneSignal (ScyllaDB), Walmart BigBen (Cassandra), Discord messages | Ideal for timers and append-only logs; old buckets are dropped cheaply | Lookups by entity id need another index |
+| **Vertical (functional)** | Different tables or domains in different databases | Almost every system, as a first step | Simple; each database tuned for its load | Does not help a single table that grows too large |
+
+Write-heavy queues and schedulers in production mostly use **fixed logical shards with one owner per shard**:
+- **Meta FOQS:** sharded MySQL, where a shard manager gives each shard a single owner.
+- **Uber Cadence and Temporal:** a fixed number of history shards, each owned by one host.
+- **Segment Centrifuge:** many MySQL job databases, each with a single writer.
+- **Airbnb Dynein:** DynamoDB partitions, each read by one pod.
+
+### 11.2 What Kairos combines
+
+1. **Vertical split.** A small control database (teams, users, endpoints) is kept apart from the cell databases (jobs, runs, outbox, history), so the hot path never writes to the control database.
+2. **Fixed logical shards.** `murmur3(team_id + name) mod 256`, with the shard embedded in every job and run id, as Instagram does. Any id routes to its database without a lookup.
+3. **Single owner per shard.** Watchers lease shards, as in FOQS, Cadence and Temporal. Two watchers never poll the same rows, so there is no lock contention.
+4. **Cells for blast radius.** A cell failover pauses only its shards. These are database cells, not full-stack cells: the services are shared across cells.
+5. **Time partitioning inside each cell.** `run_history` and `task_outputs` are partitioned by day, and old days are dropped instead of deleted row by row.
+
+**Why the shard key is team + name rather than team alone.** Sharding by team (the tenant pattern) would put a large team's entire load on one cell. Hashing the job name spreads every team across all shards. Each job is a small, bounded unit of load, since it fires at most once per occurrence, so no single job becomes a hot spot. The cost is that team-wide lists (jobs, runs, DLQ) read all cells in parallel, which happens only on the API side and never on the execution path.
+
+### 11.3 Practices not yet written into the design
+
+| Gap | What production systems do |
+|---|---|
+| **Moving a shard to a new cell** | Copy the shard's rows with logical replication, briefly pause the shard by draining its lease, let the copy catch up, point `cell_map` at the new cell, resume. `cell_map` already has a `DRAINING` status for this, but the procedure is not documented yet. |
+| **Hot-shard detection** | Per-shard metrics (fires, outbox backlog, lag) and an alert when one shard is far above the average |
+| **Shard-count headroom** | 256 shards allow at most 256 cells, far more than the planned 2–4. Temporal deployments often choose 512 or more. Raising the count later means re-issuing ids, so any increase (for example to 1024, embedding 10 bits instead of 8) is cheapest before the first release. |
