@@ -40,11 +40,16 @@ public class OpenApiConfig {
                                 All team resources are scoped to the team of the caller's token or API key.
                                 Errors use RFC 9457 problem details.""")
                         .license(new License().name("Internal")))
-                .components(new Components().addSecuritySchemes(BEARER_AUTH, new SecurityScheme()
-                        .type(SecurityScheme.Type.HTTP)
-                        .scheme("bearer")
-                        .bearerFormat("JWT access token or team API key")
-                        .description("Access token from POST /v1/auth/login, or an API key from POST /v1/api-keys.")))
+                .components(
+                        new Components()
+                                .addSecuritySchemes(
+                                        BEARER_AUTH,
+                                        new SecurityScheme()
+                                                .type(SecurityScheme.Type.HTTP)
+                                                .scheme("bearer")
+                                                .bearerFormat("JWT access token or team API key")
+                                                .description(
+                                                        "Access token from POST /v1/auth/login, or an API key from POST /v1/api-keys.")))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH));
     }
 
