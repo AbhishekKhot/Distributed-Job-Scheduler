@@ -26,6 +26,7 @@ include(
     ":libs:kairos-security",
     ":libs:kairos-http",
     ":libs:kairos-engine",
+    ":libs:kairos-test-support",
     // Deployable services
     ":services:kairos-api",
     ":services:kairos-watcher",
