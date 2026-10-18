@@ -86,7 +86,8 @@ docker compose -f deploy/compose/docker-compose.yml exec postgres psql -U postgr
 │   ├── kairos-messaging       Kafka producers and consumers
 │   ├── kairos-security        passwords, tokens, API keys, encryption
 │   ├── kairos-http            outbound HTTP client and target policy
-│   └── kairos-engine          run lock, claims, outbox, shared by watcher, executor and state
+│   ├── kairos-engine          run lock, claims, outbox, shared by watcher, executor and state
+│   └── kairos-test-support    test containers pinned to the compose images, clock and polling helpers
 ├── jobs/                      one-shot jobs: kairos-migrations, kairos-maintenance
 ├── tools/                     mock-target (test HTTPS target), bench-cli (load and verification)
 ├── build-logic/               Gradle convention plugins shared by all modules
