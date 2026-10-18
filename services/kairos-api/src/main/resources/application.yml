@@ -1,0 +1,57 @@
+# Configuration for Kairos public REST API.
+# Secrets and connection settings come from environment variables only (see deploy/compose/.env.example).
+spring:
+  application:
+    name: kairos-api
+  threads:
+    virtual:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    deserialization:
+      # Request bodies with unknown fields are rejected (no mass assignment).
+      fail-on-unknown-properties: true
+
+server:
+  port: 8080
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
+management:
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  info:
+    env:
+      enabled: false
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${KAIROS_SWAGGER_UI_ENABLED:true}
+    operations-sorter: method
+    tags-sorter: alpha
+  default-produces-media-type: application/json
+  paths-to-match: /v1/**, /.well-known/**
+
+logging:
+  structured:
+    format:
+      console: ecs

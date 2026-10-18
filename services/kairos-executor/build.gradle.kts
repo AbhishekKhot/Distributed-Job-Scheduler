@@ -1,0 +1,12 @@
+plugins {
+    id("kairos.service-conventions")
+}
+
+description = "Kairos executor: run lock, fenced claim, HTTPS calls to team endpoints"
+
+dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation(project(":libs:kairos-engine"))
+    implementation(project(":libs:kairos-http"))
+    implementation(project(":libs:kairos-security"))
+}
