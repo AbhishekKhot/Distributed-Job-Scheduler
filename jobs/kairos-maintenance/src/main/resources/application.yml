@@ -1,0 +1,26 @@
+# Configuration for Kairos maintenance job and operator commands.
+# Secrets and connection settings come from environment variables only (see deploy/compose/.env.example).
+spring:
+  application:
+    name: kairos-maintenance
+  main:
+    web-application-type: none
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  info:
+    env:
+      enabled: false
+
+logging:
+  structured:
+    format:
+      console: ecs

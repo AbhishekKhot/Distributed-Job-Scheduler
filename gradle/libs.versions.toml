@@ -1,0 +1,45 @@
+# Single source of truth for dependency versions. Spring-managed libraries take their
+# versions from the Spring Boot BOM; everything else is pinned here.
+[versions]
+java = "25"
+spring-boot = "4.1.1"
+springdoc = "3.1.1"
+protobuf = "4.36.2"
+protobuf-plugin = "0.10.0"
+testcontainers = "2.0.5"
+resilience4j = "2.4.0"
+bucket4j = "8.21.0"
+cron-utils = "9.2.1"
+tink = "1.23.0"
+tink-gcpkms = "1.12.0"
+bouncycastle = "1.86"
+nimbus-jose-jwt = "10.10"
+guava = "33.7.2-jre"
+caffeine = "3.3.1"
+picocli = "4.7.7"
+jqwik = "1.10.2"
+archunit = "1.5.1"
+jmh = "1.37"
+
+[libraries]
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
+protobuf-gradle-plugin = { module = "com.google.protobuf:protobuf-gradle-plugin", version.ref = "protobuf-plugin" }
+springdoc-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+resilience4j-bom = { module = "io.github.resilience4j:resilience4j-bom", version.ref = "resilience4j" }
+bucket4j-lettuce = { module = "com.bucket4j:bucket4j_jdk17-lettuce", version.ref = "bucket4j" }
+cron-utils = { module = "com.cronutils:cron-utils", version.ref = "cron-utils" }
+tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
+tink-gcpkms = { module = "com.google.crypto.tink:tink-gcpkms", version.ref = "tink-gcpkms" }
+bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+picocli = { module = "info.picocli:picocli", version.ref = "picocli" }
+jqwik = { module = "net.jqwik:jqwik", version.ref = "jqwik" }
+archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
+jmh-generator = { module = "org.openjdk.jmh:jmh-generator-annprocess", version.ref = "jmh" }

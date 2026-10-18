@@ -1,0 +1,343 @@
+# Local Kairos stack: everything runs in containers, nothing on the host.
+#
+#   make env    # once: writes deploy/compose/.env with random credentials
+#   make up     # builds the images and starts the stack
+#
+# Only the API (and, with the "observability" profile, Prometheus and Grafana) is published,
+# and only on 127.0.0.1. Infrastructure sits on an internal network with no route out.
+# Inside this network Postgres, Kafka and Redis run without TLS; production uses TLS
+# (Cloud SQL connector, Managed Kafka SASL_SSL, Memorystore in-transit encryption).
+name: kairos
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-app-env: &app-env
+  KAIROS_CONTROL_DB_URL: jdbc:postgresql://postgres:5432/kairos_control
+  KAIROS_CELL_0_DB_URL: jdbc:postgresql://postgres:5432/kairos_cell0
+  KAIROS_CELL_1_DB_URL: jdbc:postgresql://postgres:5432/kairos_cell1
+  KAIROS_DB_USERNAME: sched_app
+  KAIROS_DB_PASSWORD: ${KAIROS_DB_APP_PASSWORD:?run make env}
+  KAIROS_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  KAIROS_REDIS_HOST: redis
+  KAIROS_REDIS_PORT: "6379"
+  KAIROS_REDIS_USERNAME: kairos
+  KAIROS_REDIS_PASSWORD: ${KAIROS_REDIS_PASSWORD:?run make env}
+
+# Settings shared by the long-running Kairos applications.
+x-app: &app
+  <<: [*hardening, *logging]
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m
+  restart: unless-stopped
+  networks: [backend]
+  environment:
+    <<: *app-env
+  depends_on:
+    kairos-migrations:
+      condition: service_completed_successfully
+    kafka-init:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  healthcheck:
+    # The runtime image has no curl; bash can still speak HTTP to the management port.
+    test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /actuator/health/readiness HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+    interval: 10s
+    timeout: 3s
+    retries: 6
+    start_period: 40s
+  deploy:
+    resources:
+      limits:
+        memory: 640m
+
+x-build: &build
+  context: ../..
+  dockerfile: deploy/docker/Dockerfile
+
+services:
+  # ------------------------------------------------------------------ infrastructure
+  postgres:
+    <<: [*hardening, *logging]
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    # The entrypoint needs these to prepare the data directory and drop to the postgres user.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    command:
+      - postgres
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - password_encryption=scram-sha-256
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run make env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      KAIROS_DB_OWNER_PASSWORD: ${KAIROS_DB_OWNER_PASSWORD:?run make env}
+      KAIROS_DB_APP_PASSWORD: ${KAIROS_DB_APP_PASSWORD:?run make env}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./postgres/01-init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=postgres", "--dbname=kairos_cell1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    <<: [*hardening, *logging]
+    image: redis:8.8.3@sha256:eb1aa641bc5380ed14442398e45a5a51aeaaac919fab811e4f134eb77c71dd2d
+    user: redis
+    read_only: true
+    tmpfs:
+      - /tmp:size=1m,mode=0700,uid=999,gid=999
+    entrypoint: ["sh", "/opt/kairos/start-redis.sh"]
+    environment:
+      KAIROS_REDIS_PASSWORD: ${KAIROS_REDIS_PASSWORD:?run make env}
+    volumes:
+      - redis-data:/data
+      - ./redis/start-redis.sh:/opt/kairos/start-redis.sh:ro
+    networks: [backend]
+    healthcheck:
+      # REDISCLI_AUTH keeps the password out of the process list.
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$KAIROS_REDIS_PASSWORD\" redis-cli --no-auth-warning --user kairos ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  kafka:
+    <<: [*hardening, *logging]
+    image: apache/kafka:4.3.1@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:?run make env}
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  kafka-init:
+    <<: [*hardening, *logging]
+    image: apache/kafka:4.3.1@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837
+    entrypoint: ["bash", "/opt/kairos/create-topics.sh"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - ./kafka/create-topics.sh:/opt/kairos/create-topics.sh:ro
+    networks: [backend]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+
+  # ------------------------------------------------------------------ Kairos
+  kairos-migrations:
+    <<: [*hardening, *logging]
+    image: kairos/kairos-migrations:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: jobs/kairos-migrations
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    environment:
+      KAIROS_CONTROL_DB_URL: jdbc:postgresql://postgres:5432/kairos_control
+      KAIROS_CELL_0_DB_URL: jdbc:postgresql://postgres:5432/kairos_cell0
+      KAIROS_CELL_1_DB_URL: jdbc:postgresql://postgres:5432/kairos_cell1
+      # Migrations run as the schema owner; the services only get DML through sched_app.
+      KAIROS_DB_USERNAME: sched_owner
+      KAIROS_DB_PASSWORD: ${KAIROS_DB_OWNER_PASSWORD:?run make env}
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  kairos-api:
+    <<: *app
+    image: kairos/kairos-api:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: services/kairos-api
+    environment:
+      <<: *app-env
+      KAIROS_SWAGGER_UI_ENABLED: "true"
+    networks: [backend, edge]
+    ports:
+      - "127.0.0.1:${KAIROS_API_PORT:-8080}:8080"
+
+  kairos-watcher:
+    <<: *app
+    image: kairos/kairos-watcher:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: services/kairos-watcher
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 640m
+
+  kairos-executor:
+    <<: *app
+    image: kairos/kairos-executor:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: services/kairos-executor
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 640m
+
+  kairos-state:
+    <<: *app
+    image: kairos/kairos-state:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: services/kairos-state
+
+  # ------------------------------------------------------------------ test tools
+  mock-target:
+    <<: *app
+    image: kairos/mock-target:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: tools/mock-target
+    depends_on: {}
+    environment: {}
+
+  bench-cli:
+    <<: [*hardening, *logging]
+    image: kairos/bench-cli:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: tools/bench-cli
+    profiles: [bench]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    environment:
+      KAIROS_API_URL: http://kairos-api:8080
+    networks: [backend]
+    depends_on:
+      kairos-api:
+        condition: service_healthy
+    restart: "no"
+
+  # ------------------------------------------------------------------ observability
+  prometheus:
+    <<: [*hardening, *logging]
+    image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    profiles: [observability]
+    read_only: true
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=2d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [backend, edge]
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    <<: [*hardening, *logging]
+    image: grafana/grafana:12.4.13@sha256:41bbc1b5e04416f81891806076db2a2ff60a5d4da5f78d36a88b033a8c199185
+    profiles: [observability]
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run make env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    networks: [backend, edge]
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus]
+    restart: unless-stopped
+
+networks:
+  # No route out: infrastructure and services cannot reach the internet.
+  backend:
+    internal: true
+  # Only for containers with a published port.
+  edge: {}
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  prometheus-data:
+  grafana-data:

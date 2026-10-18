@@ -1,0 +1,17 @@
+# Build output
+build/
+.gradle/
+.kotlin/
+out/
+
+# IDE and OS files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Local credentials
+deploy/compose/.env
+.env
+*.pem
+*.key

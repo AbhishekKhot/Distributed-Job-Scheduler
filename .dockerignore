@@ -1,0 +1,17 @@
+# Only sources and build scripts go into the image build context.
+**/build/
+**/.gradle/
+.git/
+.github/
+.idea/
+.vscode/
+.local/
+**/.DS_Store
+**/*.iml
+deploy/
+scripts/
+assets/
+*.md
+*.pdf
+**/.env
+**/.env.*
