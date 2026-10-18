@@ -1,9 +1,15 @@
-// Settings shared by every Java module: toolchain, strict compilation, tests and locked dependencies.
+// Settings shared by every Java module: toolchain, strict compilation, tests, locked dependencies
+// and the quality gates every module must pass (formatting, coverage, architecture tests).
 plugins {
     java
+    id("kairos.dependency-locking")
+    id("kairos.formatting-conventions")
+    id("kairos.coverage-conventions")
+    id("kairos.archunit-conventions")
 }
 
 val libs = the<VersionCatalogsExtension>().named("libs")
+
 fun lib(alias: String) = libs.findLibrary(alias).get()
 
 group = "dev.kairos"
@@ -13,11 +19,6 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(libs.findVersion("java").get().requiredVersion))
     }
-}
-
-dependencyLocking {
-    // Every resolved configuration is locked; refresh with: ./gradlew resolveAndLockAll --write-locks
-    lockAllConfigurations()
 }
 
 dependencies {
@@ -32,7 +33,13 @@ dependencies {
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release.set(libs.findVersion("java").get().requiredVersion.toInt())
+    options.release.set(
+        libs
+            .findVersion("java")
+            .get()
+            .requiredVersion
+            .toInt(),
+    )
     // -parameters keeps parameter names for Spring binding; warnings fail the build.
     options.compilerArgs.addAll(listOf("-parameters", "-Xlint:all,-processing,-serial", "-Werror"))
 }
@@ -44,20 +51,5 @@ tasks.withType<Test>().configureEach {
     testLogging {
         events("failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-    }
-}
-
-tasks.withType<Javadoc>().configureEach {
-    (options as StandardJavadocDocletOptions).addBooleanOption("Xdoclint:all,-missing", true)
-}
-
-tasks.register("resolveAndLockAll") {
-    description = "Resolves every resolvable configuration so --write-locks can record it."
-    notCompatibleWithConfigurationCache("Resolves configurations at execution time")
-    doFirst {
-        require(gradle.startParameter.isWriteDependencyLocks) { "Run with --write-locks" }
-    }
-    doLast {
-        configurations.filter { it.isCanBeResolved }.forEach { it.resolve() }
     }
 }
