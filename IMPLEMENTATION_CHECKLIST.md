@@ -337,14 +337,14 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** an intentionally unformatted file, a missing Javadoc on a public library method, a `kairos-domain` class importing Spring, and a test that drops coverage each fail `make build` with a clear message.
 
 ### T-003 Shared test support
-**Status:** todo · **Needs:** T-001 · **Owns:** `libs/kairos-test-support/` (new module, test fixtures only), `settings.gradle.kts` (adding the module)
+**Status:** review · **Needs:** T-001 · **Owns:** `libs/kairos-test-support/` (new module, test fixtures only), `settings.gradle.kts` (adding the module)
 
-- [ ] New module `libs:kairos-test-support`, consumed only through `testImplementation`.
-- [ ] Testcontainers definitions pinned to the same image digests as compose: `KairosPostgres` (runs `deploy/compose/postgres/01-init-databases.sh` with generated passwords, then exposes `controlDataSource()`, `cellDataSource(int)`), `KairosKafka` (creates the topics from `create-topics.sh`), `KairosRedis` (applies the same ACL).
-- [ ] Containers are reused across test classes within a run (singleton pattern), not across runs.
-- [ ] `MutableClock` for tests; `TestIds` to build ids with a chosen shard; `Awaits` helpers with short polling.
-- [ ] A JUnit extension `@KairosIntegrationTest` that starts the needed containers and injects connection details as Spring properties (`@DynamicPropertySource`).
-- [ ] Docs in the module's `package-info.java` showing a minimal test.
+- [x] New module `libs:kairos-test-support`, consumed only through `testImplementation`.
+- [x] Testcontainers definitions pinned to the same image digests as compose: `KairosPostgres` (runs `deploy/compose/postgres/01-init-databases.sh` with generated passwords, then exposes `controlDataSource()`, `cellDataSource(int)` as `sched_app`, owner variants for migration tests, and JDBC URLs and credentials), `KairosKafka` (runs `create-topics.sh` inside the container, so the topics have one definition), `KairosRedis` (starts through `start-redis.sh`, so the ACL is the same). A unit test fails if an image drifts from `docker-compose.yml`.
+- [x] Containers are reused across test classes within a run (lazily started singletons), not across runs.
+- [x] `MutableClock` for tests; `Awaits` helpers with short polling (Awaitility, 50 ms polls).
+- [x] A JUnit extension `@KairosIntegrationTest(postgres, kafka, redis)` that starts the selected containers in parallel, resolves `KairosPostgres`/`KairosKafka`/`KairosRedis` test parameters, and registers the connection details as Spring properties (`kairos.datasource.control.*`, `kairos.datasource.cells[n].*`, `kairos.kafka.bootstrap-servers`, `kairos.redis.*`) through a context customizer, so no `@DynamicPropertySource` method is needed.
+- [x] Docs in the module's `package-info.java` showing a minimal test.
 
 **Acceptance:** a sample integration test in the module starts all three containers inside `make test` (Docker socket mounted), and runs SQL, a Kafka round trip and an authenticated Redis `SET` with the `kairos` ACL user.
 
@@ -356,6 +356,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Status:** todo · **Needs:** T-002 · **Owns:** `libs/kairos-domain` packages `dev.kairos.domain.id`, `dev.kairos.domain.shard`, `dev.kairos.domain.model`, `dev.kairos.domain.error`
 
 - [ ] `KairosId`: UUIDv7 generation from an injected `Clock` and `SecureRandom`, with the shard (0–255) written into the low 8 bits for job, workflow, run, workflow-run and DLQ ids. `shardOf(UUID)` extracts it. Timestamp ordering is preserved.
+- [ ] `TestIds` in `libs/kairos-test-support` to build ids with a chosen shard
 - [ ] `ShardKey`: `shard = floorMod(murmur3_32_fixed(utf8(teamId.toString() + "/" + name)), 256)`. The separator and encoding are fixed forever and recorded in Javadoc. Golden test vectors are committed so the function can never change silently.
 - [ ] Typed ids as records (`TeamId`, `UserId`, `JobId`, `WorkflowId`, `RunId`, `WorkflowRunId`, `EndpointId`, `DlqId`) with parsing that rejects malformed input.
 - [ ] Names: `TeamSlug` (`^[a-z][a-z0-9-]{2,62}$`), `EndpointName` (`^[a-z][a-z0-9-]{1,62}$`), `JobName` and `WorkflowName` (≤ 128, allowed character set as in the LLD), `TaskKey`. All of them check length before matching.
