@@ -1,0 +1,27 @@
+# Golden shard vectors: teamId, name, expected shard.
+# Computed with an independent murmur3_x86_32 (seed 0) implementation over utf8(teamId + "/" + name).
+# NEVER edit these rows: a different result means existing jobs would move to another shard.
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","nightly-order-sync",72
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","order-fulfilment",222
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","a",70
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","hourly-stock-sync",192
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",107
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","Report_2026.v2",161
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","café",135
+"0192e8c4-2a1b-7f3c-8d4e-5f6a7b8c9d0e","rocket-🚀",60
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","nightly-order-sync",36
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","order-fulfilment",224
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","a",76
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","hourly-stock-sync",9
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",255
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","Report_2026.v2",181
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","café",39
+"0192f3b5-3d4e-7a5b-9c6d-7e8f9a0b1c7a","rocket-🚀",75
+"01930000-0000-7000-8000-000000000000","nightly-order-sync",216
+"01930000-0000-7000-8000-000000000000","order-fulfilment",156
+"01930000-0000-7000-8000-000000000000","a",82
+"01930000-0000-7000-8000-000000000000","hourly-stock-sync",238
+"01930000-0000-7000-8000-000000000000","xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",238
+"01930000-0000-7000-8000-000000000000","Report_2026.v2",231
+"01930000-0000-7000-8000-000000000000","café",47
+"01930000-0000-7000-8000-000000000000","rocket-🚀",224
