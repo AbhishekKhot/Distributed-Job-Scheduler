@@ -1,0 +1,189 @@
+# Expected columns of every cell table in schema scheduler (LLD section 2.3).
+# One line per column, in table order: table|column|data_type|is_nullable (information_schema.columns).
+# Partitions and Flyway's history table are left out. Update this list in the same change as the LLD.
+api_idempotency|team_id|uuid|NO
+api_idempotency|idem_key|text|NO
+api_idempotency|request_hash|bytea|NO
+api_idempotency|status|smallint|NO
+api_idempotency|http_status|smallint|YES
+api_idempotency|response_body|jsonb|YES
+api_idempotency|created_at|timestamp with time zone|NO
+dead_letters|dlq_id|uuid|NO
+dead_letters|team_id|uuid|NO
+dead_letters|run_id|uuid|NO
+dead_letters|shard_id|smallint|NO
+dead_letters|scheduled_at|timestamp with time zone|NO
+dead_letters|target_type|smallint|NO
+dead_letters|definition_id|uuid|NO
+dead_letters|definition_version|integer|NO
+dead_letters|target_id|uuid|NO
+dead_letters|task_key|text|NO
+dead_letters|endpoint_id|uuid|NO
+dead_letters|endpoint_version|integer|NO
+dead_letters|attempt|smallint|NO
+dead_letters|infra_attempt|smallint|NO
+dead_letters|priority|smallint|NO
+dead_letters|reason|smallint|NO
+dead_letters|last_http_status|smallint|YES
+dead_letters|last_error|text|YES
+dead_letters|response_snippet|text|YES
+dead_letters|status|smallint|NO
+dead_letters|assignee|text|YES
+dead_letters|notes|text|YES
+dead_letters|resolved_by|text|YES
+dead_letters|resolved_at|timestamp with time zone|YES
+dead_letters|redrive_mode|smallint|YES
+dead_letters|created_at|timestamp with time zone|NO
+endpoint_health_minute|endpoint_id|uuid|NO
+endpoint_health_minute|minute|timestamp with time zone|NO
+endpoint_health_minute|node_id|text|NO
+endpoint_health_minute|team_id|uuid|NO
+endpoint_health_minute|attempts|integer|NO
+endpoint_health_minute|successes|integer|NO
+endpoint_health_minute|retryable|integer|NO
+endpoint_health_minute|non_retryable|integer|NO
+endpoint_health_minute|dead_lettered|integer|NO
+endpoint_health_minute|latency_sum_ms|bigint|NO
+endpoint_health_minute|latency_max_ms|integer|NO
+job_health|job_id|uuid|NO
+job_health|team_id|uuid|NO
+job_health|recent_mask|smallint|NO
+job_health|recent_count|smallint|NO
+job_health|consecutive_dead|smallint|NO
+job_health|unhealthy_since|timestamp with time zone|YES
+job_health|updated_at|timestamp with time zone|NO
+job_versions|job_id|uuid|NO
+job_versions|version|integer|NO
+job_versions|spec|jsonb|NO
+job_versions|created_at|timestamp with time zone|NO
+jobs|job_id|uuid|NO
+jobs|team_id|uuid|NO
+jobs|name|text|NO
+jobs|version|integer|NO
+jobs|status|text|NO
+jobs|endpoint_id|uuid|NO
+jobs|spec|jsonb|NO
+jobs|created_by|text|NO
+jobs|created_at|timestamp with time zone|NO
+jobs|updated_at|timestamp with time zone|NO
+outbox|shard_id|smallint|NO
+outbox|outbox_id|uuid|NO
+outbox|topic|smallint|NO
+outbox|msg_key|bytea|NO
+outbox|payload|bytea|NO
+outbox|trace_parent|text|YES
+outbox|run_id|uuid|YES
+outbox|available_at|timestamp with time zone|NO
+outbox|created_at|timestamp with time zone|NO
+run_history|scheduled_at|timestamp with time zone|NO
+run_history|run_id|uuid|NO
+run_history|attempt|smallint|NO
+run_history|infra_attempt|smallint|NO
+run_history|team_id|uuid|NO
+run_history|target_type|smallint|NO
+run_history|definition_id|uuid|NO
+run_history|target_id|uuid|NO
+run_history|task_key|text|NO
+run_history|endpoint_id|uuid|NO
+run_history|trigger|smallint|NO
+run_history|outcome|smallint|NO
+run_history|error_class|smallint|YES
+run_history|final|boolean|NO
+run_history|http_status|smallint|YES
+run_history|started_at|timestamp with time zone|YES
+run_history|finished_at|timestamp with time zone|NO
+run_history|latency_ms|integer|YES
+run_history|executor_id|text|YES
+run_history|error|text|YES
+run_history|response_snippet|text|YES
+run_inflight|shard_id|smallint|NO
+run_inflight|run_id|uuid|NO
+run_inflight|team_id|uuid|NO
+run_inflight|target_type|smallint|NO
+run_inflight|definition_id|uuid|NO
+run_inflight|definition_version|integer|NO
+run_inflight|target_id|uuid|NO
+run_inflight|task_key|text|NO
+run_inflight|endpoint_id|uuid|NO
+run_inflight|endpoint_version|integer|NO
+run_inflight|scheduled_at|timestamp with time zone|NO
+run_inflight|due_at|timestamp with time zone|NO
+run_inflight|state|smallint|NO
+run_inflight|attempt|smallint|NO
+run_inflight|series_start|smallint|NO
+run_inflight|series_started_at|timestamp with time zone|NO
+run_inflight|infra_attempt|smallint|NO
+run_inflight|deferrals|integer|NO
+run_inflight|fence|integer|NO
+run_inflight|owner_node|text|YES
+run_inflight|lease_until|timestamp with time zone|YES
+run_inflight|remaining_deps|smallint|NO
+run_inflight|cancel_requested|boolean|NO
+run_inflight|priority|smallint|NO
+run_inflight|trigger|smallint|NO
+run_inflight|max_lateness_ms|integer|YES
+schedules|schedule_id|uuid|NO
+schedules|target_type|smallint|NO
+schedules|team_id|uuid|NO
+schedules|endpoint_id|uuid|YES
+schedules|shard_id|smallint|NO
+schedules|status|smallint|NO
+schedules|next_fire_at|timestamp with time zone|YES
+schedules|kind|smallint|NO
+schedules|cron_expr|text|YES
+schedules|timezone|text|NO
+schedules|interval_ms|bigint|YES
+schedules|spread_ms|integer|NO
+schedules|dst_policy|smallint|NO
+schedules|misfire_policy|smallint|NO
+schedules|max_catchup|smallint|NO
+schedules|definition_version|integer|NO
+schedules|priority|smallint|NO
+schedules|last_fired_local|timestamp without time zone|YES
+shard_leases|shard_id|smallint|NO
+shard_leases|owner_node|text|YES
+shard_leases|generation|bigint|NO
+shard_leases|lease_until|timestamp with time zone|YES
+task_outputs|scheduled_at|timestamp with time zone|NO
+task_outputs|workflow_run_id|uuid|NO
+task_outputs|task_key|text|NO
+task_outputs|team_id|uuid|NO
+task_outputs|outputs|jsonb|YES
+task_outputs|sealed|bytea|YES
+task_outputs|created_at|timestamp with time zone|NO
+team_stats_minute|team_id|uuid|NO
+team_stats_minute|minute|timestamp with time zone|NO
+team_stats_minute|node_id|text|NO
+team_stats_minute|attempts|integer|NO
+team_stats_minute|successes|integer|NO
+team_stats_minute|dead_lettered|integer|NO
+team_stats_minute|latency_sum_ms|bigint|NO
+workflow_runs|workflow_run_id|uuid|NO
+workflow_runs|workflow_id|uuid|NO
+workflow_runs|workflow_version|integer|NO
+workflow_runs|team_id|uuid|NO
+workflow_runs|shard_id|smallint|NO
+workflow_runs|scheduled_at|timestamp with time zone|NO
+workflow_runs|trigger|smallint|NO
+workflow_runs|status|smallint|NO
+workflow_runs|total|smallint|NO
+workflow_runs|succeeded|smallint|NO
+workflow_runs|failed|smallint|NO
+workflow_runs|cancelled|smallint|NO
+workflow_runs|skipped|smallint|NO
+workflow_runs|blocked_until|timestamp with time zone|YES
+workflow_runs|started_at|timestamp with time zone|YES
+workflow_runs|finished_at|timestamp with time zone|YES
+workflow_versions|workflow_id|uuid|NO
+workflow_versions|version|integer|NO
+workflow_versions|spec|jsonb|NO
+workflow_versions|created_at|timestamp with time zone|NO
+workflows|workflow_id|uuid|NO
+workflows|team_id|uuid|NO
+workflows|name|text|NO
+workflows|version|integer|NO
+workflows|status|text|NO
+workflows|spec|jsonb|NO
+workflows|created_by|text|NO
+workflows|created_at|timestamp with time zone|NO
+workflows|updated_at|timestamp with time zone|NO
