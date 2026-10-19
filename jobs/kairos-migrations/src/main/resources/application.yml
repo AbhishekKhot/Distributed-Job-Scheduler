@@ -1,10 +1,18 @@
-# Configuration for Kairos database migrations job.
-# Secrets and connection settings come from environment variables only (see deploy/compose/.env.example).
+# Configuration of the kairos-migrations job. Connection settings and credentials come from
+# environment variables only (KAIROS_CONTROL_DB_URL, KAIROS_CELL_<n>_DB_URL, KAIROS_DB_USERNAME,
+# KAIROS_DB_PASSWORD), bound to MigrationProperties.
 spring:
   application:
     name: kairos-migrations
   main:
     web-application-type: none
+
+kairos:
+  migrations:
+    # The role the services connect as; every table must grant it DML.
+    app-role: sched_app
+    # Daily partitions are created for today (UTC) and this many days ahead.
+    partition-days-ahead: 3
 
 management:
   endpoints:
