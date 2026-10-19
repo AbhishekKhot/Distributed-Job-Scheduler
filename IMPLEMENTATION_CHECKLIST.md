@@ -243,7 +243,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 
 | Wave | Tasks that can run in parallel | Needs |
 |---|---|---|
-| 0 | T-001 (done), T-002, T-003 | none |
+| 0 | T-001 (done), T-002 (done), T-003 | none |
 | 1 | T-101, T-105, T-106, T-109, T-110, T-112 | T-002, T-003 |
 | 2 | T-102, T-103, T-104, T-107, T-108, T-111 | Wave 1 items listed per task |
 | 3 | T-113, T-201, T-301 | T-107, T-108, T-109, T-111 |
@@ -255,9 +255,9 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | Id | Task | Module | Status |
 |---|---|---|---|
 | T-001 | Repository skeleton, build and images | root | done |
-| T-002 | Build quality gates | build-logic | todo |
+| T-002 | Build quality gates | build-logic | done |
 | T-003 | Shared test support | libs/kairos-test-support | todo |
-| T-101 | Identifiers, shards and domain types | kairos-domain | todo |
+| T-101 | Identifiers, shards and domain types | kairos-domain | review |
 | T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | todo |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
@@ -322,7 +322,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 - [x] `make` targets for builds in containers, detached builds and the detached stack
 
 ### T-002 Build quality gates
-**Status:** review · **Needs:** T-001 · **Owns:** `build-logic/`, `config/` (new), root `build.gradle.kts`
+**Status:** done · **Needs:** T-001 · **Owns:** `build-logic/`, `config/` (new), root `build.gradle.kts`
 
 Add the checks every later task relies on, so standards are enforced by the build, not by review alone.
 
@@ -353,16 +353,16 @@ Add the checks every later task relies on, so standards are enforced by the buil
 ## 7. Phase 1: foundations (libraries)
 
 ### T-101 Identifiers, shards and domain types
-**Status:** todo · **Needs:** T-002 · **Owns:** `libs/kairos-domain` packages `dev.kairos.domain.id`, `dev.kairos.domain.shard`, `dev.kairos.domain.model`, `dev.kairos.domain.error`
+**Status:** review · **Needs:** T-002 · **Owns:** `libs/kairos-domain` packages `dev.kairos.domain.id`, `dev.kairos.domain.shard`, `dev.kairos.domain.model`, `dev.kairos.domain.error`
 
-- [ ] `KairosId`: UUIDv7 generation from an injected `Clock` and `SecureRandom`, with the shard (0–255) written into the low 8 bits for job, workflow, run, workflow-run and DLQ ids. `shardOf(UUID)` extracts it. Timestamp ordering is preserved.
+- [x] `KairosId`: UUIDv7 generation from an injected `Clock` and `SecureRandom`, with the shard (0–255) written into the low 8 bits for job, workflow, run, workflow-run and DLQ ids. `shardOf(UUID)` extracts it. Timestamp ordering is preserved.
 - [ ] `TestIds` in `libs/kairos-test-support` to build ids with a chosen shard
-- [ ] `ShardKey`: `shard = floorMod(murmur3_32_fixed(utf8(teamId.toString() + "/" + name)), 256)`. The separator and encoding are fixed forever and recorded in Javadoc. Golden test vectors are committed so the function can never change silently.
-- [ ] Typed ids as records (`TeamId`, `UserId`, `JobId`, `WorkflowId`, `RunId`, `WorkflowRunId`, `EndpointId`, `DlqId`) with parsing that rejects malformed input.
-- [ ] Names: `TeamSlug` (`^[a-z][a-z0-9-]{2,62}$`), `EndpointName` (`^[a-z][a-z0-9-]{1,62}$`), `JobName` and `WorkflowName` (≤ 128, allowed character set as in the LLD), `TaskKey`. All of them check length before matching.
-- [ ] Enumerations with stable database codes (smallint) for every coded column in LLD section 2: run state, trigger, target type, outcome, error class, DLQ status, schedule kind and status, misfire policy, DST policy, workflow run status, outbox topic. Each enum has `code()` and `fromCode(int)`, and unknown codes throw.
-- [ ] `Priority` (1–10) with tier mapping (8–10 high, 5–7 medium, 1–4 low).
-- [ ] `ErrorCode` catalogue matching LLD problem `type` values, and the `KairosException` hierarchy (`NotFound`, `Conflict`, `ValidationFailed`, `PreconditionFailed`, `QuotaExceeded`).
+- [x] `ShardKey`: `shard = floorMod(murmur3_32_fixed(utf8(teamId.toString() + "/" + name)), 256)`. The separator and encoding are fixed forever and recorded in Javadoc. Golden test vectors are committed so the function can never change silently.
+- [x] Typed ids as records (`TeamId`, `UserId`, `JobId`, `WorkflowId`, `RunId`, `WorkflowRunId`, `EndpointId`, `DlqId`) with parsing that rejects malformed input.
+- [x] Names: `TeamSlug` (`^[a-z][a-z0-9-]{2,62}$`), `EndpointName` (`^[a-z][a-z0-9-]{1,62}$`), `JobName` and `WorkflowName` (≤ 128, allowed character set as in the LLD), `TaskKey`. All of them check length before matching.
+- [x] Enumerations with stable database codes (smallint) for every coded column in LLD section 2: run state, trigger, target type, outcome, error class, DLQ status, schedule kind and status, misfire policy, DST policy, workflow run status, outbox topic. Each enum has `code()` and `fromCode(int)`, and unknown codes throw.
+- [x] `Priority` (1–10) with tier mapping (8–10 high, 5–7 medium, 1–4 low).
+- [x] `ErrorCode` catalogue matching LLD problem `type` values, and the `KairosException` hierarchy (`NotFound`, `Conflict`, `ValidationFailed`, `PreconditionFailed`, `QuotaExceeded`).
 
 **Acceptance:** jqwik properties hold (`shardOf(newId(shard)) == shard` for all shards; ids sort by creation time); golden shard vectors pass; ArchUnit confirms no framework imports.
 
