@@ -22,7 +22,9 @@ class OpenApiConfigTests {
     void publishesOpenApiDocument() throws Exception {
         try (HttpClient client = HttpClient.newHttpClient()) {
             HttpResponse<String> response = client.send(
-                    HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/v3/api-docs/v1")).GET().build(),
+                    HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/v3/api-docs/v1"))
+                            .GET()
+                            .build(),
                     HttpResponse.BodyHandlers.ofString());
 
             assertThat(response.statusCode()).isEqualTo(200);
