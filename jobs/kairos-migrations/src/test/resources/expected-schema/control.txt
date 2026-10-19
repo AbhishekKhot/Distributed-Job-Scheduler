@@ -1,0 +1,103 @@
+# Expected columns of every control table in schema scheduler (LLD section 2.2).
+# One line per column, in table order: table|column|data_type|is_nullable (information_schema.columns).
+# Partitions and Flyway's history table are left out. Update this list in the same change as the LLD.
+api_endpoint_versions|endpoint_id|uuid|NO
+api_endpoint_versions|version|integer|NO
+api_endpoint_versions|spec|jsonb|NO
+api_endpoint_versions|created_at|timestamp with time zone|NO
+api_endpoint_versions|created_by|text|NO
+api_endpoints|endpoint_id|uuid|NO
+api_endpoints|team_id|uuid|NO
+api_endpoints|name|text|NO
+api_endpoints|version|integer|NO
+api_endpoints|status|text|NO
+api_endpoints|status_reason|text|YES
+api_endpoints|status_changed_at|timestamp with time zone|YES
+api_endpoints|spec|jsonb|NO
+api_endpoints|created_at|timestamp with time zone|NO
+api_endpoints|updated_at|timestamp with time zone|NO
+api_idempotency|team_id|uuid|NO
+api_idempotency|idem_key|text|NO
+api_idempotency|request_hash|bytea|NO
+api_idempotency|status|smallint|NO
+api_idempotency|http_status|smallint|YES
+api_idempotency|response_body|jsonb|YES
+api_idempotency|created_at|timestamp with time zone|NO
+api_keys|key_id|text|NO
+api_keys|team_id|uuid|NO
+api_keys|name|text|NO
+api_keys|secret_hash|bytea|NO
+api_keys|pepper_version|smallint|NO
+api_keys|created_by|uuid|NO
+api_keys|created_at|timestamp with time zone|NO
+api_keys|expires_at|timestamp with time zone|YES
+api_keys|revoked_at|timestamp with time zone|YES
+api_keys|last_used_at|timestamp with time zone|YES
+audit_log|audit_id|uuid|NO
+audit_log|at|timestamp with time zone|NO
+audit_log|team_id|uuid|YES
+audit_log|actor|text|NO
+audit_log|action|text|NO
+audit_log|resource_type|text|YES
+audit_log|resource_id|text|YES
+audit_log|details|jsonb|YES
+cell_map|cell_id|smallint|NO
+cell_map|shard_from|smallint|NO
+cell_map|shard_to|smallint|NO
+cell_map|datasource_ref|text|NO
+cell_map|status|text|NO
+platform_keysets|purpose|text|NO
+platform_keysets|encrypted_keyset|bytea|NO
+platform_keysets|kek_uri|text|NO
+platform_keysets|rotated_at|timestamp with time zone|NO
+scheduler_flags|name|text|NO
+scheduler_flags|value_ts|timestamp with time zone|YES
+scheduler_flags|updated_at|timestamp with time zone|NO
+scheduler_nodes|node_id|text|NO
+scheduler_nodes|roles|text|NO
+scheduler_nodes|version|text|NO
+scheduler_nodes|started_at|timestamp with time zone|NO
+scheduler_nodes|heartbeat_at|timestamp with time zone|NO
+team_ca_bundles|team_id|uuid|NO
+team_ca_bundles|name|text|NO
+team_ca_bundles|pem|text|NO
+team_ca_bundles|created_at|timestamp with time zone|NO
+team_keysets|team_id|uuid|NO
+team_keysets|purpose|text|NO
+team_keysets|encrypted_keyset|bytea|NO
+team_keysets|kek_uri|text|NO
+team_keysets|updated_at|timestamp with time zone|NO
+team_secrets|team_id|uuid|NO
+team_secrets|name|text|NO
+team_secrets|version|integer|NO
+team_secrets|kind|text|NO
+team_secrets|ciphertext|bytea|NO
+team_secrets|created_at|timestamp with time zone|NO
+team_secrets|disabled_at|timestamp with time zone|YES
+teams|team_id|uuid|NO
+teams|slug|text|NO
+teams|quotas|jsonb|NO
+teams|retry_default|jsonb|YES
+teams|created_at|timestamp with time zone|NO
+teams|updated_at|timestamp with time zone|NO
+user_sessions|session_id|uuid|NO
+user_sessions|user_id|uuid|NO
+user_sessions|family_id|uuid|NO
+user_sessions|token_hash|bytea|NO
+user_sessions|status|text|NO
+user_sessions|created_at|timestamp with time zone|NO
+user_sessions|expires_at|timestamp with time zone|NO
+user_sessions|last_used_at|timestamp with time zone|YES
+user_sessions|user_agent|text|YES
+user_sessions|ip_address|inet|YES
+users|user_id|uuid|NO
+users|team_id|uuid|YES
+users|email|text|NO
+users|password_hash|text|NO
+users|status|text|NO
+users|failed_logins|smallint|NO
+users|locked_until|timestamp with time zone|YES
+users|password_changed_at|timestamp with time zone|NO
+users|last_login_at|timestamp with time zone|YES
+users|created_at|timestamp with time zone|NO
+users|updated_at|timestamp with time zone|NO
