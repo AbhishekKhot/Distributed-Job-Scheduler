@@ -322,17 +322,17 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 - [x] `make` targets for builds in containers, detached builds and the detached stack
 
 ### T-002 Build quality gates
-**Status:** todo · **Needs:** T-001 · **Owns:** `build-logic/`, `config/` (new), root `build.gradle.kts`
+**Status:** review · **Needs:** T-001 · **Owns:** `build-logic/`, `config/` (new), root `build.gradle.kts`
 
 Add the checks every later task relies on, so standards are enforced by the build, not by review alone.
 
-- [ ] Formatting: Spotless with palantir-java-format for Java and ktlint for `*.gradle.kts`. `make build` fails on unformatted code, and `make gradle ARGS=spotlessApply` fixes it.
-- [ ] Static analysis: Error Prone with NullAway (JSpecify annotations) on `libs/*`, at warning-as-error level.
-- [ ] Coverage: JaCoCo report per module plus an aggregated report. Verification thresholds: 80% lines for `libs/*` and 70% for services, tools and jobs (excluding generated Protobuf code and `*Application` classes).
-- [ ] Architecture tests: ArchUnit rules from section 4.1 as reusable rule sets in a `kairos.archunit-conventions` plugin or shared test fixture, run in every module's `test` task.
-- [ ] Javadoc: `javadoc` runs in `check` for `libs/*` with doclint (missing comments on public API fail the build).
-- [ ] Gradle configuration cache enabled and verified (`org.gradle.configuration-cache=true`); fix incompatible tasks such as `resolveAndLockAll`, or mark them.
-- [ ] `make build` time recorded in the pull request (cold and warm cache).
+- [x] Formatting: Spotless with palantir-java-format for Java and ktlint for `*.gradle.kts` (and the Kotlin sources of `build-logic`). `make build` fails on unformatted code, and `make gradle ARGS=spotlessApply` fixes it.
+- [x] Static analysis: Error Prone with NullAway (JSpecify annotations, every `dev.kairos` package null-marked) on `libs/*`, at warning-as-error level. Generated Protobuf sources are excluded.
+- [x] Coverage: JaCoCo report per module plus an aggregated report (`testCodeCoverageReport` in the root project). Verification thresholds: 80% lines for `libs/*` and 70% for services, tools and jobs (excluding generated Protobuf code and `*Application` classes).
+- [x] Architecture tests: ArchUnit rules from section 4.1 as a reusable rule set in `config/archunit`, compiled into every module's test source set by the `kairos.archunit-conventions` plugin and run in every module's `test` task.
+- [x] Javadoc: `javadoc` runs in `check` for `libs/*` with doclint (missing comments on public API fail the build).
+- [x] Gradle configuration cache enabled and verified (`org.gradle.configuration-cache=true`); `resolveAndLockAll` made compatible.
+- [x] `make build` time recorded in the pull request (cold and warm cache).
 
 **Acceptance:** an intentionally unformatted file, a missing Javadoc on a public library method, a `kairos-domain` class importing Spring, and a test that drops coverage each fail `make build` with a clear message.
 

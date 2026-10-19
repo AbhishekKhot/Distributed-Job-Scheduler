@@ -61,9 +61,10 @@ docker compose -f deploy/compose/docker-compose.yml exec postgres psql -U postgr
 
 | Command | Purpose |
 |---|---|
-| `make build` | Compile, unit tests, boot jars |
+| `make build` | Compile, unit tests, quality gates (formatting, Error Prone, coverage, architecture tests, Javadoc), boot jars |
 | `make test` | All checks, including Testcontainers integration tests |
 | `make gradle ARGS=":libs:kairos-domain:test"` | Any Gradle command |
+| `make gradle ARGS=spotlessApply` | Format Java sources and build scripts (the build fails on unformatted code) |
 | `make bg ARGS=check` | Same as `make gradle`, but in a detached container; then `make bg-logs` or `make bg-wait` |
 | `make logs S=kairos-executor` | Follow one service's logs |
 | `make locks` | Refresh lockfiles and checksums after changing a dependency |
