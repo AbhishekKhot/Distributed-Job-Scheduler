@@ -90,8 +90,8 @@ class KairosContainersIntegrationTest {
 
         for (Map.Entry<String, DataSource> database : databases.entrySet()) {
             try (Connection connection = database.getValue().getConnection();
-                    PreparedStatement statement = connection.prepareStatement(
-                            "SELECT current_database(), current_user, current_schema()");
+                    PreparedStatement statement =
+                            connection.prepareStatement("SELECT current_database(), current_user, current_schema()");
                     ResultSet result = statement.executeQuery()) {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getString(1)).isEqualTo(database.getKey());
@@ -167,13 +167,16 @@ class KairosContainersIntegrationTest {
             Map<String, TopicDescription> topics =
                     admin.describeTopics(PARTITIONS.keySet()).allTopicNames().get(30, TimeUnit.SECONDS);
             assertThat(topics.values().stream()
-                            .collect(toMap(TopicDescription::name, topic -> topic.partitions().size())))
+                            .collect(toMap(
+                                    TopicDescription::name,
+                                    topic -> topic.partitions().size())))
                     .isEqualTo(PARTITIONS);
 
             List<ConfigResource> resources = PARTITIONS.keySet().stream()
                     .map(name -> new ConfigResource(ConfigResource.Type.TOPIC, name))
                     .toList();
-            Map<ConfigResource, Config> configs = admin.describeConfigs(resources).all().get(30, TimeUnit.SECONDS);
+            Map<ConfigResource, Config> configs =
+                    admin.describeConfigs(resources).all().get(30, TimeUnit.SECONDS);
             assertThat(configs.entrySet().stream()
                             .collect(toMap(
                                     entry -> entry.getKey().name(),
@@ -189,16 +192,25 @@ class KairosContainersIntegrationTest {
         String topic = "kairos.run.cancel";
         String key = UUID.randomUUID().toString();
         Map<String, Object> producerConfig = Map.of(
-                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.bootstrapServers(),
-                ProducerConfig.ACKS_CONFIG, "all",
-                ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true,
-                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
-                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers(),
+                ProducerConfig.ACKS_CONFIG,
+                "all",
+                ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG,
+                true,
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+                StringSerializer.class,
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+                StringSerializer.class);
         Map<String, Object> consumerConfig = Map.of(
-                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.bootstrapServers(),
-                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false,
-                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
-                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers(),
+                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
+                false,
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                StringDeserializer.class);
 
         RecordMetadata sent;
         try (KafkaProducer<String, String> producer = new KafkaProducer<>(producerConfig)) {
@@ -291,7 +303,11 @@ class KairosContainersIntegrationTest {
         command.append('*').append(arguments.length).append("\r\n");
         for (String argument : arguments) {
             byte[] bytes = argument.getBytes(StandardCharsets.UTF_8);
-            command.append('$').append(bytes.length).append("\r\n").append(argument).append("\r\n");
+            command.append('$')
+                    .append(bytes.length)
+                    .append("\r\n")
+                    .append(argument)
+                    .append("\r\n");
         }
         out.write(command.toString().getBytes(StandardCharsets.UTF_8));
         out.flush();

@@ -21,8 +21,8 @@ class PinnedImageTest {
 
     @Test
     void createsTheContainerFromTheDigestAlone() {
-        DockerImageName name = PinnedImage.parse("apache/kafka:4.3.1@sha256:" + DIGEST)
-                .toDockerImageName("apache/kafka");
+        DockerImageName name =
+                PinnedImage.parse("apache/kafka:4.3.1@sha256:" + DIGEST).toDockerImageName("apache/kafka");
 
         assertThat(name.asCanonicalNameString()).isEqualTo("apache/kafka@sha256:" + DIGEST);
         assertThat(name.isCompatibleWith(DockerImageName.parse("apache/kafka"))).isTrue();

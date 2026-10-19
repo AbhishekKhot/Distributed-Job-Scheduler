@@ -27,7 +27,8 @@ class SpringPropertiesIntegrationTest {
         KairosPostgres postgres = KairosPostgres.get();
 
         assertThat(environment.getProperty("kairos.datasource.control.url")).isEqualTo(postgres.controlJdbcUrl());
-        assertThat(environment.getProperty("kairos.datasource.control.username")).isEqualTo("sched_app");
+        assertThat(environment.getProperty("kairos.datasource.control.username"))
+                .isEqualTo("sched_app");
         for (int cell = 0; cell < KairosPostgres.CELL_COUNT; cell++) {
             assertThat(environment.getProperty("kairos.datasource.cells[" + cell + "].url"))
                     .isEqualTo(postgres.cellJdbcUrl(cell))
@@ -60,7 +61,8 @@ class SpringPropertiesIntegrationTest {
 
     @Test
     void leavesOutContainersThatAreNotSelected(@Autowired Environment environment) {
-        assertThat(environment.containsProperty("kairos.kafka.bootstrap-servers")).isFalse();
+        assertThat(environment.containsProperty("kairos.kafka.bootstrap-servers"))
+                .isFalse();
     }
 
     @Configuration(proxyBeanMethods = false)

@@ -61,8 +61,8 @@ public final class KairosRedis {
                         MountableFile.forHostPath(RepositoryFiles.resolve(START_SCRIPT), 0444),
                         START_SCRIPT_IN_CONTAINER)
                 // The same entry point and user as compose; the script writes the ACL file and execs redis-server.
-                .withCreateContainerCmdModifier(
-                        cmd -> cmd.withEntrypoint("sh", START_SCRIPT_IN_CONTAINER).withUser("redis"))
+                .withCreateContainerCmdModifier(cmd ->
+                        cmd.withEntrypoint("sh", START_SCRIPT_IN_CONTAINER).withUser("redis"))
                 .waitingFor(Wait.forLogMessage(".*Ready to accept connections.*\\s", 1));
         container.start();
         return new KairosRedis(container.getHost(), container.getMappedPort(REDIS_PORT), password);
