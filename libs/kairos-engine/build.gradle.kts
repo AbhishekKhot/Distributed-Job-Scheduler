@@ -10,6 +10,8 @@ dependencies {
     api(project(":libs:kairos-messaging"))
 
     testImplementation(project(":libs:kairos-test-support"))
+    // The NOTIFY test listens through the driver's PGConnection.
+    testImplementation("org.postgresql:postgresql")
     testRuntimeOnly("ch.qos.logback:logback-classic")
 }
 
