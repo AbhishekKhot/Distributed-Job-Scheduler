@@ -180,8 +180,9 @@ public final class AccessTokenService {
         if (audience == null || !audience.contains(settings.audience())) {
             return new Invalid(Reason.AUDIENCE);
         }
-        Long issuedAt = claims.getLongClaim("iat");
-        Long expiresAt = claims.getLongClaim("exp");
+        // Nimbus parses the registered time claims into dates; only the epoch seconds are used.
+        Long issuedAt = epochSeconds(claims.getDateClaim("iat"));
+        Long expiresAt = epochSeconds(claims.getDateClaim("exp"));
         String subject = claims.getSubject();
         String session = claims.getStringClaim(SESSION_CLAIM);
         String tokenId = claims.getJWTID();
@@ -204,6 +205,10 @@ public final class AccessTokenService {
                 tokenId,
                 Instant.ofEpochSecond(issuedAt),
                 Instant.ofEpochSecond(expiresAt)));
+    }
+
+    private static @Nullable Long epochSeconds(java.util.@Nullable Date date) {
+        return date == null ? null : date.toInstant().getEpochSecond();
     }
 
     /**
