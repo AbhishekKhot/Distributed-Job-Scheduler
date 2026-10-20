@@ -265,11 +265,11 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-106 | Database migrations | kairos-migrations | done |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | done |
 | T-108 | Messaging foundation | kairos-messaging | todo |
-| T-109 | Security library | kairos-security | review |
+| T-109 | Security library | kairos-security | done |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
-| T-111 | Redis run lock and sent markers | kairos-engine | todo |
+| T-111 | Redis run lock and sent markers | kairos-engine | review |
 | T-112 | Observability baseline | build-logic, deploy | done |
-| T-113 | Run creation and outbox writer | kairos-engine | review |
+| T-113 | Run creation and outbox writer | kairos-engine | done |
 | T-201 | API foundation | kairos-api | todo |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
 | T-203a | Team and members APIs (8–12) | kairos-api | todo |
@@ -461,7 +461,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** Testcontainers round trip for every topic; a poison message is counted and skipped without stalling the partition; pause and resume work under load in a test.
 
 ### T-109 Security library
-**Status:** review · **Needs:** T-101 · **Owns:** `libs/kairos-security/**`; adds secrets to `deploy/compose/.env.example`, `scripts/dev-env.sh` and the env blocks of `kairos-api`, `kairos-executor` and `kairos-migrations`
+**Status:** done · **Needs:** T-101 · **Owns:** `libs/kairos-security/**`; adds secrets to `deploy/compose/.env.example`, `scripts/dev-env.sh` and the env blocks of `kairos-api`, `kairos-executor` and `kairos-migrations`
 
 - [x] `PasswordHasher`: Argon2id through Bouncy Castle (memory 19 MiB, 2 iterations, parallelism 1, 16-byte salt, 32-byte hash, PHC string format), with `needsRehash` for parameter upgrades. `PasswordPolicy`: 12–128 characters, not equal to the email, and rejected if it appears in a bundled list of common passwords. Passwords are NFC-normalised before hashing; costs read back from a stored hash are capped (256 MiB, 16 iterations, 16 lanes) so a planted hash cannot exhaust memory; `verifyDummy` spends one verification for unknown emails so login timing does not reveal accounts. Length is counted in code points; violations carry the codes `too-short`, `too-long`, `same-as-email` and `common-password` with the LLD detail. Costs can only be raised through `kairos.security.password.*`.
 - [x] `AccessTokenService`: ES256 JWT through Nimbus (15 minutes; claims `sub`, `team`, `sid`, `iat`, `exp`, `jti`, `iss`, `aud`; header `kid`). Verification checks the algorithm allow-list (ES256 only), `iss`, `aud`, expiry with 30s skew, and that `kid` is known. JWKS export of public keys only. The keys come from the platform `JWT_SIGNING` Tink keyset (ECDSA P-256, IEEE P1363, no prefix) through `JwtKeyRing`; `kid` is `k` plus the Tink key id in hex. `iat` in the future (beyond the skew) is rejected; tokens longer than 4 KB are rejected before parsing; keys embedded in the header are never used. Results are a sealed `TokenVerification` (`Valid` or `Invalid` with a reason for metrics). `rotateJwtSigningKeyset` keeps the previous key so issued tokens verify until they expire; `replaceKeys` swaps the ring at run time.
@@ -489,18 +489,18 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** tests with a local TLS server (Testcontainers or an in-JVM server) show that `http://` is refused, a host resolving to `127.0.0.1` or `169.254.169.254` is refused, a rebinding resolver (first public, then private) is refused, a 302 is not followed, a 300 KB body is cut off, a wrong certificate host fails, and a team CA bundle is trusted only for that client.
 
 ### T-111 Redis run lock and sent markers
-**Status:** todo · **Needs:** T-003 · **Owns:** `libs/kairos-engine` package `dev.kairos.engine.lock`
+**Status:** review · **Needs:** T-003 · **Owns:** `libs/kairos-engine` package `dev.kairos.engine.lock`
 
-- [ ] Lettuce client configuration: ACL username and password from environment variables, command timeout 500 ms, and TLS when `kairos.redis.tls=true` (production).
-- [ ] Lua scripts, loaded once and called by SHA with automatic reload:
+- [x] Lettuce client configuration: ACL username and password from environment variables, command timeout 500 ms, and TLS when `kairos.redis.tls=true` (production). Bound from `kairos.redis.*` (`RedisProperties`: `host`, `port`, `username`, `password`, `tls`, `trust-certificate`, `command-timeout`, `connect-timeout`, `reconnect-delay`, `node-id`); TLS verifies chain and host name (TLS 1.3/1.2) against the JDK trust store or a PEM CA file. Commands are rejected at once while disconnected; the first connection opens in the background so a service starts while Redis is down. `RunLockConfiguration` is imported explicitly by the services (no auto-configuration); the node id defaults to `HOSTNAME` (validated) or a random id.
+- [x] Lua scripts, loaded once and called by SHA with automatic reload:
   - `acquire`: `SET key token NX PX ttl`; the token encodes fence, node id and random bytes;
   - `remaining`: returns the TTL left only if the caller still owns the lock (used by the send-time guard);
   - `release`: compare-and-delete;
   - `extend`: compare-and-extend, for long calls.
-- [ ] `RunLockPort` and `SentMarkerPort` interfaces, plus Lettuce adapters. Keys follow LLD section 4.3 (`kairos:lock:run:{runId}`, `kairos:sent:{runId}:{attempt}:{infraAttempt}` with a 48h TTL).
-- [ ] Fail-closed behaviour: any Redis error or timeout makes `acquire` return `UNAVAILABLE`. Callers then do not call the target.
-- [ ] `RedisTopologyProbe`: reads the replication id and role (`INFO replication`, allowed by the ACL) for the failover monitor (T-225).
-- [ ] Metrics: acquire outcome counts, script latency, unavailable count.
+- [x] `RunLockPort` and `SentMarkerPort` interfaces, plus Lettuce adapters. Keys follow LLD section 4.3 (`kairos:lock:run:{runId}`, `kairos:sent:{runId}:{attempt}:{infraAttempt}` with a 48h TTL). Sealed results (`AcquireResult`, `RemainingResult`, `LockInspection`) and enums (`ReleaseResult`, `ExtendResult`, `MarkResult`, `MarkerCheck`); `RunLockPort.inspect` reads the holder for the lease sweeper. Lock TTLs are capped at 1h.
+- [x] Fail-closed behaviour: any Redis error or timeout makes `acquire` return `UNAVAILABLE`. Callers then do not call the target. The other operations fail closed the same way; nothing throws for a Redis failure.
+- [x] `RedisTopologyProbe`: reads the replication id and role (`INFO replication`, allowed by the ACL) for the failover monitor (T-225).
+- [x] Metrics: acquire outcome counts, script latency, unavailable count (`kairos_run_lock_acquire_total{outcome}`, `kairos_redis_script_duration_seconds{script}`, `kairos_redis_unavailable_total`, counted on every failed command).
 
 **Acceptance:** Testcontainers tests show that two concurrent acquires yield exactly one owner; release by a non-owner is a no-op; `remaining` returns nothing after expiry; with Redis stopped, `acquire` returns `UNAVAILABLE` within the timeout.
 
@@ -537,7 +537,7 @@ Metric names the alerts and dashboards expect; the tasks that emit them use exac
 **Acceptance:** `make up-all` shows all dashboards with live data from the running services, and Prometheus loads the alert rules without errors.
 
 ### T-113 Run creation and outbox writer
-**Status:** review · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
+**Status:** done · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
 
 The single place where runs and their outbox rows are created, used by the API (immediate runs, run now, backfill, redrive), the fire poller, the delayed poller and the settler.
 
