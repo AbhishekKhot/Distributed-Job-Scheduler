@@ -11,6 +11,7 @@ com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.22.1=aggregateCodeCov
 com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.1=aggregateCodeCoverageReportResults
 com.fasterxml.jackson:jackson-bom:2.22.1=aggregateCodeCoverageReportResults
 com.fasterxml:classmate:1.7.3=aggregateCodeCoverageReportResults
+com.github.ben-manes.caffeine:caffeine:3.3.1=aggregateCodeCoverageReportResults
 com.github.docker-java:docker-java-api:3.7.1=aggregateCodeCoverageReportResults
 com.github.docker-java:docker-java-transport-zerodep:3.7.1=aggregateCodeCoverageReportResults
 com.github.docker-java:docker-java-transport:3.7.1=aggregateCodeCoverageReportResults
