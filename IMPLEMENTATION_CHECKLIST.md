@@ -259,17 +259,17 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-003 | Shared test support | libs/kairos-test-support | done |
 | T-101 | Identifiers, shards and domain types | kairos-domain | done |
 | T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
-| T-103 | Retry policy, outcomes and run state machine | kairos-domain | review |
+| T-103 | Retry policy, outcomes and run state machine | kairos-domain | done |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
-| T-107 | Persistence foundation and cell routing | kairos-persistence | review |
+| T-107 | Persistence foundation and cell routing | kairos-persistence | done |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | todo |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
 | T-111 | Redis run lock and sent markers | kairos-engine | todo |
 | T-112 | Observability baseline | build-logic, deploy | done |
-| T-113 | Run creation and outbox writer | kairos-engine | todo |
+| T-113 | Run creation and outbox writer | kairos-engine | in progress (abhishekkhot) |
 | T-201 | API foundation | kairos-api | todo |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
 | T-203a | Team and members APIs (8–12) | kairos-api | todo |
@@ -379,7 +379,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** tests for New York, London, Sydney, Kolkata and Lord Howe (30-minute DST) across both transitions; `0 2 * * *` on DST-start day follows the gap policy; `30 1 * * *` on DST-end day fires once; jqwik property: fire times are strictly increasing and never skip a valid occurrence.
 
 ### T-103 Retry policy, outcomes and run state machine
-**Status:** review · **Needs:** T-101 · **Owns:** `dev.kairos.domain.retry`, `dev.kairos.domain.run`, `dev.kairos.domain.health`
+**Status:** done · **Needs:** T-101 · **Owns:** `dev.kairos.domain.retry`, `dev.kairos.domain.run`, `dev.kairos.domain.health`
 
 - [x] `RetryPolicy` (`maxRetries` default 5, `baseDelaySec` 30, `maxDelaySec` 600, `maxAgeSec` 86400, strategy) with resolution order: job override, then endpoint, then team default, then platform default. The first non-null policy wins as a whole (fields are never merged). Ranges, reported as `retryPolicy.<field>` / `range`: `maxRetries` 0–20, `baseDelaySec` 1–3600, `maxDelaySec` from the base to 86400, `maxAgeSec` 60–604800 (the 7-day history retention). A series allows `maxRetries` retries after its first attempt (`attempt - series_start`).
 - [x] `RetryBackoff` strategies: exponential with jitter, full jitter and fixed, with an injected random source. Defaults give roughly 15 minutes from the first failure to the DLQ. `EXPONENTIAL_JITTER` = `min(max, base * 2^(n-1) + U[0, base/2))` (930–1005s over 5 retries), `FULL_JITTER` = `U[0, min(max, base * 2^(n-1)))`, `FIXED` = `base` without jitter. One shared contract test (bounds, cap, non-decreasing bounds and same-draw delays, reproducible seeds) runs against each strategy. `RetryPlanner` takes a `Supplier<RandomGenerator>` (production: `ThreadLocalRandom::current`; jitter is not a security value) and an injected `Clock`.
@@ -434,7 +434,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** `make up` runs the migrations container to exit code 0, and `\dt scheduler.*` in each database shows the LLD tables; the schema test passes.
 
 ### T-107 Persistence foundation and cell routing
-**Status:** review · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
+**Status:** done · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
 
 - [x] `DataSourceRegistry`: one HikariCP pool for the control database and one per cell, built from `kairos.datasource.control.*` and `kairos.datasource.cells[n].*` (`PersistenceProperties`; each service maps `KAIROS_CONTROL_DB_URL`, `KAIROS_CELL_<n>_DB_URL`, `KAIROS_DB_USERNAME` and `KAIROS_DB_PASSWORD` onto them in its `application.yml`). Pool sizes are configurable per service (`kairos.datasource.pool.*`, with an optional `maximum-pool-size` per database). Cell `n` is the data source `cell-n` of `cell_map`. Pools start without connecting, so a database that is down fails readiness instead of startup.
 - [x] `CellRouter`: shard → cell from `cell_map`, cached with Caffeine and refreshed every 30s (`kairos.datasource.cell-map-refresh`). `forShard(int|Shard)`, `forId(UUID|ShardedId)`, and `allCells()` for fan-out reads. Reloads run in the background; a failed or invalid reload (gap, overlap, unknown data source) keeps the current layout, so a control database outage never stops cell traffic.
@@ -537,7 +537,7 @@ Metric names the alerts and dashboards expect; the tasks that emit them use exac
 **Acceptance:** `make up-all` shows all dashboards with live data from the running services, and Prometheus loads the alert rules without errors.
 
 ### T-113 Run creation and outbox writer
-**Status:** todo · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
+**Status:** in progress (abhishekkhot) · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
 
 The single place where runs and their outbox rows are created, used by the API (immediate runs, run now, backfill, redrive), the fire poller, the delayed poller and the settler.
 
