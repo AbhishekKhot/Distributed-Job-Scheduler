@@ -263,12 +263,12 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
-| T-107 | Persistence foundation and cell routing | kairos-persistence | todo |
+| T-107 | Persistence foundation and cell routing | kairos-persistence | review |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | todo |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
 | T-111 | Redis run lock and sent markers | kairos-engine | todo |
-| T-112 | Observability baseline | build-logic, deploy | review |
+| T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | todo |
 | T-201 | API foundation | kairos-api | todo |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
@@ -434,17 +434,17 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** `make up` runs the migrations container to exit code 0, and `\dt scheduler.*` in each database shows the LLD tables; the schema test passes.
 
 ### T-107 Persistence foundation and cell routing
-**Status:** todo · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
+**Status:** review · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
 
-- [ ] `DataSourceRegistry`: one HikariCP pool for the control database and one per cell, built from `kairos.datasource.control.*` and `kairos.datasource.cells[n].*` (URLs from `KAIROS_*` variables). Pool sizes are configurable per service.
-- [ ] `CellRouter`: shard → cell from `cell_map`, cached with Caffeine and refreshed every 30s. `forShard(int)`, `forId(UUID)`, and `allCells()` for fan-out reads.
-- [ ] `CellTransactions`: runs a callback in one transaction on one cell (`TransactionTemplate` per cell), with configurable isolation (default read committed) and statement timeouts.
-- [ ] `ControlTransactions`: the same for the control database.
-- [ ] `JdbcClient` beans per database, plus helpers for batch inserts (`batchUpdate` with named parameters) and `RETURNING` mapping.
-- [ ] Error translation: unique violation → `ConflictException`, serialization failure or deadlock → a retryable exception with a bounded retry helper (three attempts, jittered).
-- [ ] Readiness health indicators per database. A cell being down marks only the services that need it as not ready.
-- [ ] Fan-out query helper for team-scoped list endpoints across both cells: k-way merge by sort key with cursor support.
-- [ ] Metrics: pool usage, wait time, and transaction duration per cell.
+- [x] `DataSourceRegistry`: one HikariCP pool for the control database and one per cell, built from `kairos.datasource.control.*` and `kairos.datasource.cells[n].*` (`PersistenceProperties`; each service maps `KAIROS_CONTROL_DB_URL`, `KAIROS_CELL_<n>_DB_URL`, `KAIROS_DB_USERNAME` and `KAIROS_DB_PASSWORD` onto them in its `application.yml`). Pool sizes are configurable per service (`kairos.datasource.pool.*`, with an optional `maximum-pool-size` per database). Cell `n` is the data source `cell-n` of `cell_map`. Pools start without connecting, so a database that is down fails readiness instead of startup.
+- [x] `CellRouter`: shard → cell from `cell_map`, cached with Caffeine and refreshed every 30s (`kairos.datasource.cell-map-refresh`). `forShard(int|Shard)`, `forId(UUID|ShardedId)`, and `allCells()` for fan-out reads. Reloads run in the background; a failed or invalid reload (gap, overlap, unknown data source) keeps the current layout, so a control database outage never stops cell traffic.
+- [x] `CellTransactions`: runs a callback in one transaction on the cell of a shard (`TransactionTemplate` per call on the cell's `DataSourceTransactionManager`), with configurable isolation (default read committed) and a transaction deadline that becomes each statement's JDBC query timeout (works behind PgBouncer, unlike `SET statement_timeout`). Statements outside a transaction get `kairos.datasource.transaction.statement-timeout` (5s). Opening a transaction on a second database from inside one throws.
+- [x] `ControlTransactions`: the same for the control database.
+- [x] `JdbcClient` beans per database (`controlJdbcClient`; cell clients through `Cell.jdbc()`), plus helpers for batch inserts (`Database.batchUpdate`, named parameters, chunked by `kairos.datasource.transaction.batch-size`) and `RETURNING` mapping (`Database.updateReturning`).
+- [x] Error translation (`SqlErrorTranslator`): unique violation → `ConflictException` with the code registered for the violated constraint in `ConstraintConflicts` (`INVALID_STATE` otherwise), serialization failure or deadlock → `RetryableDatabaseException` with a bounded retry helper (`TransientRetry`: three attempts, delay in [d/2, d] with d = 20 ms × 2^(n−1)), used by `executeWithRetry`.
+- [x] Readiness health indicators per database: one `kairosDatabases` composite with a child per database (`control`, `cell-0`, ...). A service includes `kairosDatabases` or only the children it needs (`kairosDatabases/cell-0`) in its readiness group, so a cell being down marks only the services that need it as not ready.
+- [x] Fan-out query helper for team-scoped list endpoints across both cells (`FanOutQuery`): parallel reads on virtual threads with a deadline, k-way merge by sort key, `limit + 1` per cell, and the last row's key as the cursor (the API signs it). A cell that fails or answers out of order fails the read; partial pages are never returned.
+- [x] Metrics: pool usage and wait time (`hikaricp_connections_*`, `pool` = `kairos-control`, `kairos-cell-0`, ...), and transaction duration per database (`kairos_db_transaction_duration_seconds`, `cell` = `control`, `cell-0`, ..., with histogram buckets).
 
 **Acceptance:** integration tests route ids from shards 0, 127, 128 and 255 to the right database; a duplicate insert raises `ConflictException`; the fan-out list merges two cells in order with a stable cursor.
 
@@ -505,7 +505,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** Testcontainers tests show that two concurrent acquires yield exactly one owner; release by a non-owner is a no-op; `remaining` returns nothing after expiry; with Redis stopped, `acquire` returns `UNAVAILABLE` within the timeout.
 
 ### T-112 Observability baseline
-**Status:** review · **Needs:** T-002 · **Owns:** `build-logic` (`kairos.observability-conventions`, applied by the service conventions), `config/observability/` (package `dev.kairos.observability`, compiled into every application so no application depends on another), `deploy/compose/prometheus/`, `deploy/compose/grafana/`
+**Status:** done · **Needs:** T-002 · **Owns:** `build-logic` (`kairos.observability-conventions`, applied by the service conventions), `config/observability/` (package `dev.kairos.observability`, compiled into every application so no application depends on another), `deploy/compose/prometheus/`, `deploy/compose/grafana/`
 
 - [x] Micrometer Tracing with the OpenTelemetry bridge in every service. OTLP export is configurable and off by default locally; sampling is configurable (`kairos.observability.tracing.*`: `export-enabled`, `endpoint`, `sampling-probability`, default 0.1). W3C `traceparent` propagation.
 - [x] Common metric tags (`service`, `instance`, `cell` where relevant), and an SLO histogram for `kairos_schedule_lag_seconds` with buckets around 2s (meter `kairos.schedule.lag`; buckets 100 ms to 60 s, dense between 1 s and 3 s, configurable through `kairos.observability.schedule-lag-slo`).
