@@ -21,6 +21,7 @@
  *       {@link dev.kairos.testsupport.KairosContainers}).
  *   <li>{@link dev.kairos.testsupport.MutableClock} to control time, and {@link dev.kairos.testsupport.Awaits} to wait
  *       for asynchronous outcomes without sleeping.
+ *   <li>{@link dev.kairos.testsupport.TestIds} to build ids with a chosen shard.
  * </ul>
  *
  * <p>A minimal plain JUnit integration test against cell 0, as the application role:
