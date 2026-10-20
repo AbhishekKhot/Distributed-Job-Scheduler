@@ -264,7 +264,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | done |
-| T-108 | Messaging foundation | kairos-messaging | todo |
+| T-108 | Messaging foundation | kairos-messaging | in progress (Abhishek) |
 | T-109 | Security library | kairos-security | done |
 | T-110 | Outbound HTTP client and target policy | kairos-http | done |
 | T-111 | Redis run lock and sent markers | kairos-engine | done |
@@ -449,7 +449,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** integration tests route ids from shards 0, 127, 128 and 255 to the right database; a duplicate insert raises `ConflictException`; the fan-out list merges two cells in order with a stable cursor.
 
 ### T-108 Messaging foundation
-**Status:** todo · **Needs:** T-105, T-003 · **Owns:** `libs/kairos-messaging/**`
+**Status:** in progress (Abhishek) · **Needs:** T-105, T-003 · **Owns:** `libs/kairos-messaging/**`
 
 - [ ] `KairosTopic` enum with names, key type, outbox code and priority mapping (LLD section 4.2).
 - [ ] Protobuf `Serializer` and `Deserializer` per message type. The deserializer never throws on a bad payload; it returns a poison marker instead.
