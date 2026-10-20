@@ -265,7 +265,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-106 | Database migrations | kairos-migrations | done |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | review |
 | T-108 | Messaging foundation | kairos-messaging | todo |
-| T-109 | Security library | kairos-security | todo |
+| T-109 | Security library | kairos-security | in progress (abhishekkhot) |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
 | T-111 | Redis run lock and sent markers | kairos-engine | todo |
 | T-112 | Observability baseline | build-logic, deploy | done |
@@ -461,7 +461,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** Testcontainers round trip for every topic; a poison message is counted and skipped without stalling the partition; pause and resume work under load in a test.
 
 ### T-109 Security library
-**Status:** todo · **Needs:** T-101 · **Owns:** `libs/kairos-security/**`; adds secrets to `deploy/compose/.env.example`, `scripts/dev-env.sh` and the env blocks of `kairos-api`, `kairos-executor` and `kairos-migrations`
+**Status:** in progress (abhishekkhot) · **Needs:** T-101 · **Owns:** `libs/kairos-security/**`; adds secrets to `deploy/compose/.env.example`, `scripts/dev-env.sh` and the env blocks of `kairos-api`, `kairos-executor` and `kairos-migrations`
 
 - [ ] `PasswordHasher`: Argon2id through Bouncy Castle (memory 19 MiB, 2 iterations, parallelism 1, 16-byte salt, 32-byte hash, PHC string format), with `needsRehash` for parameter upgrades. `PasswordPolicy`: 12–128 characters, not equal to the email, and rejected if it appears in a bundled list of common passwords.
 - [ ] `AccessTokenService`: ES256 JWT through Nimbus (15 minutes; claims `sub`, `team`, `sid`, `iat`, `exp`, `jti`, `iss`, `aud`; header `kid`). Verification checks the algorithm allow-list (ES256 only), `iss`, `aud`, expiry with 30s skew, and that `kid` is known. JWKS export of public keys only.
