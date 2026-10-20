@@ -261,7 +261,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | todo |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
-| T-105 | Protobuf message contracts | kairos-proto | todo |
+| T-105 | Protobuf message contracts | kairos-proto | review |
 | T-106 | Database migrations | kairos-migrations | todo |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | todo |
 | T-108 | Messaging foundation | kairos-messaging | todo |
@@ -405,13 +405,13 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** DAG fixtures (diamond, wide fan-out of 200, chain of 10, chain of 11 rejected, self-loop and cycle rejected with path); template injection attempts (CR/LF, `../` in a path, `}}{{`, a host placeholder) are rejected; jqwik: any valid random DAG passes, and adding a back edge fails.
 
 ### T-105 Protobuf message contracts
-**Status:** todo · **Needs:** T-002 · **Owns:** `libs/kairos-proto/src/main/proto/kairos/v1/*`, `dev.kairos.proto`
+**Status:** review · **Needs:** T-002 · **Owns:** `libs/kairos-proto/src/main/proto/kairos/v1/*`, `dev.kairos.proto`
 
-- [ ] `dispatch.proto`: run id, shard, fence, attempt, infra attempt, team id, target type, definition id and version, target id, task key, endpoint id and version, priority, timeout, scheduled and due times, request snapshot (rendered path params, query, headers, body bytes; never secrets, only secret references), trace parent.
-- [ ] `result.proto`: run id, shard, fence, attempt, outcome, error class, HTTP status, latency, started and finished times, executor id, redacted error (≤ 512), redacted response snippet (≤ 1 KB), extracted outputs (non-sensitive) plus sealed sensitive outputs, sent-marker flag.
-- [ ] `cancel.proto`, `completed.proto`, `dead.proto` with the fields the LLD lists for subscribers and alerting.
-- [ ] `package kairos.v1; option java_multiple_files = true; option java_package = "dev.kairos.proto.v1";` Comments on every message and field.
-- [ ] A compatibility check task that compares against the last released descriptor set and fails on removed or renumbered fields (descriptor set committed under `libs/kairos-proto/compat/`).
+- [x] `dispatch.proto`: run id, shard, fence, attempt, infra attempt, team id, target type, definition id and version, target id, task key, endpoint id and version, priority, timeout, scheduled and due times, request snapshot (rendered path params, query, headers, body bytes; never secrets, only secret references), trace parent.
+- [x] `result.proto`: run id, shard, fence, attempt, outcome, error class, HTTP status, latency, started and finished times, executor id, redacted error (≤ 512), redacted response snippet (≤ 1 KB), extracted outputs (non-sensitive) plus sealed sensitive outputs, sent-marker flag.
+- [x] `cancel.proto`, `completed.proto`, `dead.proto` with the fields the LLD lists for subscribers and alerting.
+- [x] `package kairos.v1; option java_multiple_files = true; option java_package = "dev.kairos.proto.v1";` Comments on every message and field.
+- [x] A compatibility check task that compares against the last released descriptor set and fails on removed or renumbered fields (descriptor set committed under `libs/kairos-proto/compat/`).
 
 **Acceptance:** round-trip tests for every message; the compatibility check fails when a field number is changed in a test branch.
 

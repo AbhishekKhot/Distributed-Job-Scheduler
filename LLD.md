@@ -4691,6 +4691,24 @@ Content-Type: application/problem+json
 
 Replication factor 3, `min.insync.replicas = 2`, Protobuf payloads. A dispatch message carries the run id, fence, attempt, pinned endpoint version and a snapshot of the request values, never secrets.
 
+Message contracts (package `kairos.v1`, `libs/kairos-proto`). Ids are 16 bytes, big-endian. Enum numbers equal the smallint codes of section 2, and 0 means not set. `infra_attempt` starts at 0. The W3C `traceparent` travels in a Kafka header, and the dispatch also carries it as a field.
+
+| Message | Topic | Fields |
+|---|---|---|
+| `Dispatch` | `kairos.run.high/medium/low` | run id, shard, fence, attempt, infra attempt, team id, target type, definition id and version, target id, task key, endpoint id and version, priority, timeout, scheduled and due times, request snapshot, trace parent |
+| `RequestSnapshot` | (inside `Dispatch`) | rendered path params, query and headers (ordered name/value pairs), body bytes, names of the secrets the call needs, sensitive upstream outputs sealed with the team's `OUTPUTS` keyset |
+| `Result` | `kairos.run.result` | run id, shard, fence, attempt, infra attempt, call outcome, error class, HTTP status, latency, started and finished times, executor id, redacted error (≤ 512), redacted response snippet (≤ 1 KB), non-sensitive outputs, sealed sensitive outputs, sent-marker flag, retry-after |
+| `Cancel` | `kairos.run.cancel` | run id, shard, fence, reason (`REQUESTED`, `DEFINITION_CANCELLED`, `WORKFLOW_FAIL_FAST`), requested time |
+| `Completed` | `kairos.run.completed` | run id, shard, team id, target type, definition id and version, target id, task key, trigger, scheduled time, final outcome, error class, HTTP status, attempts, started and finished times, latency; no outputs |
+| `Dead` | `kairos.run.dead` | DLQ id, run id, shard, team id, target type, definition id and version, target id, task key, endpoint id and version, priority, scheduled time, attempt, infra attempt, reason, last HTTP status, dead-letter time; no error text or response content |
+
+The executor reports a call outcome, and `kairos-state` maps it to the run outcome:
+- `SUCCEEDED`, `FAILED` and `UNKNOWN` (the request may have been sent but no response arrived) are settled with the retry policy and the `unknownOutcomePolicy`.
+- `CANCELLED` and `SKIPPED` (past `max_lateness_ms`) settle directly.
+- `DEFERRED` (rate limit or open breaker; no call made) delays the run without using an attempt.
+
+Compatibility: field and enum numbers are never reused, and removed fields are reserved by number and name. The build fails when the contracts break the released descriptor set in `libs/kairos-proto/compat/`.
+
 ### 4.3 Redis keys
 
 | Key | Value and TTL | Used by |
