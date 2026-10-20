@@ -1,0 +1,93 @@
+# Unit tests for alerts.yml:
+#   docker run --rm --entrypoint promtool -v "$PWD/deploy/compose/prometheus:/etc/prometheus:ro" \
+#     prom/prometheus:<pinned tag> test rules /etc/prometheus/alerts-test.yml
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: schedule lag above the SLO pages
+    interval: 1m
+    input_series:
+      # Every new observation lands between 2.5s and 3s, so p99 is well above 2s.
+      - series: 'kairos_schedule_lag_seconds_bucket{le="2.0"}'
+        values: '0+0x15'
+      - series: 'kairos_schedule_lag_seconds_bucket{le="3.0"}'
+        values: '0+100x15'
+      - series: 'kairos_schedule_lag_seconds_bucket{le="+Inf"}'
+        values: '0+100x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: KairosScheduleLagHigh
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Schedule lag p99 is above 2s"
+              description: "p99 of (start time - due time) over 5 minutes is 2.99s. Check outbox age, Kafka consumer lag and executor saturation."
+
+  - name: schedule lag within the SLO stays quiet
+    interval: 1m
+    input_series:
+      - series: 'kairos_schedule_lag_seconds_bucket{le="1.0"}'
+        values: '0+100x15'
+      - series: 'kairos_schedule_lag_seconds_bucket{le="2.0"}'
+        values: '0+100x15'
+      - series: 'kairos_schedule_lag_seconds_bucket{le="+Inf"}'
+        values: '0+100x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: KairosScheduleLagHigh
+        exp_alerts: []
+
+  - name: old outbox rows page per cell
+    interval: 1m
+    input_series:
+      - series: 'kairos_outbox_oldest_due_seconds{cell="cell-0", service="kairos-watcher"}'
+        values: '30x5'
+      - series: 'kairos_outbox_oldest_due_seconds{cell="cell-1", service="kairos-watcher"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KairosOutboxBacklogOld
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              cell: cell-0
+            exp_annotations:
+              summary: "Outbox in cell-0 has rows waiting more than 10s"
+              description: "The oldest due outbox row is 30s old. Watchers stop claiming new work in this cell until the relay catches up (Kafka or relay trouble)."
+
+  - name: executor saturation warns
+    interval: 1m
+    input_series:
+      - series: 'kairos_executor_inflight{instance="executor-1", priority="high"}'
+        values: '90x15'
+      - series: 'kairos_executor_capacity{instance="executor-1"}'
+        values: '100x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: KairosExecutorSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: executor-1
+            exp_annotations:
+              summary: "Executor executor-1 is above 80% of its capacity"
+              description: "In-flight calls are 90% of capacity. Scale executors out before lag grows."
+
+  - name: login failure spike warns
+    interval: 1m
+    input_series:
+      - series: 'kairos_login_failures_total{service="kairos-api"}'
+        values: '0+300x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: KairosLoginFailureSpike
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Login failures above 1 per second"
+              description: "5 failed logins per second over 5 minutes. Rate limits are holding; check for credential stuffing."
