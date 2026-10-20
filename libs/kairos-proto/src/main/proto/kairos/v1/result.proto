@@ -1,0 +1,76 @@
+// Result messages: executors publish one per finished call attempt to kairos.run.result, keyed by
+// target id. kairos-state consumes them and settles the run.
+syntax = "proto3";
+
+package kairos.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "kairos/v1/common.proto";
+
+option java_multiple_files = true;
+option java_package = "dev.kairos.proto.v1";
+option java_outer_classname = "ResultProto";
+
+// What happened to one call attempt, as seen by the executor. The settler turns it into a run
+// outcome (succeeded, retrying, dead-lettered and so on) using the retry policy.
+enum CallOutcome {
+  // Not set; the settler rejects the message.
+  CALL_OUTCOME_UNSPECIFIED = 0;
+  // The target answered with a success status and every required output was extracted.
+  CALL_OUTCOME_SUCCEEDED = 1;
+  // The call failed with a known result: error_class says why, http_status when there was one.
+  CALL_OUTCOME_FAILED = 2;
+  // The request may have reached the target but no response was received; the endpoint's
+  // unknownOutcomePolicy decides what happens next.
+  CALL_OUTCOME_UNKNOWN = 3;
+  // The call was aborted by a cancel request.
+  CALL_OUTCOME_CANCELLED = 4;
+  // The run was not called because it would have started past its lateness limit.
+  CALL_OUTCOME_SKIPPED = 5;
+  // The call was not made because the endpoint's rate limit or circuit breaker was closed to it;
+  // the run is deferred without using up an attempt.
+  CALL_OUTCOME_DEFERRED = 6;
+}
+
+// The result of one call attempt.
+message Result {
+  // Run id. 16 bytes.
+  bytes run_id = 1;
+  // Shard of the run (0-255).
+  int32 shard = 2;
+  // Fence the executor claimed the run with; the settler ignores a result whose fence is stale.
+  int32 fence = 3;
+  // Attempt number this result belongs to.
+  int32 attempt = 4;
+  // Infrastructure re-queue count this result belongs to.
+  int32 infra_attempt = 5;
+  // What happened to the call.
+  CallOutcome outcome = 6;
+  // Why the call failed; unspecified when it succeeded.
+  ErrorClass error_class = 7;
+  // HTTP status of the response; 0 when no response was received.
+  int32 http_status = 8;
+  // Time from sending the request to receiving the full response, in milliseconds.
+  int32 latency_ms = 9;
+  // When the executor started the call.
+  google.protobuf.Timestamp started_at = 10;
+  // When the executor finished the call.
+  google.protobuf.Timestamp finished_at = 11;
+  // Node id of the executor ({service}-{pod}-{startMillis}).
+  string executor_id = 12;
+  // Error description with secrets and personal data redacted, at most 512 characters.
+  string error = 13;
+  // Start of the response body with secrets redacted, at most 1 KB.
+  string response_snippet = 14;
+  // Outputs extracted from the response that are not marked sensitive, by output name.
+  map<string, google.protobuf.Value> outputs = 15;
+  // Outputs marked sensitive, encrypted with the team's OUTPUTS keyset (AES-GCM through Tink);
+  // empty when there are none.
+  bytes sealed_outputs = 16;
+  // True if the sent marker was written, meaning the target may have received the request.
+  bool sent_marker = 17;
+  // How long the target or the rate limiter asked to wait before the next attempt, in
+  // milliseconds (from Retry-After or the limiter); 0 when not given.
+  int64 retry_after_ms = 18;
+}

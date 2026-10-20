@@ -1,0 +1,39 @@
+// Cancel messages: the outbox relay publishes one to kairos.run.cancel, keyed by run id, when a
+// running run is cancelled. Every executor consumes the topic (one consumer group per pod) and
+// aborts the call if it holds the run.
+syntax = "proto3";
+
+package kairos.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "dev.kairos.proto.v1";
+option java_outer_classname = "CancelProto";
+
+// Why a run is being cancelled.
+enum CancelReason {
+  // Not set; treated as a requested cancel.
+  CANCEL_REASON_UNSPECIFIED = 0;
+  // A member or API key cancelled the run.
+  CANCEL_REASON_REQUESTED = 1;
+  // The job or workflow was cancelled or deleted while the run was in flight.
+  CANCEL_REASON_DEFINITION_CANCELLED = 2;
+  // Another task of the workflow run failed and the workflow uses FAIL_FAST.
+  CANCEL_REASON_WORKFLOW_FAIL_FAST = 3;
+}
+
+// A request to abort one in-flight run. Executors that do not hold the run ignore it, and a
+// cancel that arrives after the call finished has no effect.
+message Cancel {
+  // Run to abort. 16 bytes.
+  bytes run_id = 1;
+  // Shard of the run (0-255).
+  int32 shard = 2;
+  // Fence of the run when the cancel was requested; an executor holding an older claim also aborts.
+  int32 fence = 3;
+  // Why the run is being cancelled.
+  CancelReason reason = 4;
+  // When the cancel was requested.
+  google.protobuf.Timestamp requested_at = 5;
+}
