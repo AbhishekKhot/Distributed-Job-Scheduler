@@ -199,6 +199,9 @@ services:
       # Migrations run as the schema owner; the services only get DML through sched_app.
       KAIROS_DB_USERNAME: sched_owner
       KAIROS_DB_PASSWORD: ${KAIROS_DB_OWNER_PASSWORD:?run make env}
+      # The local key encryption key seals the platform JWT keyset; it is accepted only under the local profile.
+      SPRING_PROFILES_ACTIVE: local
+      KAIROS_LOCAL_KEK: ${KAIROS_LOCAL_KEK:?run make env}
     networks: [backend]
     depends_on:
       postgres:
@@ -219,6 +222,10 @@ services:
     environment:
       <<: *app-env
       KAIROS_SWAGGER_UI_ENABLED: "true"
+      SPRING_PROFILES_ACTIVE: local
+      KAIROS_LOCAL_KEK: ${KAIROS_LOCAL_KEK:?run make env}
+      KAIROS_API_KEY_PEPPER: ${KAIROS_API_KEY_PEPPER:?run make env}
+      KAIROS_CURSOR_HMAC_KEY: ${KAIROS_CURSOR_HMAC_KEY:?run make env}
     networks: [backend, edge]
     ports:
       - "127.0.0.1:${KAIROS_API_PORT:-8080}:8080"
@@ -243,6 +250,11 @@ services:
       <<: *build
       args:
         MODULE_PATH: services/kairos-executor
+    environment:
+      <<: *app-env
+      # Opens the team keysets that decrypt target credentials and sign requests.
+      SPRING_PROFILES_ACTIVE: local
+      KAIROS_LOCAL_KEK: ${KAIROS_LOCAL_KEK:?run make env}
     deploy:
       replicas: 2
       resources:
