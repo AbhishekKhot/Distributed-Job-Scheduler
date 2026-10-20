@@ -129,7 +129,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 |---|---|---|
 | job_id | uuid | PK, shard in the low 8 bits |
 | team_id | uuid | Unique with `name` among non-deleted jobs |
-| name | text | ≤ 128, cannot be changed |
+| name | text | `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`, cannot be changed |
 | version | int | Current version |
 | status | text | `ACTIVE`, `PAUSED`, `AUTO_PAUSED`, `COMPLETED`, `FAILED`, `CANCELLED`, `DELETED` |
 | endpoint_id | uuid | Endpoint in the control database |
@@ -139,7 +139,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 
 **job_versions** (PK `job_id, version`, immutable): `job_id` uuid, `version` int, `spec` jsonb, `created_at` timestamptz.
 
-**workflows**: same shape as `jobs` without `endpoint_id`; `workflow_id` uuid PK; `status` `ACTIVE`, `PAUSED`, `CANCELLED`, `DELETED`; `spec` jsonb ≤ 512 KB (tasks, edges and the computed plan).
+**workflows**: same shape as `jobs` without `endpoint_id`; `workflow_id` uuid PK; `name` follows the job name rule; `status` `ACTIVE`, `PAUSED`, `CANCELLED`, `DELETED`; `spec` jsonb ≤ 512 KB (tasks, edges and the computed plan).
 
 **workflow_versions** (PK `workflow_id, version`, immutable): `workflow_id` uuid, `version` int, `spec` jsonb, `created_at` timestamptz.
 
@@ -159,7 +159,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | timezone | text | IANA zone |
 | interval_ms | bigint | ≥ 1000 |
 | spread_ms | int | Fixed per-job offset to smooth top-of-minute spikes |
-| dst_policy | smallint | Gap and overlap handling |
+| dst_policy | smallint | 1 gap: run at the first valid instant after it, overlap: run at the first occurrence (default); 2 gap: shift forward, overlap: run at both; 3 gap: skip, overlap: first; 4 gap: skip, overlap: both |
 | misfire_policy | smallint | 1 `RUN_ALL`, 2 `RUN_LATEST`, 3 `SKIP` |
 | max_catchup | smallint | Default 100 |
 | definition_version | int | Version to fire |
@@ -177,7 +177,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | definition_id | uuid | Job or workflow id |
 | definition_version | int | Pinned |
 | target_id | uuid | Job id, or workflow run id for tasks |
-| task_key | text | Workflow task key, empty for jobs |
+| task_key | text | Workflow task key (`^[A-Za-z][A-Za-z0-9_-]{0,63}$`), empty for jobs |
 | endpoint_id, endpoint_version | uuid, int | Pinned endpoint version |
 | scheduled_at | timestamptz | Occurrence time; unique with `target_id, task_key` |
 | due_at | timestamptz | When to dispatch (spread, retry delay, backfill pacing) |
@@ -216,7 +216,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | scheduled_at, run_id, attempt, infra_attempt | timestamptz, uuid, smallint, smallint | PK |
 | team_id, target_type, definition_id, target_id, task_key, endpoint_id, trigger | | As in `run_inflight` |
 | outcome | smallint | 1 `SUCCEEDED`, 2 `FAILED_RETRYING`, 3 `DEAD_LETTERED`, 4 `CANCELLED`, 5 `SKIPPED`, 6 `UPSTREAM_FAILED`, 7 `EXECUTOR_LOST` |
-| error_class | smallint | For example `TIMEOUT`, `HTTP_5XX`, `HTTP_4XX`, `UNKNOWN_OUTCOME` |
+| error_class | smallint | 1 `TIMEOUT`, 2 `DNS_FAILED`, 3 `CONNECT_FAILED`, 4 `TLS_FAILED`, 5 `HTTP_4XX`, 6 `HTTP_429`, 7 `HTTP_5XX`, 8 `UNKNOWN_OUTCOME`, 9 `RESPONSE_TOO_LARGE`, 10 `OUTPUT_MISSING`, 11 `RENDER_FAILED`, 12 `TARGET_NOT_ALLOWED`, 13 `MAX_AGE_EXCEEDED`, 14 `EXECUTOR_LOST` |
 | final | boolean | Last attempt of the run |
 | http_status | smallint | |
 | started_at, finished_at | timestamptz | |
@@ -2205,7 +2205,7 @@ Content-Type: application/problem+json
 
 ### 3.6 Jobs
 
-Job body rules: `schedule.type` is `IMMEDIATE`, `ONE_TIME` (with `at`), `CRON` (with `expression` and `timezone`) or `INTERVAL` (with `everySec`); `priority` 1–10 (8–10 high, 5–7 medium, 1–4 low tier); `misfirePolicy` is `RUN_LATEST` (default), `RUN_ALL` or `SKIP`; `retryPolicy` overrides the endpoint's; `autoPauseAfter` 0 disables auto-pause.
+Job body rules: `name` is 1–128 characters matching `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`; `schedule.type` is `IMMEDIATE`, `ONE_TIME` (with `at`), `CRON` (with `expression` and `timezone`) or `INTERVAL` (with `everySec`); `priority` 1–10 (8–10 high, 5–7 medium, 1–4 low tier); `misfirePolicy` is `RUN_LATEST` (default), `RUN_ALL` or `SKIP`; `retryPolicy` overrides the endpoint's; `autoPauseAfter` 0 disables auto-pause.
 
 <details>
 <summary><b>34. Create a job</b> &nbsp; <code>POST /v1/jobs</code></summary>
@@ -3108,7 +3108,7 @@ Content-Type: application/problem+json
 
 ### 3.7 Workflows and workflow runs
 
-Workflow body rules: acyclic, at most 200 tasks and 10 levels; placeholders (`{{ tasks.<task>.outputs.<name> }}`, `{{ run.id }}`) may reference only declared outputs of ancestor tasks and never the URL host; `onTaskFailure` is `BLOCK_FOR_REVIEW` (default) or `FAIL_FAST`.
+Workflow body rules: `name` follows the job name rule; task keys match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; acyclic, at most 200 tasks and 10 levels; placeholders (`{{ tasks.<task>.outputs.<name> }}`, `{{ run.id }}`) may reference only declared outputs of ancestor tasks and never the URL host; `onTaskFailure` is `BLOCK_FOR_REVIEW` (default) or `FAIL_FAST`.
 
 <details>
 <summary><b>46. Create a workflow</b> &nbsp; <code>POST /v1/workflows</code></summary>

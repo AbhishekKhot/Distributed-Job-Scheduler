@@ -13,6 +13,7 @@ dependencies {
     implementation(platform(libs.testcontainers.bom))
 
     // Types that appear in this module's public API.
+    api(project(":libs:kairos-domain"))
     api("org.junit.jupiter:junit-jupiter-api")
     api("org.awaitility:awaitility")
 
