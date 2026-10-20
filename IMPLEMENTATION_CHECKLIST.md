@@ -263,12 +263,12 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
-| T-107 | Persistence foundation and cell routing | kairos-persistence | todo |
+| T-107 | Persistence foundation and cell routing | kairos-persistence | in progress (abhishekkhot) |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | todo |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
 | T-111 | Redis run lock and sent markers | kairos-engine | todo |
-| T-112 | Observability baseline | build-logic, deploy | review |
+| T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | todo |
 | T-201 | API foundation | kairos-api | todo |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
@@ -434,7 +434,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** `make up` runs the migrations container to exit code 0, and `\dt scheduler.*` in each database shows the LLD tables; the schema test passes.
 
 ### T-107 Persistence foundation and cell routing
-**Status:** todo · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
+**Status:** in progress (abhishekkhot) · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
 
 - [ ] `DataSourceRegistry`: one HikariCP pool for the control database and one per cell, built from `kairos.datasource.control.*` and `kairos.datasource.cells[n].*` (URLs from `KAIROS_*` variables). Pool sizes are configurable per service.
 - [ ] `CellRouter`: shard → cell from `cell_map`, cached with Caffeine and refreshed every 30s. `forShard(int)`, `forId(UUID)`, and `allCells()` for fan-out reads.
@@ -505,7 +505,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** Testcontainers tests show that two concurrent acquires yield exactly one owner; release by a non-owner is a no-op; `remaining` returns nothing after expiry; with Redis stopped, `acquire` returns `UNAVAILABLE` within the timeout.
 
 ### T-112 Observability baseline
-**Status:** review · **Needs:** T-002 · **Owns:** `build-logic` (`kairos.observability-conventions`, applied by the service conventions), `config/observability/` (package `dev.kairos.observability`, compiled into every application so no application depends on another), `deploy/compose/prometheus/`, `deploy/compose/grafana/`
+**Status:** done · **Needs:** T-002 · **Owns:** `build-logic` (`kairos.observability-conventions`, applied by the service conventions), `config/observability/` (package `dev.kairos.observability`, compiled into every application so no application depends on another), `deploy/compose/prometheus/`, `deploy/compose/grafana/`
 
 - [x] Micrometer Tracing with the OpenTelemetry bridge in every service. OTLP export is configurable and off by default locally; sampling is configurable (`kairos.observability.tracing.*`: `export-enabled`, `endpoint`, `sampling-probability`, default 0.1). W3C `traceparent` propagation.
 - [x] Common metric tags (`service`, `instance`, `cell` where relevant), and an SLO histogram for `kairos_schedule_lag_seconds` with buckets around 2s (meter `kairos.schedule.lag`; buckets 100 ms to 60 s, dense between 1 s and 3 s, configurable through `kairos.observability.schedule-lag-slo`).
