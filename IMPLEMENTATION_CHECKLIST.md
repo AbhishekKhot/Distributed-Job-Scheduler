@@ -265,7 +265,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | done |
-| T-108 | Messaging foundation | kairos-messaging | todo |
+| T-108 | Messaging foundation | kairos-messaging | review |
 | T-109 | Security library | kairos-security | done |
 | T-110 | Outbound HTTP client and target policy | kairos-http | done |
 | T-111 | Redis run lock and sent markers | kairos-engine | done |
@@ -450,14 +450,16 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** integration tests route ids from shards 0, 127, 128 and 255 to the right database; a duplicate insert raises `ConflictException`; the fan-out list merges two cells in order with a stable cursor.
 
 ### T-108 Messaging foundation
-**Status:** todo · **Needs:** T-105, T-003 · **Owns:** `libs/kairos-messaging/**`
+**Status:** review · **Needs:** T-105, T-003 · **Owns:** `libs/kairos-messaging/**`
 
-- [ ] `KairosTopic` enum with names, key type, outbox code and priority mapping (LLD section 4.2).
-- [ ] Protobuf `Serializer` and `Deserializer` per message type. The deserializer never throws on a bad payload; it returns a poison marker instead.
-- [ ] A producer factory with the settings in section 4.7, plus a `KafkaPublisher` that sends a batch and returns per-record futures (used by the outbox relay).
-- [ ] A consumer factory (manual commit, cooperative-sticky, configurable `max.poll.records`) and a `PartitionFlowControl` helper for pause/resume at the high and low water marks.
-- [ ] `traceparent` header helpers that inject and extract with Micrometer Tracing.
-- [ ] Kafka client metrics bound to Micrometer.
+- [x] `KairosTopic` enum with names, key type, outbox code and priority mapping (LLD section 4.2). Each outbox-fed topic refers to its `OutboxTopic` constant in `kairos-domain` (the codes the outbox writer stores), and the enum refuses to load if a name differs, so they cannot drift; only `kairos.run.result` has no outbox code. Keys are 16-byte ids (`KeyType`: target id for dispatches and results, run id for cancels, definition id for completed and dead events, as the outbox writer keys them). Partitions and retention are checked against the compose topic script in a test.
+- [x] Protobuf `Serializer` and `Deserializer` per message type. The deserializer never throws on a bad payload; it returns a poison marker instead. `MessageType` holds one serializer and deserializer per contract; `Decoded` is `Valid | Poison(reason, size)` with reasons `EMPTY`, `TOO_LARGE` and `MALFORMED`. Values are capped at 256 KiB (the `outbox` payload limit): the serializer refuses larger messages and the deserializer marks them poison before parsing.
+- [x] A producer factory with the settings in section 4.7, plus a `KafkaPublisher` that sends a batch and returns per-record futures (used by the outbox relay). `KafkaClientFactory`: `acks=all`, idempotence, lz4, bounded `delivery.timeout.ms` (default 30s, 5s to 5 min), 1 MiB requests; a synchronous refusal fails only its record's future; the `traceparent` header is written from the stored value.
+- [x] A consumer factory (manual commit, cooperative-sticky, configurable `max.poll.records`) and a `PartitionFlowControl` helper for pause/resume at the high and low water marks. Consumers read `read_committed` with raw keys and `Decoded` values; `PartitionFlowControl` pauses every assigned partition at the high mark, re-pauses partitions a rebalance adds, and resumes at the low mark. `PoisonMessages` counts `kairos_messages_poison_total` (labels `topic`, `reason`), logs topic, partition, offset, reason and size without the payload, and skips the record.
+- [x] `traceparent` header helpers that inject and extract with Micrometer Tracing. `TraceHeaders` injects and extracts through the service's `Propagator` (no-op when tracing is off) and reads and writes the raw stored value for the outbox relay, with the same validity rules as the engine's `TraceParents`.
+- [x] Kafka client metrics bound to Micrometer. Every producer and consumer from the factory binds `KafkaClientMetrics` and unbinds it on close.
+
+Connection settings come from `kairos.kafka.*` (`KafkaProperties`): bootstrap servers, `PLAINTEXT` (local only), `SSL` or `SASL_SSL` with `PLAIN` or SCRAM, user name and password from the environment (validated so they cannot break out of the JAAS line, never logged), an optional PEM trust certificate, and producer and consumer tunables. Services import `MessagingConfiguration` (client factory, a shared publisher, poison handler, trace headers).
 
 **Acceptance:** Testcontainers round trip for every topic; a poison message is counted and skipped without stalling the partition; pause and resume work under load in a test.
 

@@ -2,6 +2,8 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :dependencies --write-locks
+aopalliance:aopalliance:1.0=aggregateCodeCoverageReportResults
+at.yawk.lz4:lz4-java:1.10.1=aggregateCodeCoverageReportResults
 ch.qos.logback:logback-classic:1.5.38=aggregateCodeCoverageReportResults
 ch.qos.logback:logback-core:1.5.38=aggregateCodeCoverageReportResults
 com.fasterxml.jackson.core:jackson-annotations:2.22=aggregateCodeCoverageReportResults
@@ -15,6 +17,7 @@ com.github.ben-manes.caffeine:caffeine:3.3.1=aggregateCodeCoverageReportResults
 com.github.docker-java:docker-java-api:3.7.1=aggregateCodeCoverageReportResults
 com.github.docker-java:docker-java-transport-zerodep:3.7.1=aggregateCodeCoverageReportResults
 com.github.docker-java:docker-java-transport:3.7.1=aggregateCodeCoverageReportResults
+com.github.luben:zstd-jni:1.5.6-10=aggregateCodeCoverageReportResults
 com.google.android:annotations:4.1.1.4=aggregateCodeCoverageReportResults
 com.google.api-client:google-api-client:2.7.2=aggregateCodeCoverageReportResults
 com.google.api.grpc:proto-google-cloud-kms-v1:2.96.0=aggregateCodeCoverageReportResults
@@ -133,6 +136,7 @@ org.apache.httpcomponents.core5:httpcore5-h2:5.4.3=aggregateCodeCoverageReportRe
 org.apache.httpcomponents.core5:httpcore5:5.4.3=aggregateCodeCoverageReportResults
 org.apache.httpcomponents:httpclient:4.5.14=aggregateCodeCoverageReportResults
 org.apache.httpcomponents:httpcore:4.4.16=aggregateCodeCoverageReportResults
+org.apache.kafka:kafka-clients:4.2.1=aggregateCodeCoverageReportResults
 org.apache.logging.log4j:log4j-api:2.25.5=aggregateCodeCoverageReportResults
 org.apache.logging.log4j:log4j-to-slf4j:2.25.5=aggregateCodeCoverageReportResults
 org.apache.tomcat.embed:tomcat-embed-core:11.0.24=aggregateCodeCoverageReportResults
@@ -218,6 +222,7 @@ org.threeten:threeten-extra:1.8.0=aggregateCodeCoverageReportResults
 org.threeten:threetenbp:1.7.0=aggregateCodeCoverageReportResults
 org.webjars:swagger-ui:5.32.14=aggregateCodeCoverageReportResults
 org.webjars:webjars-locator-lite:1.1.4=aggregateCodeCoverageReportResults
+org.xerial.snappy:snappy-java:1.1.10.7=aggregateCodeCoverageReportResults
 org.yaml:snakeyaml:2.6=aggregateCodeCoverageReportResults
 redis.clients.authentication:redis-authx-core:0.1.1-beta2=aggregateCodeCoverageReportResults
 tools.jackson.core:jackson-core:3.1.5=aggregateCodeCoverageReportResults
