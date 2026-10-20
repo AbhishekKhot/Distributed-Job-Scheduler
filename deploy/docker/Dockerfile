@@ -18,6 +18,8 @@ ENV GRADLE_USER_HOME=/gradle-home
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle gradle
 COPY build-logic build-logic
+# Sources shared by every application (config/observability) and the architecture rules.
+COPY config config
 COPY libs libs
 COPY services services
 COPY jobs jobs

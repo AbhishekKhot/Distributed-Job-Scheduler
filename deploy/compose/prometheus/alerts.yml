@@ -1,0 +1,109 @@
+# Alert rules for the HLD alerts (HLD section 12). The kairos_* series are emitted by the services
+# as their features land; until then an expression over a missing series is simply empty.
+# Labels: severity is "critical" (pages) or "warning" (chat). Thresholds match the SLOs in the HLD.
+groups:
+  - name: kairos-slo
+    rules:
+      - alert: KairosScheduleLagHigh
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(kairos_schedule_lag_seconds_bucket[5m]))) > 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Schedule lag p99 is above 2s
+          description: >-
+            p99 of (start time - due time) over 5 minutes is {{ $value | humanizeDuration }}.
+            Check outbox age, Kafka consumer lag and executor saturation.
+
+      - alert: KairosOutboxBacklogOld
+        expr: max by (cell) (kairos_outbox_oldest_due_seconds) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Outbox in {{ $labels.cell }} has rows waiting more than 10s"
+          description: >-
+            The oldest due outbox row is {{ $value | humanizeDuration }} old. Watchers stop claiming
+            new work in this cell until the relay catches up (Kafka or relay trouble).
+
+  - name: kairos-dependencies
+    rules:
+      - alert: KairosServiceDown
+        expr: up{job="kairos"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} instance {{ $labels.instance }} is not being scraped"
+          description: The metrics endpoint has not answered for 2 minutes.
+
+      - alert: KairosRedisUnavailable
+        expr: sum by (service) (rate(kairos_redis_unavailable_total[1m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} cannot reach Redis"
+          description: >-
+            Redis commands are failing. Executors pause dispatching and the API's rate limits fail
+            closed; no work is lost.
+
+  - name: kairos-targets
+    rules:
+      - alert: KairosEndpointSuspended
+        expr: sum by (endpoint_id) (increase(kairos_endpoint_suspensions_total[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Endpoint {{ $labels.endpoint_id }} was auto-suspended"
+          description: >-
+            Sustained failures suspended the endpoint; its runs are deferred until a team member
+            resumes it.
+
+      - alert: KairosJobFailingRecentRuns
+        expr: max(kairos_jobs_failing_recent_runs) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} jobs fail most of their recent runs"
+          description: >-
+            Jobs with more than half of their last 10 runs failed. The owning teams see them in the
+            job stats; auto-pause takes over after repeated dead-lettered runs.
+
+      - alert: KairosDlqGrowing
+        expr: sum(increase(kairos_dlq_entries_created_total[1h])) > 100
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 100 runs were dead-lettered in the last hour
+          description: "{{ $value | humanize }} new DLQ entries in 1h; triage and redrive them."
+
+  - name: kairos-capacity
+    rules:
+      - alert: KairosExecutorSaturated
+        expr: |
+          sum by (instance) (kairos_executor_inflight)
+            / sum by (instance) (kairos_executor_capacity) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Executor {{ $labels.instance }} is above 80% of its capacity"
+          description: >-
+            In-flight calls are {{ $value | humanizePercentage }} of capacity. Scale executors out
+            before lag grows.
+
+  - name: kairos-security
+    rules:
+      - alert: KairosLoginFailureSpike
+        expr: sum(rate(kairos_login_failures_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Login failures above 1 per second
+          description: >-
+            {{ $value | humanize }} failed logins per second over 5 minutes. Rate limits are holding;
+            check for credential stuffing.
