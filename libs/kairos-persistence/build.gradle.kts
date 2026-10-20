@@ -36,3 +36,11 @@ tasks.withType<Test>().configureEach {
     // Testcontainers reaches the Docker socket through JNA.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
+
+tasks.named<Test>("test") {
+    // The integration tests apply the control and cell schemas of the migrations job, so they run against the real
+    // tables and constraint names.
+    inputs
+        .dir(isolated.rootProject.projectDirectory.dir("jobs/kairos-migrations/src/main/resources/db"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
