@@ -2,21 +2,41 @@
 # Writes deploy/compose/.env with fresh random credentials for the local stack.
 # Values come from the operating system CSPRNG (openssl rand). The file is created with
 # mode 600 and is gitignored. An existing file is kept unless --force is given, because
-# the Postgres and Redis volumes keep the passwords they were first started with.
+# the Postgres and Redis volumes keep the passwords they were first started with; keys
+# introduced later are appended to it.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_file="$repo_root/deploy/compose/.env"
 
-if [[ -f "$env_file" && "${1:-}" != "--force" ]]; then
-  echo "$env_file already exists; use --force to regenerate (then run: make clean)." >&2
-  exit 0
-fi
-
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 
 # 32 random bytes as 64 hex characters: no quoting or escaping issues anywhere.
 secret() { openssl rand -hex 32; }
+
+# Application keys that no volume depends on, so they can be added to an existing file:
+#   KAIROS_LOCAL_KEK        local key encryption key; seals every Tink keyset (local profile only)
+#   KAIROS_API_KEY_PEPPER   HMAC pepper of API key hashes (pepper version 1)
+#   KAIROS_CURSOR_HMAC_KEY  HMAC key that authenticates pagination cursors
+app_keys=(KAIROS_LOCAL_KEK KAIROS_API_KEY_PEPPER KAIROS_CURSOR_HMAC_KEY)
+
+if [[ -f "$env_file" && "${1:-}" != "--force" ]]; then
+  # Keys added after the file was written are appended; existing values are never changed.
+  added=0
+  umask 077
+  for key in "${app_keys[@]}"; do
+    if ! grep -q "^${key}=" "$env_file"; then
+      printf '%s=%s\n' "$key" "$(secret)" >> "$env_file"
+      added=$((added + 1))
+    fi
+  done
+  if [[ $added -gt 0 ]]; then
+    echo "Added $added new key(s) to $env_file"
+  else
+    echo "$env_file already exists; use --force to regenerate (then run: make clean)." >&2
+  fi
+  exit 0
+fi
 
 # Kafka expects a cluster id of 16 bytes in URL-safe base64 without padding.
 cluster_id="$(openssl rand 16 | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
@@ -34,6 +54,9 @@ KAFKA_CLUSTER_ID=$cluster_id
 GRAFANA_ADMIN_PASSWORD=$(secret)
 KAIROS_API_PORT=8080
 EOF
+for key in "${app_keys[@]}"; do
+  printf '%s=%s\n' "$key" "$(secret)" >> "$tmp_file"
+done
 mv "$tmp_file" "$env_file"
 trap - EXIT
 echo "Wrote $env_file"
