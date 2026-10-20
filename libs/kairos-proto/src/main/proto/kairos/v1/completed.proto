@@ -1,0 +1,50 @@
+// Completion events: the outbox relay publishes one to kairos.run.completed, keyed by job id (or
+// workflow id), when a run reaches its final outcome. Teams that opt in subscribe to the topic.
+syntax = "proto3";
+
+package kairos.v1;
+
+import "google/protobuf/timestamp.proto";
+import "kairos/v1/common.proto";
+
+option java_multiple_files = true;
+option java_package = "dev.kairos.proto.v1";
+option java_outer_classname = "CompletedProto";
+
+// A run that finished for good. Outputs are not included; subscribers read them through the API.
+message Completed {
+  // Run id. 16 bytes.
+  bytes run_id = 1;
+  // Shard of the run (0-255).
+  int32 shard = 2;
+  // Team that owns the run. 16 bytes.
+  bytes team_id = 3;
+  // Job or workflow task.
+  TargetType target_type = 4;
+  // Job id or workflow id. 16 bytes; also the Kafka key.
+  bytes definition_id = 5;
+  // Version of the job or workflow the run used.
+  int32 definition_version = 6;
+  // Job id, or workflow run id for a workflow task. 16 bytes.
+  bytes target_id = 7;
+  // Workflow task key; empty for jobs.
+  string task_key = 8;
+  // Why the run was created.
+  Trigger trigger = 9;
+  // Occurrence time of the run.
+  google.protobuf.Timestamp scheduled_at = 10;
+  // Final outcome: succeeded, dead-lettered, cancelled, skipped, upstream failed or executor lost.
+  RunOutcome outcome = 11;
+  // Classification of the last failure; unspecified when the run succeeded.
+  ErrorClass error_class = 12;
+  // HTTP status of the last attempt; 0 when no response was received.
+  int32 http_status = 13;
+  // Number of the last attempt.
+  int32 attempts = 14;
+  // When the first attempt started; unset when the run never started.
+  google.protobuf.Timestamp started_at = 15;
+  // When the run reached its final outcome.
+  google.protobuf.Timestamp finished_at = 16;
+  // Latency of the last attempt in milliseconds; 0 when no call was made.
+  int32 latency_ms = 17;
+}

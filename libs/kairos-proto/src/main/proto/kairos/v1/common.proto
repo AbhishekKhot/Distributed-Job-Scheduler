@@ -1,0 +1,108 @@
+// Types shared by every Kairos Kafka message.
+//
+// Compatibility rules (IMPLEMENTATION_CHECKLIST section 4.7): field and enum numbers are never
+// reused or changed, and removed fields are reserved by number and name. The compatibility check
+// in this module compares every build with libs/kairos-proto/compat/kairos-v1.txtpb.
+//
+// Ids are UUIDs encoded as 16 bytes in big-endian order (most significant half first). Enum
+// numbers equal the smallint codes stored in the database (LLD section 2.3); 0 is never stored and
+// marks a value that was not set.
+syntax = "proto3";
+
+package kairos.v1;
+
+option java_multiple_files = true;
+option java_package = "dev.kairos.proto.v1";
+option java_outer_classname = "CommonProto";
+
+// What a run executes.
+enum TargetType {
+  // Not set; consumers reject the message.
+  TARGET_TYPE_UNSPECIFIED = 0;
+  // A job: one call to its endpoint.
+  TARGET_TYPE_JOB = 1;
+  // One task of a workflow run.
+  TARGET_TYPE_WORKFLOW_TASK = 2;
+  // A whole workflow. Used by schedules only; a run is always a job or a workflow task.
+  TARGET_TYPE_WORKFLOW = 3;
+}
+
+// Why a run was created.
+enum Trigger {
+  // Not set; consumers reject the message.
+  TRIGGER_UNSPECIFIED = 0;
+  // Fired by the schedule (one-time, cron or interval).
+  TRIGGER_SCHEDULE = 1;
+  // Created by an immediate schedule.
+  TRIGGER_IMMEDIATE = 2;
+  // Started by a person or API key through "run now".
+  TRIGGER_MANUAL = 3;
+  // Re-creates an occurrence missed while the platform was unavailable.
+  TRIGGER_BACKFILL = 4;
+  // Re-runs a dead-lettered run.
+  TRIGGER_REDRIVE = 5;
+}
+
+// Final or intermediate outcome of a run attempt, as recorded in run_history.outcome.
+enum RunOutcome {
+  // Not set; consumers reject the message.
+  RUN_OUTCOME_UNSPECIFIED = 0;
+  // The target answered with a success status and every required output was present.
+  RUN_OUTCOME_SUCCEEDED = 1;
+  // The attempt failed and another attempt is scheduled.
+  RUN_OUTCOME_FAILED_RETRYING = 2;
+  // Retries are exhausted (or the error is not retryable); the run is in the dead-letter queue.
+  RUN_OUTCOME_DEAD_LETTERED = 3;
+  // The run was cancelled before or during the call.
+  RUN_OUTCOME_CANCELLED = 4;
+  // The run was not executed, for example because it would have started past its lateness limit.
+  RUN_OUTCOME_SKIPPED = 5;
+  // A workflow task that did not run because an upstream task failed.
+  RUN_OUTCOME_UPSTREAM_FAILED = 6;
+  // The executor holding the run was lost and the run could not be recovered.
+  RUN_OUTCOME_EXECUTOR_LOST = 7;
+}
+
+// Classification of a failed attempt, as recorded in run_history.error_class and
+// dead_letters.reason.
+enum ErrorClass {
+  // No error (the attempt succeeded) or not classified.
+  ERROR_CLASS_UNSPECIFIED = 0;
+  // The call exceeded the endpoint timeout.
+  ERROR_CLASS_TIMEOUT = 1;
+  // The target host name did not resolve.
+  ERROR_CLASS_DNS_FAILED = 2;
+  // The TCP connection could not be established.
+  ERROR_CLASS_CONNECT_FAILED = 3;
+  // The TLS handshake or certificate verification failed.
+  ERROR_CLASS_TLS_FAILED = 4;
+  // The target answered with a 4xx status other than 429.
+  ERROR_CLASS_HTTP_4XX = 5;
+  // The target answered 429 Too Many Requests.
+  ERROR_CLASS_HTTP_429 = 6;
+  // The target answered with a 5xx status.
+  ERROR_CLASS_HTTP_5XX = 7;
+  // The request may have reached the target, but no response was received.
+  ERROR_CLASS_UNKNOWN_OUTCOME = 8;
+  // The response body exceeded the response size cap.
+  ERROR_CLASS_RESPONSE_TOO_LARGE = 9;
+  // A required output could not be extracted from the response.
+  ERROR_CLASS_OUTPUT_MISSING = 10;
+  // The request could not be rendered from its template and inputs.
+  ERROR_CLASS_RENDER_FAILED = 11;
+  // The resolved target was rejected by the platform target policy.
+  ERROR_CLASS_TARGET_NOT_ALLOWED = 12;
+  // The retry series is older than the endpoint's maximum age.
+  ERROR_CLASS_MAX_AGE_EXCEEDED = 13;
+  // The executor holding the run was lost.
+  ERROR_CLASS_EXECUTOR_LOST = 14;
+}
+
+// One name and value pair of an HTTP header or query parameter. A repeated list of pairs keeps
+// the order and allows a name to appear more than once.
+message NameValue {
+  // Header or query parameter name.
+  string name = 1;
+  // Value, already rendered. Never a credential.
+  string value = 2;
+}

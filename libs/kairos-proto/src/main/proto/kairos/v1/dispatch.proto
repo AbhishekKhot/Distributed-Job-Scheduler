@@ -1,0 +1,77 @@
+// Dispatch messages: the outbox relay publishes one per queued run to kairos.run.high, .medium or
+// .low (by priority tier), keyed by target id. Executors consume them.
+syntax = "proto3";
+
+package kairos.v1;
+
+import "google/protobuf/timestamp.proto";
+import "kairos/v1/common.proto";
+
+option java_multiple_files = true;
+option java_package = "dev.kairos.proto.v1";
+option java_outer_classname = "DispatchProto";
+
+// A run that is ready to execute. The fenced claim (QUEUED to RUNNING only when fence matches the
+// row) makes a stale or duplicate copy of this message harmless.
+message Dispatch {
+  // Run id; also sent to the target as the Idempotency-Key header. 16 bytes.
+  bytes run_id = 1;
+  // Shard of the run (0-255), also embedded in the low 8 bits of run_id.
+  int32 shard = 2;
+  // Fence of the dispatch; the executor's claim succeeds only if it still equals the row's fence.
+  int32 fence = 3;
+  // Attempt number, starting at 1.
+  int32 attempt = 4;
+  // Re-queues after executor loss for this attempt, starting at 0 (at most 3).
+  int32 infra_attempt = 5;
+  // Team that owns the run. 16 bytes.
+  bytes team_id = 6;
+  // Job or workflow task.
+  TargetType target_type = 7;
+  // Job id or workflow id. 16 bytes.
+  bytes definition_id = 8;
+  // Version of the job or workflow pinned when the run was created.
+  int32 definition_version = 9;
+  // Job id, or workflow run id for a workflow task. 16 bytes; also the Kafka key.
+  bytes target_id = 10;
+  // Workflow task key; empty for jobs.
+  string task_key = 11;
+  // Endpoint to call (control database id). 16 bytes.
+  bytes endpoint_id = 12;
+  // Endpoint version pinned when the run was created; the executor loads exactly this version.
+  int32 endpoint_version = 13;
+  // Priority 1-10 (8-10 high, 5-7 medium, 1-4 low tier).
+  int32 priority = 14;
+  // Call timeout in milliseconds (1000-300000), from the pinned endpoint version.
+  int32 timeout_ms = 15;
+  // Occurrence time of the run.
+  google.protobuf.Timestamp scheduled_at = 16;
+  // Time at which the run became due for dispatch (after spread, retry delay or pacing).
+  google.protobuf.Timestamp due_at = 17;
+  // Request values rendered for this run.
+  RequestSnapshot request = 18;
+  // W3C traceparent of the transaction that queued the run; empty when not traced.
+  string trace_parent = 19;
+}
+
+// The request values of one run, rendered from the job or task definition and upstream outputs.
+// The URL template, method and authentication come from the pinned endpoint version. A snapshot
+// never contains a secret value: credentials are resolved by the executor from secret references,
+// and sensitive upstream outputs travel only in sealed form.
+message RequestSnapshot {
+  // Values for the {param} placeholders in the endpoint's URL path, by placeholder name.
+  map<string, string> path_params = 1;
+  // Query parameters in order.
+  repeated NameValue query = 2;
+  // Request headers in order, merged over the endpoint's default headers. Never Authorization or
+  // any header carrying a credential.
+  repeated NameValue headers = 3;
+  // Request body bytes (JSON for the current API); empty for requests without a body.
+  bytes body = 4;
+  // Names of the team secrets the call needs (for example the endpoint's auth secretRef). The
+  // executor resolves and decrypts them just before the call; values never appear on Kafka.
+  repeated string secret_refs = 5;
+  // Sensitive upstream outputs used by this request, encrypted with the team's OUTPUTS keyset
+  // (AES-GCM through Tink). Empty when the request uses no sensitive output.
+  bytes sealed_inputs = 6;
+}
