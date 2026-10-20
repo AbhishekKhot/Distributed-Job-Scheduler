@@ -1,0 +1,53 @@
+// Dead-letter events: the outbox relay publishes one to kairos.run.dead, keyed by job id (or
+// workflow id), when a run is dead-lettered. Alerting consumes the topic.
+syntax = "proto3";
+
+package kairos.v1;
+
+import "google/protobuf/timestamp.proto";
+import "kairos/v1/common.proto";
+
+option java_multiple_files = true;
+option java_package = "dev.kairos.proto.v1";
+option java_outer_classname = "DeadProto";
+
+// A run that entered the dead-letter queue. It carries ids and codes only, no error text or
+// response content, so alerts can never leak target data.
+message Dead {
+  // Dead-letter entry id. 16 bytes.
+  bytes dlq_id = 1;
+  // Run id. 16 bytes.
+  bytes run_id = 2;
+  // Shard of the run (0-255).
+  int32 shard = 3;
+  // Team that owns the run. 16 bytes.
+  bytes team_id = 4;
+  // Job or workflow task.
+  TargetType target_type = 5;
+  // Job id or workflow id. 16 bytes; also the Kafka key.
+  bytes definition_id = 6;
+  // Version of the job or workflow the run used.
+  int32 definition_version = 7;
+  // Job id, or workflow run id for a workflow task. 16 bytes.
+  bytes target_id = 8;
+  // Workflow task key; empty for jobs.
+  string task_key = 9;
+  // Endpoint the run called. 16 bytes.
+  bytes endpoint_id = 10;
+  // Endpoint version the run used.
+  int32 endpoint_version = 11;
+  // Priority 1-10.
+  int32 priority = 12;
+  // Occurrence time of the run.
+  google.protobuf.Timestamp scheduled_at = 13;
+  // Number of the last attempt.
+  int32 attempt = 14;
+  // Infrastructure re-queues of the last attempt.
+  int32 infra_attempt = 15;
+  // Why the run was dead-lettered (dead_letters.reason).
+  ErrorClass reason = 16;
+  // HTTP status of the last attempt; 0 when no response was received.
+  int32 last_http_status = 17;
+  // When the run was dead-lettered.
+  google.protobuf.Timestamp dead_at = 18;
+}
