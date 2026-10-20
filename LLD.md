@@ -251,6 +251,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | target_type, definition_id, definition_version, target_id, task_key | | Which job or task |
 | endpoint_id, endpoint_version | uuid, int | |
 | attempt, infra_attempt, priority | smallint | |
+| fence | int | The run's fence when it was dead-lettered; a redrive continues from it |
 | reason | smallint | `error_class` |
 | last_http_status | smallint | |
 | last_error, response_snippet | text | Redacted |
@@ -967,7 +968,7 @@ Location: /v1/api-keys/7Hq2Lm9Xc4Vb8Nz1
 {
   "keyId": "7Hq2Lm9Xc4Vb8Nz1",
   "name": "ci-pipeline",
-  "key": "sk_prod_7Hq2Lm9Xc4Vb8Nz1_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "key": "kairos_7Hq2Lm9Xc4Vb8Nz1_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
   "expiresAt": "2027-04-14T00:00:00Z",
   "createdAt": "2026-10-14T09:30:00Z"
 }
@@ -1503,7 +1504,7 @@ Content-Type: application/problem+json
 
 ### 3.5 Endpoints
 
-Endpoint body rules: `method` is `GET`, `POST`, `PUT`, `PATCH`, `DELETE` or `HEAD`; `urlTemplate` must be HTTPS, pass the platform target policy and use `{param}` only in the path; `auth.type` is `NONE`, `BASIC`, `BEARER`, `API_KEY` or `OAUTH2_CLIENT_CREDENTIALS`, with credentials only through `secretRef`; `API_KEY` also takes `location` (`HEADER` or `QUERY`) and `name` (the header or query parameter that carries the key); `OAUTH2_CLIENT_CREDENTIALS` also takes `tokenUrl` (HTTPS, checked by the same target policy) and an optional `scope`, sends the client id and secret as HTTP Basic, and caches the token until 60s before `expires_in` (a token without `expires_in` is used once and not cached); `defaultHeaders` may not set headers the client manages (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Keep-Alive`, `Proxy-Connection`, `Proxy-Authorization`, `Upgrade`, `TE`, `Trailer`, `Expect`), and header names and values may not contain CR or LF; the rendered request body is at most 1 MiB; redirects are never followed (a 3xx is returned as the response); `timeoutMs` 1000–300000 (default 30000); retry `strategy` is `EXPONENTIAL_JITTER`, `FULL_JITTER` or `FIXED`; `unknownOutcomePolicy` is `RETRY_WITH_IDEMPOTENCY_KEY` (default) or `REVIEW`.
+Endpoint body rules: `method` is `GET`, `POST`, `PUT`, `PATCH`, `DELETE` or `HEAD`; `urlTemplate` must be HTTPS, pass the platform target policy and use `{param}` only in the path; `auth.type` is `NONE`, `BASIC`, `BEARER`, `API_KEY` or `OAUTH2_CLIENT_CREDENTIALS`, with credentials only through `secretRef`; `API_KEY` also takes `location` (`HEADER` or `QUERY`) and `name` (the header or query parameter that carries the key); `OAUTH2_CLIENT_CREDENTIALS` also takes `tokenUrl` (HTTPS, checked by the same target policy) and an optional `scope`, sends the client id and secret as HTTP Basic, and caches the token until 60s before `expires_in` (a token without `expires_in` is used once and not cached); `defaultHeaders` may not set headers the client manages (`Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Keep-Alive`, `Proxy-Connection`, `Proxy-Authorization`, `Upgrade`, `TE`, `Trailer`, `Expect`), and header names and values may not contain CR or LF; the rendered request body is at most 1 MiB; redirects are never followed (a 3xx is returned as the response); `timeoutMs` 1000–300000 (default 30000); `successStatus` has 1–10 entries, each a status class (`2xx`) or a status (100–599); `statusOverrides` maps up to 50 three-digit statuses to `SUCCESS`, `RETRY` or `FAIL` and is checked before `successStatus`; a status that is neither overridden nor listed is classified as `HTTP_429` (429) or `HTTP_5XX` (5xx), both retried, `HTTP_4XX` retried for 408 and 425, and `HTTP_4XX` not retried for every other status, including an unlisted 1xx, 2xx or 3xx; `retryPolicy` takes `maxRetries` 0–20, `baseDelaySec` 1–3600, `maxDelaySec` from `baseDelaySec` to 86400 and `maxAgeSec` 60–604800 (7 days); retry `strategy` is `EXPONENTIAL_JITTER`, `FULL_JITTER` or `FIXED`; `unknownOutcomePolicy` is `RETRY_WITH_IDEMPOTENCY_KEY` (default) or `REVIEW`.
 
 <details>
 <summary><b>25. Register an endpoint</b> &nbsp; <code>POST /v1/endpoints</code></summary>
@@ -2205,7 +2206,7 @@ Content-Type: application/problem+json
 
 ### 3.6 Jobs
 
-Job body rules: `name` is 1–128 characters matching `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`; `schedule.type` is `IMMEDIATE`, `ONE_TIME` (with `at`), `CRON` (with `expression` and `timezone`) or `INTERVAL` (with `everySec`); `priority` 1–10 (8–10 high, 5–7 medium, 1–4 low tier); `misfirePolicy` is `RUN_LATEST` (default), `RUN_ALL` or `SKIP`; `retryPolicy` overrides the endpoint's; `autoPauseAfter` 0 disables auto-pause.
+Job body rules: `name` is 1–128 characters matching `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`; `schedule.type` is `IMMEDIATE`, `ONE_TIME` (with `at`), `CRON` (with `expression` and `timezone`) or `INTERVAL` (with `everySec`); `priority` 1–10 (8–10 high, 5–7 medium, 1–4 low tier); `misfirePolicy` is `RUN_LATEST` (default), `RUN_ALL` or `SKIP`; `retryPolicy` overrides the endpoint's as a whole, with the same ranges; `autoPauseAfter` is 0–100, and 0 disables auto-pause.
 
 <details>
 <summary><b>34. Create a job</b> &nbsp; <code>POST /v1/jobs</code></summary>
@@ -4461,7 +4462,7 @@ Content-Type: application/problem+json
 {"type": "/errors/endpoint-suspended", "title": "Endpoint suspended", "status": 409, "detail": "Resume endpoint orders-create before redriving."}
 ```
 
-**Background effect:** The run starts a new attempt series under the same run id, so the target sees the same `Idempotency-Key`. `ORIGINAL` uses the pinned configuration, `CURRENT` the latest job and endpoint versions. A blocked workflow run resumes.
+**Background effect:** The run starts a new attempt series under the same run id, so the target sees the same `Idempotency-Key`, and continues from the fence stored on the entry, so messages of the dead-lettered run can never claim it. `ORIGINAL` uses the pinned configuration, `CURRENT` the latest job and endpoint versions. A blocked workflow run resumes.
 
 </details>
 
