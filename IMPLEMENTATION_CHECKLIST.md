@@ -259,17 +259,17 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-003 | Shared test support | libs/kairos-test-support | done |
 | T-101 | Identifiers, shards and domain types | kairos-domain | done |
 | T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
-| T-103 | Retry policy, outcomes and run state machine | kairos-domain | review |
+| T-103 | Retry policy, outcomes and run state machine | kairos-domain | done |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
-| T-107 | Persistence foundation and cell routing | kairos-persistence | review |
+| T-107 | Persistence foundation and cell routing | kairos-persistence | done |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | todo |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
 | T-111 | Redis run lock and sent markers | kairos-engine | todo |
 | T-112 | Observability baseline | build-logic, deploy | done |
-| T-113 | Run creation and outbox writer | kairos-engine | todo |
+| T-113 | Run creation and outbox writer | kairos-engine | review |
 | T-201 | API foundation | kairos-api | todo |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
 | T-203a | Team and members APIs (8–12) | kairos-api | todo |
@@ -379,7 +379,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** tests for New York, London, Sydney, Kolkata and Lord Howe (30-minute DST) across both transitions; `0 2 * * *` on DST-start day follows the gap policy; `30 1 * * *` on DST-end day fires once; jqwik property: fire times are strictly increasing and never skip a valid occurrence.
 
 ### T-103 Retry policy, outcomes and run state machine
-**Status:** review · **Needs:** T-101 · **Owns:** `dev.kairos.domain.retry`, `dev.kairos.domain.run`, `dev.kairos.domain.health`
+**Status:** done · **Needs:** T-101 · **Owns:** `dev.kairos.domain.retry`, `dev.kairos.domain.run`, `dev.kairos.domain.health`
 
 - [x] `RetryPolicy` (`maxRetries` default 5, `baseDelaySec` 30, `maxDelaySec` 600, `maxAgeSec` 86400, strategy) with resolution order: job override, then endpoint, then team default, then platform default. The first non-null policy wins as a whole (fields are never merged). Ranges, reported as `retryPolicy.<field>` / `range`: `maxRetries` 0–20, `baseDelaySec` 1–3600, `maxDelaySec` from the base to 86400, `maxAgeSec` 60–604800 (the 7-day history retention). A series allows `maxRetries` retries after its first attempt (`attempt - series_start`).
 - [x] `RetryBackoff` strategies: exponential with jitter, full jitter and fixed, with an injected random source. Defaults give roughly 15 minutes from the first failure to the DLQ. `EXPONENTIAL_JITTER` = `min(max, base * 2^(n-1) + U[0, base/2))` (930–1005s over 5 retries), `FULL_JITTER` = `U[0, min(max, base * 2^(n-1)))`, `FIXED` = `base` without jitter. One shared contract test (bounds, cap, non-decreasing bounds and same-draw delays, reproducible seeds) runs against each strategy. `RetryPlanner` takes a `Supplier<RandomGenerator>` (production: `ThreadLocalRandom::current`; jitter is not a security value) and an injected `Clock`.
@@ -434,7 +434,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** `make up` runs the migrations container to exit code 0, and `\dt scheduler.*` in each database shows the LLD tables; the schema test passes.
 
 ### T-107 Persistence foundation and cell routing
-**Status:** review · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
+**Status:** done · **Needs:** T-101, T-106, T-003 · **Owns:** `libs/kairos-persistence/**`
 
 - [x] `DataSourceRegistry`: one HikariCP pool for the control database and one per cell, built from `kairos.datasource.control.*` and `kairos.datasource.cells[n].*` (`PersistenceProperties`; each service maps `KAIROS_CONTROL_DB_URL`, `KAIROS_CELL_<n>_DB_URL`, `KAIROS_DB_USERNAME` and `KAIROS_DB_PASSWORD` onto them in its `application.yml`). Pool sizes are configurable per service (`kairos.datasource.pool.*`, with an optional `maximum-pool-size` per database). Cell `n` is the data source `cell-n` of `cell_map`. Pools start without connecting, so a database that is down fails readiness instead of startup.
 - [x] `CellRouter`: shard → cell from `cell_map`, cached with Caffeine and refreshed every 30s (`kairos.datasource.cell-map-refresh`). `forShard(int|Shard)`, `forId(UUID|ShardedId)`, and `allCells()` for fan-out reads. Reloads run in the background; a failed or invalid reload (gap, overlap, unknown data source) keeps the current layout, so a control database outage never stops cell traffic.
@@ -537,15 +537,15 @@ Metric names the alerts and dashboards expect; the tasks that emit them use exac
 **Acceptance:** `make up-all` shows all dashboards with live data from the running services, and Prometheus loads the alert rules without errors.
 
 ### T-113 Run creation and outbox writer
-**Status:** todo · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
+**Status:** review · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
 
 The single place where runs and their outbox rows are created, used by the API (immediate runs, run now, backfill, redrive), the fire poller, the delayed poller and the settler.
 
-- [ ] `RunFactory`: builds `run_inflight` rows for each trigger (schedule, immediate, manual, backfill, redrive), pinning definition and endpoint versions and computing `due_at` (spread, pacing). A redrive re-creates the run under its original run id with a new attempt series (`series_start`, `series_started_at`).
-- [ ] `RunInserter`: batch `INSERT ... ON CONFLICT (target_id, task_key, scheduled_at) DO NOTHING RETURNING run_id`, so an occurrence is created at most once.
-- [ ] `OutboxWriter`: writes outbox rows in the caller's transaction (dispatch to the priority topic, cancel, completed, dead). It must be called inside a `CellTransactions` callback, and throws otherwise.
-- [ ] `DispatchMessageBuilder`: builds the Protobuf dispatch payload from the run and the pinned versions (no secrets) and increments the fence.
-- [ ] Postgres `NOTIFY kairos_fire_<cell>` on new immediate runs, so the poller reacts without waiting for its next cycle.
+- [x] `RunFactory`: builds `run_inflight` rows for each trigger (schedule, immediate, manual, backfill, redrive), pinning definition and endpoint versions and computing `due_at` (spread, pacing). A redrive re-creates the run under its original run id with a new attempt series (`series_start`, `series_started_at`). Input is a `RunTarget` (team, job or workflow task, pinned definition and endpoint versions, priority, `maxLateness`, `CallSpec`); output is a `PlannedRun(InflightRun, CallSpec)`. Schedule: `due_at = scheduled_at + spread` (0–60s); due within the 5-second dispatch horizon (the fire poller's look-ahead) it is created `QUEUED` at fence 1, later `DELAYED` at fence 0. Immediate and manual: `QUEUED`, due now. Backfill: `DELAYED`, the i-th occurrence due `i / rate` seconds from now (default 100/s, at most 1K/s and 1,000 occurrences per call). Redrive: `DELAYED` and due now so the delayed poller paces it, attempt `last + 1` starting the series, and the fence continues from the dead-lettered run's fence so its old dispatch messages can never match again. `waiting(...)` creates `WAITING` workflow tasks with `remaining_deps`. Times are truncated to microseconds so the occurrence key matches the database.
+- [x] `RunInserter`: batch `INSERT ... ON CONFLICT (target_id, task_key, scheduled_at) DO NOTHING RETURNING run_id`, so an occurrence is created at most once. One multi-row statement per 500 rows (named parameters numbered by row); the conflict target is `(shard_id, target_id, task_key, scheduled_at)`, the partitioned form of the occurrence constraint (T-106). The integration test checks the plan (`Conflict Resolution: NOTHING`, arbiter index, no sequential scan).
+- [x] `OutboxWriter`: writes outbox rows in the caller's transaction (dispatch to the priority topic, cancel, completed, dead). It must be called inside a `CellTransactions` callback, and throws otherwise. `OutboxMessage` factories build rows from `Dispatch`, `Cancel`, `Completed` and `Dead` with the LLD section 4.2 keys (target id, run id, definition id) and validate the `outbox` constraints; `CellTransactionGuard` checks that the shard's cell pool is bound to the thread's transaction, so a transaction on the control database or the other cell does not count. Rows are a JDBC batch with time-ordered ids in the row's shard; `trace_parent` is kept only when it is a valid W3C value (`TraceParents`).
+- [x] `DispatchMessageBuilder`: builds the Protobuf dispatch payload from the run and the pinned versions (no secrets) and increments the fence. `build` serialises a run created `QUEUED` (fence already 1); `redispatch` moves a `WAITING`, `DELAYED`, `QUEUED` or `RUNNING` run to `QUEUED` through `RunStateMachine` and returns the row with its new fence plus the message, for the delayed poller and sweepers. `CallSpec` rejects snapshots carrying `Authorization`, `Proxy-Authorization`, `Cookie` or `Set-Cookie` headers; credentials travel only as `secret_refs`.
+- [x] Postgres `NOTIFY kairos_fire_<cell>` on new immediate runs, so the poller reacts without waiting for its next cycle. `FireNotifier` sends `pg_notify` with the shard number as payload (delivered on commit, dropped on rollback) when `RunCreator` creates a `QUEUED` run that is already due and was not created by the fire poller (immediate, manual, redrive). `RunCreator` ties it together: insert, one dispatch row per created `QUEUED` run with `available_at = due_at`, notify; it returns `RunCreation(created, duplicates)`.
 
 **Acceptance:** integration tests show that a run and its outbox row commit or roll back together; inserting the same occurrence twice creates one run and one outbox row; a dispatch payload never contains secret values (asserted by scanning the bytes for the test secret).
 
