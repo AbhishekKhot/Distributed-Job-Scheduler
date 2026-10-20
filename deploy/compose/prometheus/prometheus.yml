@@ -3,9 +3,15 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - /etc/prometheus/alerts.yml
+
 scrape_configs:
   - job_name: kairos
     metrics_path: /actuator/prometheus
+    # The services tag every series with service and instance (the container or pod name); those
+    # tags win over the target labels below, which only label the synthetic series such as `up`.
+    honor_labels: true
     dns_sd_configs:
       - names: [kairos-api, kairos-watcher, kairos-executor, kairos-state]
         type: A
