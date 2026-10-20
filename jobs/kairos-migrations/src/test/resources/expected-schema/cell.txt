@@ -34,6 +34,7 @@ dead_letters|resolved_by|text|YES
 dead_letters|resolved_at|timestamp with time zone|YES
 dead_letters|redrive_mode|smallint|YES
 dead_letters|created_at|timestamp with time zone|NO
+dead_letters|fence|integer|NO
 endpoint_health_minute|endpoint_id|uuid|NO
 endpoint_health_minute|minute|timestamp with time zone|NO
 endpoint_health_minute|node_id|text|NO
