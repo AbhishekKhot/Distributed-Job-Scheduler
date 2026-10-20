@@ -9,7 +9,17 @@ dependencies {
     api(project(":libs:kairos-persistence"))
     api(project(":libs:kairos-messaging"))
 
+    // The Redis run lock and sent markers (dev.kairos.engine.lock). Lettuce stays behind the ports; only the
+    // configuration properties, the Spring configuration and the meter registry appear in the public API.
+    implementation("io.lettuce:lettuce-core")
+    api("org.springframework:spring-context")
+
     testImplementation(project(":libs:kairos-test-support"))
+    // A dedicated Redis container that the fail-closed test stops.
+    testImplementation("org.testcontainers:testcontainers")
+    testImplementation("org.springframework.boot:spring-boot-test")
+    // Binds the configuration properties with Bean Validation, as the services do.
+    testRuntimeOnly("org.springframework.boot:spring-boot-starter-validation")
     // The NOTIFY test listens through the driver's PGConnection.
     testImplementation("org.postgresql:postgresql")
     testRuntimeOnly("ch.qos.logback:logback-classic")
