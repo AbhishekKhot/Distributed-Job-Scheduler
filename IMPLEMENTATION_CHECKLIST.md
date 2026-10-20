@@ -266,7 +266,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-107 | Persistence foundation and cell routing | kairos-persistence | done |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | done |
-| T-110 | Outbound HTTP client and target policy | kairos-http | review |
+| T-110 | Outbound HTTP client and target policy | kairos-http | done |
 | T-111 | Redis run lock and sent markers | kairos-engine | done |
 | T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | done |
@@ -476,7 +476,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** known-answer tests for Argon2id; a JWT signed with a different key, `alg: none`, HS256 or an expired timestamp is rejected; refresh reuse revokes the family; ciphertext with swapped associated data fails to decrypt; no secret value appears in any `toString()` (a test checks).
 
 ### T-110 Outbound HTTP client and target policy
-**Status:** review · **Needs:** T-101 · **Owns:** `libs/kairos-http/**`
+**Status:** done · **Needs:** T-101 · **Owns:** `libs/kairos-http/**`
 
 - [x] `TargetPolicy` from configuration (`kairos.target-policy.*`): HTTPS only; allowed DNS suffixes (for example `.svc.cluster.local`, `.internal`) and exact hosts; allowed CIDRs; allowed ports. The fixed deny list cannot be configured away: loopback, link-local (including `169.254.169.254`), metadata hostnames, the Kubernetes API service address, `0.0.0.0/8`, multicast, and the Kairos infrastructure addresses provided at startup. Defaults: suffixes `.svc.cluster.local` and `.internal`, CIDRs `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7`, ports 443 and 8443; every resolved address must also lie in an allowed CIDR. The fixed list also covers `240.0.0.0/4`, the IPv6 unspecified, loopback, link-local, site-local and multicast ranges, and IPv6 forms that embed IPv4 (IPv4-compatible, NAT64, 6to4, Teredo); `localhost`, `metadata`, `metadata.google.internal`, `metadata.goog` and `kubernetes.default.svc.*` are denied by name. Infrastructure comes from `kairos.target-policy.infrastructure-hosts` (denied by name and by the addresses resolved at startup), `infrastructure-cidrs` and `KUBERNETES_SERVICE_HOST`. IPv4-mapped IPv6 is folded to IPv4. IPv4 literals must be canonical dotted quads; any other host whose last label starts with a digit (`127.1`, `2130706433`, `0x7f.0.0.1`, `0177.0.0.1`) is refused, as are IPv6 zone ids, user info, fragments, trailing dots, non-ASCII names and authorities that `java.net.URI` reads differently.
 - [x] `ValidatingDnsResolver` for Apache HttpClient 5. It resolves, checks every address against the policy, and returns only checked addresses, so the connection goes to the checked IP. TLS hostname verification still uses the original host name (SNI and certificate check). This blocks DNS rebinding. One refused address refuses the whole host; a refusal is a `TargetNotAllowedException` (a subclass of `UnknownHostException`), so it is told apart from a DNS failure. Reverse lookups are never made.
@@ -676,7 +676,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Status:** todo · **Needs:** T-201, T-113 · **Owns:** `dev.kairos.api.runs`, `dev.kairos.api.dlq`, `dev.kairos.api.stats`
 
 - [ ] 59 list runs (filters, fan-out across cells, cursor), 60 get a run (current state plus attempts from `run_history`), 61 cancel a run (waiting, queued and delayed runs are deleted with their unpublished outbox row; a running run is flagged and gets a cancel message).
-- [ ] 62 list DLQ entries, 63 get, 64 acknowledge (assignee, notes), 65 redrive (`ORIGINAL` or `CURRENT` configuration; the run starts a new attempt series under the same run id, so the target sees the same `Idempotency-Key`; a blocked workflow run resumes; `409 dlq-resolved`, `409 endpoint-suspended`), 66 discard, 67 bulk redrive (at least one filter required; `dryRun` returns only the count; `409 endpoint-suspended` until the endpoint is resumed; matching entries become `DELAYED` runs released at 100/s).
+- [ ] 62 list DLQ entries, 63 get, 64 acknowledge (assignee, notes), 65 redrive (`ORIGINAL` or `CURRENT` configuration; the run starts a new attempt series under the same run id, so the target sees the same `Idempotency-Key`, and is re-created through `RunFactory.redrive` from the entry's stored `fence`; a blocked workflow run resumes; `409 dlq-resolved`, `409 endpoint-suspended`), 66 discard, 67 bulk redrive (at least one filter required; `dryRun` returns only the count; `409 endpoint-suspended` until the endpoint is resumed; matching entries become `DELAYED` runs released at 100/s).
 - [ ] 68 team stats from `team_stats_minute` and the current DLQ count.
 
 **Acceptance:** tests for every LLD row; redriving one entry twice starts one new attempt series and the second call returns `409 dlq-resolved`; bulk redrive respects pacing.
@@ -803,7 +803,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 - [ ] Fence check: ignore a result whose fence does not match the row (late or duplicate result).
 - [ ] Success: append to `run_history` (final), delete from `run_inflight`, update `job_health`, and write a `completed` outbox row when the team opted in.
 - [ ] Retryable failure within policy (attempts and max age): append history (`FAILED_RETRYING`) and set the run `DELAYED` with `due_at = now + backoff`, `attempt + 1` and a new fence.
-- [ ] Exhausted or non-retryable: append history (`DEAD_LETTERED`, final), insert `dead_letters`, write a `dead` outbox row, and update `job_health` (auto-pause the job after N consecutive dead runs; audit `system:auto-pause`).
+- [ ] Exhausted or non-retryable: append history (`DEAD_LETTERED`, final), insert `dead_letters` with the run's current `fence` (a redrive continues from it), write a `dead` outbox row, and update `job_health` (auto-pause the job after N consecutive dead runs; audit `system:auto-pause`).
 - [ ] Unknown outcome: apply `unknownOutcomePolicy`.
 - [ ] Cancelled: history `CANCELLED`, delete from inflight.
 - [ ] Workflow task results are handed to T-262 inside the same transaction (an interface agreed first).
