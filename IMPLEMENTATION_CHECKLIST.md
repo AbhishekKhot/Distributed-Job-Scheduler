@@ -163,6 +163,7 @@ Patterns used deliberately (and where):
 - Persistence uses `JdbcClient` with named parameters and set-based statements. No JPA or Hibernate: the hot paths need explicit SQL, batching and `FOR UPDATE SKIP LOCKED`.
 - Time comes from an injected `java.time.Clock`, never `Instant.now()` directly, so tests control time.
 - Configuration: prefix `kairos.*`, environment variables `KAIROS_*`, bound to `@ConfigurationProperties` records with `@Validated` constraints.
+- Library wiring: every library exposes its beans through explicit `@Configuration(proxyBeanMethods = false)` classes. There is no Spring Boot auto-configuration and no component scanning of `dev.kairos` libraries; each service `@Import`s exactly the configurations it uses. Existing ones: `PersistenceConfiguration` (persistence), `HttpConfiguration` (http), `KeyManagementConfiguration`, `PlatformKeysetConfiguration`, `PasswordConfiguration`, `TokenConfiguration` and `ApiKeyConfiguration` (security), and `RunLockConfiguration`, `OutboxConfiguration` and `RunCreationConfiguration` (engine). A configuration imports the library configurations its beans need, uses the service's `Clock` and `MeterRegistry` beans when present, and binds its tunables to a validated `kairos.*` properties record.
 - Errors: domain exceptions extend `KairosException` with a stable `ErrorCode`. Only the API layer maps them to HTTP.
 
 ### 4.4 Comments and Javadoc
@@ -548,6 +549,8 @@ The single place where runs and their outbox rows are created, used by the API (
 - [x] Postgres `NOTIFY kairos_fire_<cell>` on new immediate runs, so the poller reacts without waiting for its next cycle. `FireNotifier` sends `pg_notify` with the shard number as payload (delivered on commit, dropped on rollback) when `RunCreator` creates a `QUEUED` run that is already due and was not created by the fire poller (immediate, manual, redrive). `RunCreator` ties it together: insert, one dispatch row per created `QUEUED` run with `available_at = due_at`, notify; it returns `RunCreation(created, duplicates)`.
 
 **Acceptance:** integration tests show that a run and its outbox row commit or roll back together; inserting the same occurrence twice creates one run and one outbox row; a dispatch payload never contains secret values (asserted by scanning the bytes for the test secret).
+
+**Wiring:** services import `RunCreationConfiguration` (run factory, inserter, fire notifier, run creator; `kairos.engine.runs.dispatch-horizon`, default 5s, must match the fire poller's look-ahead), which imports `OutboxConfiguration` (cell transaction guard, outbox writer and the process's single `KairosIdFactory`) and through it `PersistenceConfiguration`. A service that only writes outbox rows imports `OutboxConfiguration` alone.
 
 ---
 
