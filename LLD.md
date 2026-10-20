@@ -4685,10 +4685,10 @@ Content-Type: application/problem+json
 | Topic | Key | Partitions | Retention | Producer → consumer |
 |---|---|---|---|---|
 | `kairos.run.high` / `.medium` / `.low` | target id | 24 / 48 / 24 | 24h | outbox relay → executors |
-| `kairos.run.result` | target id | 48 | 24h | executors → kairos-state |
+| `kairos.run.result` | target id (taken from the dispatch) | 48 | 24h | executors → kairos-state |
 | `kairos.run.cancel` | run id | 6 | 1h | outbox relay → every executor |
-| `kairos.run.completed` | job id | 12 | 3 days | outbox relay → subscribers (opt-in per team) |
-| `kairos.run.dead` | job id | 6 | 14 days | outbox relay → alerting |
+| `kairos.run.completed` | definition id (job or workflow id) | 12 | 3 days | outbox relay → subscribers (opt-in per team) |
+| `kairos.run.dead` | definition id (job or workflow id) | 6 | 14 days | outbox relay → alerting |
 
 Replication factor 3, `min.insync.replicas = 2`, Protobuf payloads. A dispatch message carries the run id, fence, attempt, pinned endpoint version and a snapshot of the request values, never secrets.
 
