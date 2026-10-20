@@ -265,7 +265,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | done |
-| T-108 | Messaging foundation | kairos-messaging | review |
+| T-108 | Messaging foundation | kairos-messaging | done |
 | T-109 | Security library | kairos-security | done |
 | T-110 | Outbound HTTP client and target policy | kairos-http | done |
 | T-111 | Redis run lock and sent markers | kairos-engine | done |
@@ -450,7 +450,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** integration tests route ids from shards 0, 127, 128 and 255 to the right database; a duplicate insert raises `ConflictException`; the fan-out list merges two cells in order with a stable cursor.
 
 ### T-108 Messaging foundation
-**Status:** review · **Needs:** T-105, T-003 · **Owns:** `libs/kairos-messaging/**`
+**Status:** done · **Needs:** T-105, T-003 · **Owns:** `libs/kairos-messaging/**`
 
 - [x] `KairosTopic` enum with names, key type, outbox code and priority mapping (LLD section 4.2). Each outbox-fed topic refers to its `OutboxTopic` constant in `kairos-domain` (the codes the outbox writer stores), and the enum refuses to load if a name differs, so they cannot drift; only `kairos.run.result` has no outbox code. Keys are 16-byte ids (`KeyType`: target id for dispatches and results, run id for cancels, definition id for completed and dead events, as the outbox writer keys them). Partitions and retention are checked against the compose topic script in a test.
 - [x] Protobuf `Serializer` and `Deserializer` per message type. The deserializer never throws on a bad payload; it returns a poison marker instead. `MessageType` holds one serializer and deserializer per contract; `Decoded` is `Valid | Poison(reason, size)` with reasons `EMPTY`, `TOO_LARGE` and `MALFORMED`. Values are capped at 256 KiB (the `outbox` payload limit): the serializer refuses larger messages and the deserializer marks them poison before parsing.
@@ -785,7 +785,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 - [ ] Render the request from the dispatch snapshot: path parameters, query, headers, body; upstream outputs for workflow tasks (sensitive outputs decrypted only in memory); `Idempotency-Key: <runId>`; `traceparent`; `X-Kairos-Run-Id`; `X-Kairos-Attempt`; `X-Kairos-Signature` and timestamp.
 - [ ] Apply auth (secret decrypted in memory for the call only, then cleared) and the team CA bundle.
 - [ ] Circuit breaker per endpoint (Resilience4j, 50% failure rate over 100 calls, open 30s). An open breaker defers the run without counting an attempt. A per-endpoint `ratePerSec` limiter likewise defers.
-- [ ] Call, then classify with T-103, extract outputs with T-104 (sensitive ones sealed with the team's `OUTPUTS` keyset), redact the error and snippet, and publish a `result` message to `kairos.run.result` (key = target id) with `acks=all`. On publish failure, retry; the run stays `RUNNING` with its lease, so recovery handles a crash.
+- [ ] Call, then classify with T-103, extract outputs with T-104 (sensitive ones sealed with the team's `OUTPUTS` keyset), redact the error and snippet, and publish a `result` message to `kairos.run.result` (key = the dispatch's target id, since the `Result` message carries no target id) with `acks=all`. On publish failure, retry; the run stays `RUNNING` with its lease, so recovery handles a crash.
 - [ ] Internal endpoint test API for LLD API 30: `POST /internal/v1/endpoint-tests` on the executor, reachable only from `kairos-api` (NetworkPolicy in Helm, the backend network locally) and authenticated with a short-lived service token signed by the platform keyset. It runs one call through the same render and call path, without the run gates, and returns the redacted result.
 - [ ] Metrics: calls by outcome and error class, latency histogram per tier, breaker state changes.
 
@@ -943,7 +943,7 @@ Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mo
 - [ ] Probes on 8081 (`/actuator/health/liveness`, `/actuator/health/readiness`), resource requests and limits, `terminationGracePeriodSeconds` 75 for executors (60s drain), PodDisruptionBudgets.
 - [ ] Autoscaling: HPA for the API on CPU; KEDA for executors on Kafka lag and for state on result-topic lag.
 - [ ] NetworkPolicies: default deny; allow the API from the ingress; allow services to reach Postgres, Kafka and Redis; allow executors egress only to internal target ranges on allowed ports.
-- [ ] Secrets through the Secret Manager CSI driver and Workload Identity (no Kubernetes Secret manifests with values in the chart).
+- [ ] Secrets through the Secret Manager CSI driver and Workload Identity (no Kubernetes Secret manifests with values in the chart). Kafka connection settings for production: `KAIROS_KAFKA_SECURITY_PROTOCOL=SASL_SSL`, `KAIROS_KAFKA_SASL_MECHANISM`, `KAIROS_KAFKA_USERNAME`, `KAIROS_KAFKA_PASSWORD` (from Secret Manager) and, when the brokers use a private CA, `KAIROS_KAFKA_TRUST_CERTIFICATE`; compose stays `PLAINTEXT`.
 - [ ] `values.yaml` documented, with `values-kind.yaml` and `values-gke.yaml`.
 - [ ] `helm lint` and `kubeconform` run in CI.
 
