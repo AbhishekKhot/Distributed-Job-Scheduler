@@ -269,7 +269,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
 | T-111 | Redis run lock and sent markers | kairos-engine | todo |
 | T-112 | Observability baseline | build-logic, deploy | done |
-| T-113 | Run creation and outbox writer | kairos-engine | in progress (abhishekkhot) |
+| T-113 | Run creation and outbox writer | kairos-engine | review |
 | T-201 | API foundation | kairos-api | todo |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
 | T-203a | Team and members APIs (8–12) | kairos-api | todo |
@@ -537,15 +537,15 @@ Metric names the alerts and dashboards expect; the tasks that emit them use exac
 **Acceptance:** `make up-all` shows all dashboards with live data from the running services, and Prometheus loads the alert rules without errors.
 
 ### T-113 Run creation and outbox writer
-**Status:** in progress (abhishekkhot) · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
+**Status:** review · **Needs:** T-101, T-103, T-105, T-107 · **Owns:** `libs/kairos-engine` packages `dev.kairos.engine.run`, `dev.kairos.engine.outbox`
 
 The single place where runs and their outbox rows are created, used by the API (immediate runs, run now, backfill, redrive), the fire poller, the delayed poller and the settler.
 
-- [ ] `RunFactory`: builds `run_inflight` rows for each trigger (schedule, immediate, manual, backfill, redrive), pinning definition and endpoint versions and computing `due_at` (spread, pacing). A redrive re-creates the run under its original run id with a new attempt series (`series_start`, `series_started_at`).
-- [ ] `RunInserter`: batch `INSERT ... ON CONFLICT (target_id, task_key, scheduled_at) DO NOTHING RETURNING run_id`, so an occurrence is created at most once.
-- [ ] `OutboxWriter`: writes outbox rows in the caller's transaction (dispatch to the priority topic, cancel, completed, dead). It must be called inside a `CellTransactions` callback, and throws otherwise.
-- [ ] `DispatchMessageBuilder`: builds the Protobuf dispatch payload from the run and the pinned versions (no secrets) and increments the fence.
-- [ ] Postgres `NOTIFY kairos_fire_<cell>` on new immediate runs, so the poller reacts without waiting for its next cycle.
+- [x] `RunFactory`: builds `run_inflight` rows for each trigger (schedule, immediate, manual, backfill, redrive), pinning definition and endpoint versions and computing `due_at` (spread, pacing). A redrive re-creates the run under its original run id with a new attempt series (`series_start`, `series_started_at`). Input is a `RunTarget` (team, job or workflow task, pinned definition and endpoint versions, priority, `maxLateness`, `CallSpec`); output is a `PlannedRun(InflightRun, CallSpec)`. Schedule: `due_at = scheduled_at + spread` (0–60s); due within the 5-second dispatch horizon (the fire poller's look-ahead) it is created `QUEUED` at fence 1, later `DELAYED` at fence 0. Immediate and manual: `QUEUED`, due now. Backfill: `DELAYED`, the i-th occurrence due `i / rate` seconds from now (default 100/s, at most 1K/s and 1,000 occurrences per call). Redrive: `DELAYED` and due now so the delayed poller paces it, attempt `last + 1` starting the series, and the fence continues from the dead-lettered run's fence so its old dispatch messages can never match again. `waiting(...)` creates `WAITING` workflow tasks with `remaining_deps`. Times are truncated to microseconds so the occurrence key matches the database.
+- [x] `RunInserter`: batch `INSERT ... ON CONFLICT (target_id, task_key, scheduled_at) DO NOTHING RETURNING run_id`, so an occurrence is created at most once. One multi-row statement per 500 rows (named parameters numbered by row); the conflict target is `(shard_id, target_id, task_key, scheduled_at)`, the partitioned form of the occurrence constraint (T-106). The integration test checks the plan (`Conflict Resolution: NOTHING`, arbiter index, no sequential scan).
+- [x] `OutboxWriter`: writes outbox rows in the caller's transaction (dispatch to the priority topic, cancel, completed, dead). It must be called inside a `CellTransactions` callback, and throws otherwise. `OutboxMessage` factories build rows from `Dispatch`, `Cancel`, `Completed` and `Dead` with the LLD section 4.2 keys (target id, run id, definition id) and validate the `outbox` constraints; `CellTransactionGuard` checks that the shard's cell pool is bound to the thread's transaction, so a transaction on the control database or the other cell does not count. Rows are a JDBC batch with time-ordered ids in the row's shard; `trace_parent` is kept only when it is a valid W3C value (`TraceParents`).
+- [x] `DispatchMessageBuilder`: builds the Protobuf dispatch payload from the run and the pinned versions (no secrets) and increments the fence. `build` serialises a run created `QUEUED` (fence already 1); `redispatch` moves a `WAITING`, `DELAYED`, `QUEUED` or `RUNNING` run to `QUEUED` through `RunStateMachine` and returns the row with its new fence plus the message, for the delayed poller and sweepers. `CallSpec` rejects snapshots carrying `Authorization`, `Proxy-Authorization`, `Cookie` or `Set-Cookie` headers; credentials travel only as `secret_refs`.
+- [x] Postgres `NOTIFY kairos_fire_<cell>` on new immediate runs, so the poller reacts without waiting for its next cycle. `FireNotifier` sends `pg_notify` with the shard number as payload (delivered on commit, dropped on rollback) when `RunCreator` creates a `QUEUED` run that is already due and was not created by the fire poller (immediate, manual, redrive). `RunCreator` ties it together: insert, one dispatch row per created `QUEUED` run with `available_at = due_at`, notify; it returns `RunCreation(created, duplicates)`.
 
 **Acceptance:** integration tests show that a run and its outbox row commit or roll back together; inserting the same occurrence twice creates one run and one outbox row; a dispatch payload never contains secret values (asserted by scanning the bytes for the test secret).
 
