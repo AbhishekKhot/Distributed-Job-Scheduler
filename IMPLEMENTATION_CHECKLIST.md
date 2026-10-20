@@ -268,7 +268,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-109 | Security library | kairos-security | todo |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
 | T-111 | Redis run lock and sent markers | kairos-engine | todo |
-| T-112 | Observability baseline | build-logic, deploy | todo |
+| T-112 | Observability baseline | build-logic, deploy | review |
 | T-113 | Run creation and outbox writer | kairos-engine | todo |
 | T-201 | API foundation | kairos-api | todo |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
@@ -505,13 +505,34 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** Testcontainers tests show that two concurrent acquires yield exactly one owner; release by a non-owner is a no-op; `remaining` returns nothing after expiry; with Redis stopped, `acquire` returns `UNAVAILABLE` within the timeout.
 
 ### T-112 Observability baseline
-**Status:** todo · **Needs:** T-002 · **Owns:** `build-logic` (tracing dependencies in service conventions), `deploy/compose/prometheus/`, `deploy/compose/grafana/`, `dev.kairos.*.support.observability` in each service (a class each)
+**Status:** review · **Needs:** T-002 · **Owns:** `build-logic` (`kairos.observability-conventions`, applied by the service conventions), `config/observability/` (package `dev.kairos.observability`, compiled into every application so no application depends on another), `deploy/compose/prometheus/`, `deploy/compose/grafana/`
 
-- [ ] Micrometer Tracing with the OpenTelemetry bridge in every service. OTLP export is configurable and off by default locally; sampling is configurable.
-- [ ] Common metric tags (`service`, `instance`, `cell` where relevant), and an SLO histogram for `kairos_schedule_lag_seconds` with buckets around 2s.
-- [ ] Log redaction: a Logback converter or ECS field filter that masks values for keys matching `password|secret|token|authorization|apikey` and `Bearer ...` patterns. A test proves it.
-- [ ] Prometheus alert rules (`deploy/compose/prometheus/alerts.yml`) for the HLD alerts: schedule lag p99 > 2s, outbox backlog age > 10s, Redis unavailable, endpoint suspended, job failing most recent runs, DLQ growth, executor saturation, login-failure spike.
-- [ ] Grafana dashboards provisioned from JSON: Overview (fires/s, executions/s, lag p50/p99, outcomes), Watcher (leases, poll durations, outbox age), Executor (in-flight, gates, call latency by outcome, breaker states), State (batch size, settle latency), Databases (pool usage, transaction time).
+- [x] Micrometer Tracing with the OpenTelemetry bridge in every service. OTLP export is configurable and off by default locally; sampling is configurable (`kairos.observability.tracing.*`: `export-enabled`, `endpoint`, `sampling-probability`, default 0.1). W3C `traceparent` propagation.
+- [x] Common metric tags (`service`, `instance`, `cell` where relevant), and an SLO histogram for `kairos_schedule_lag_seconds` with buckets around 2s (meter `kairos.schedule.lag`; buckets 100 ms to 60 s, dense between 1 s and 3 s, configurable through `kairos.observability.schedule-lag-slo`).
+- [x] Log redaction: an ECS field filter (`RedactingLogCustomizer`) masks every value under a key containing `password|passwd|pwd|secret|token|authorization|apikey`, `key=value` and JSON pairs in messages and stack traces (any case and spacing, escaped quotes), `Bearer ...`/`Basic ...` credentials and URL user-info passwords. Unit tests and a test that starts an application with ECS logging prove it.
+- [x] Prometheus alert rules (`deploy/compose/prometheus/alerts.yml`) for the HLD alerts: schedule lag p99 > 2s, outbox backlog age > 10s, Redis unavailable, endpoint suspended, job failing most recent runs, DLQ growth, executor saturation, login-failure spike, plus a scrape-down alert. `promtool test rules` cases in `alerts-test.yml`.
+- [x] Grafana dashboards provisioned from JSON: Overview (fires/s, executions/s, lag p50/p99, outcomes), Watcher (leases, poll durations, outbox age), Executor (in-flight, gates, call latency by outcome, breaker states), State (batch size, settle latency), Databases (pool usage, transaction time).
+
+Metric names the alerts and dashboards expect; the tasks that emit them use exactly these names and labels (section 4.9):
+
+| Metric (Prometheus name) | Type | Labels | Emitted by |
+|---|---|---|---|
+| `kairos_schedule_lag_seconds` | timer (histogram) | `priority` | T-243 |
+| `kairos_fires_total`, `kairos_misfires_total` | counter | `cell`; misfires add `policy` | T-222 |
+| `kairos_poll_duration_seconds`, `kairos_poll_batch_size` | timer, summary | `poller`, `cell` | T-222, T-223 |
+| `kairos_shard_leases_owned`, `kairos_shard_lease_changes_total` | gauge, counter | `outcome` on changes | T-221 |
+| `kairos_outbox_oldest_due_seconds`, `kairos_outbox_backlog_rows`, `kairos_outbox_published_total` | gauge, gauge, counter | `cell`; published adds `topic` | T-224 |
+| `kairos_executor_inflight`, `kairos_executor_capacity` | gauge | `priority` on in-flight | T-241 |
+| `kairos_executor_deferrals_total` | counter | `reason` | T-241 |
+| `kairos_execution_gate_total` | counter | `gate`, `outcome` | T-242 |
+| `kairos_executor_calls_total`, `kairos_executor_call_duration_seconds` | counter, timer | `outcome`, `error_class`, `priority` | T-243 |
+| `kairos_settle_batch_size`, `kairos_settle_duration_seconds` | summary, timer | none | T-261 |
+| `kairos_retries_scheduled_total`, `kairos_dlq_entries_created_total`, `kairos_dlq_open_entries` | counter, counter, gauge | `error_class`; DLQ adds `cell` | T-261 |
+| `kairos_workflow_tasks_queued_total` | counter | none | T-262 |
+| `kairos_endpoint_suspensions_total`, `kairos_jobs_failing_recent_runs` | counter, gauge | `endpoint_id` on suspensions | T-226, T-263 |
+| `kairos_redis_unavailable_total` | counter | none | T-111 |
+| `kairos_db_transaction_duration_seconds` | timer | `cell` | T-107 |
+| `kairos_login_failures_total` | counter | none | T-202 |
 
 **Acceptance:** `make up-all` shows all dashboards with live data from the running services, and Prometheus loads the alert rules without errors.
 
