@@ -243,7 +243,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 
 | Wave | Tasks that can run in parallel | Needs |
 |---|---|---|
-| 0 | T-001 (done), T-002 (done), T-003 | none |
+| 0 | T-001 (done), T-002 (done), T-003 (done) | none |
 | 1 | T-101, T-105, T-106, T-109, T-110, T-112 | T-002, T-003 |
 | 2 | T-102, T-103, T-104, T-107, T-108, T-111 | Wave 1 items listed per task |
 | 3 | T-113, T-201, T-301 | T-107, T-108, T-109, T-111 |
@@ -257,12 +257,12 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-001 | Repository skeleton, build and images | root | done |
 | T-002 | Build quality gates | build-logic | done |
 | T-003 | Shared test support | libs/kairos-test-support | done |
-| T-101 | Identifiers, shards and domain types | kairos-domain | review |
+| T-101 | Identifiers, shards and domain types | kairos-domain | done |
 | T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | todo |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
-| T-106 | Database migrations | kairos-migrations | todo |
+| T-106 | Database migrations | kairos-migrations | review |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | todo |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | todo |
@@ -353,7 +353,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 ## 7. Phase 1: foundations (libraries)
 
 ### T-101 Identifiers, shards and domain types
-**Status:** review · **Needs:** T-002 · **Owns:** `libs/kairos-domain` packages `dev.kairos.domain.id`, `dev.kairos.domain.shard`, `dev.kairos.domain.model`, `dev.kairos.domain.error`
+**Status:** done · **Needs:** T-002 · **Owns:** `libs/kairos-domain` packages `dev.kairos.domain.id`, `dev.kairos.domain.shard`, `dev.kairos.domain.model`, `dev.kairos.domain.error`
 
 - [x] `KairosId`: UUIDv7 generation from an injected `Clock` and `SecureRandom`, with the shard (0–255) written into the low 8 bits for job, workflow, run, workflow-run and DLQ ids. `shardOf(UUID)` extracts it. Timestamp ordering is preserved.
 - [x] `TestIds` in `libs/kairos-test-support` to build ids with a chosen shard
@@ -416,20 +416,20 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** round-trip tests for every message; the compatibility check fails when a field number is changed in a test branch.
 
 ### T-106 Database migrations
-**Status:** todo · **Needs:** T-002 · **Owns:** `jobs/kairos-migrations/**`
+**Status:** review · **Needs:** T-002 · **Owns:** `jobs/kairos-migrations/**`
 
-- [ ] Flyway (from the Spring Boot BOM) with two locations: `db/control` and `db/cell`. The job migrates the control database, then every cell listed in its configuration (`KAIROS_CELL_<n>_DB_URL`), then exits with code 0. Any failure exits non-zero.
-- [ ] Control DDL for every table in LLD section 2.2 with the stated types, primary keys, unique constraints and checks (slug and name patterns, value ranges). `audit_log` is range-partitioned by day.
-- [ ] Cell DDL for every table in LLD section 2.3:
+- [x] Flyway (from the Spring Boot BOM) with two locations: `db/control` and `db/cell`. The job migrates the control database, then every cell listed in its configuration (`KAIROS_CELL_<n>_DB_URL`), then exits with code 0. Any failure exits non-zero. Flyway is driven directly, one instance per database, with `clean` disabled and an `afterMigrate` callback that takes the application role's access to the history table away.
+- [x] Control DDL for every table in LLD section 2.2 with the stated types, primary keys, unique constraints and checks (slug and name patterns, value ranges). `audit_log` is range-partitioned by day.
+- [x] Cell DDL for every table in LLD section 2.3:
   - `run_inflight` and `outbox` hash-partitioned by `shard_id` (16 partitions);
   - `run_history` and `task_outputs` range-partitioned by day;
-  - the unique occurrence constraint `(target_id, task_key, scheduled_at)`.
-- [ ] Indexes for every hot query: `schedules (shard_id, next_fire_at) WHERE status = 1`, `run_inflight (shard_id, state, due_at)`, `run_inflight (owner_node, lease_until)`, `outbox (shard_id, available_at)`, the job and workflow name uniqueness among non-deleted rows (partial unique indexes), `dead_letters (team_id, status, created_at)`, and the list endpoints' sort keys.
-- [ ] Autovacuum settings per hot table (`outbox`, `run_inflight`, `schedules`): lower scale factors and a higher cost limit, set with `ALTER TABLE ... SET (...)`.
-- [ ] Seed `cell_map` for the local layout (cell 0 = shards 0–127, cell 1 = 128–255) from configuration, idempotently.
-- [ ] Initial partitions: today plus 3 days ahead (T-281 maintains them later).
-- [ ] Grants: tables created by `sched_owner` are usable by `sched_app` through the default privileges set in `01-init-databases.sh`. The migration verifies this and fails if `sched_app` lacks DML on any table.
-- [ ] `kairos-migrations` test: runs all migrations twice against Testcontainers (idempotent), then asserts that every LLD table and column exists with the documented type (a test reads `information_schema` and compares with a checked-in expected list).
+  - the unique occurrence constraint `(target_id, task_key, scheduled_at)`, declared as `(shard_id, target_id, task_key, scheduled_at)` because a unique constraint on a partitioned table must include the partition key (the target id embeds the shard, so the two are equivalent).
+- [x] Indexes for every hot query: `schedules (shard_id, next_fire_at) WHERE status = 1`, `run_inflight (shard_id, state, due_at)`, `run_inflight (owner_node, lease_until)`, `outbox (shard_id, available_at)`, the job and workflow name uniqueness among non-deleted rows (partial unique indexes), `dead_letters (team_id, status, created_at)`, and the list endpoints' sort keys.
+- [x] Autovacuum settings per hot table (`outbox`, `run_inflight`, `schedules`): lower scale factors and a higher cost limit, set with `ALTER TABLE ... SET (...)`.
+- [x] Seed `cell_map` for the local layout (cell 0 = shards 0–127, cell 1 = 128–255) from configuration, idempotently.
+- [x] Initial partitions: today plus 3 days ahead (UTC days, `kairos.migrations.partition-days-ahead`), created through `scheduler.create_day_partition(table, day)`, which T-281 reuses. `run_history`, `task_outputs` and `audit_log` also get a `DEFAULT` partition, so an old occurrence (a backfill) never fails its insert.
+- [x] Grants: tables created by `sched_owner` are usable by `sched_app` through the default privileges set in `01-init-databases.sh`. The migration verifies this and fails if `sched_app` lacks DML on any table.
+- [x] `kairos-migrations` test: runs all migrations twice against Testcontainers (idempotent), then asserts that every LLD table and column exists with the documented type (a test reads `information_schema` and compares with a checked-in expected list).
 
 **Acceptance:** `make up` runs the migrations container to exit code 0, and `\dt scheduler.*` in each database shows the LLD tables; the schema test passes.
 
