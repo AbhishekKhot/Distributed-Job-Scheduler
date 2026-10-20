@@ -259,7 +259,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-003 | Shared test support | libs/kairos-test-support | done |
 | T-101 | Identifiers, shards and domain types | kairos-domain | done |
 | T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
-| T-103 | Retry policy, outcomes and run state machine | kairos-domain | todo |
+| T-103 | Retry policy, outcomes and run state machine | kairos-domain | in progress (abhishekkhot) |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
@@ -379,7 +379,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** tests for New York, London, Sydney, Kolkata and Lord Howe (30-minute DST) across both transitions; `0 2 * * *` on DST-start day follows the gap policy; `30 1 * * *` on DST-end day fires once; jqwik property: fire times are strictly increasing and never skip a valid occurrence.
 
 ### T-103 Retry policy, outcomes and run state machine
-**Status:** todo · **Needs:** T-101 · **Owns:** `dev.kairos.domain.retry`, `dev.kairos.domain.run`, `dev.kairos.domain.health`
+**Status:** in progress (abhishekkhot) · **Needs:** T-101 · **Owns:** `dev.kairos.domain.retry`, `dev.kairos.domain.run`, `dev.kairos.domain.health`
 
 - [ ] `RetryPolicy` (`maxRetries` default 5, `baseDelaySec` 30, `maxDelaySec` 600, `maxAgeSec` 86400, strategy) with resolution order: job override, then endpoint, then team default, then platform default.
 - [ ] `RetryBackoff` strategies: exponential with jitter, full jitter and fixed, with an injected random source. Defaults give roughly 15 minutes from the first failure to the DLQ.
