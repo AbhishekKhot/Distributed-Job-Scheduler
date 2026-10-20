@@ -24,11 +24,13 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -46,6 +48,12 @@ public final class EngineFixtures {
 
     /** A secret reference the test requests carry; its value never appears in a message. */
     public static final String SECRET_REF = "billing-token";
+
+    /**
+     * The value behind {@link #SECRET_REF} in the team's secret store. Random per test run, so no credential-like
+     * literal is ever committed; tests scan payloads to prove it never appears in one.
+     */
+    public static final String SECRET_VALUE = randomSecret();
 
     private static final String MIGRATIONS = "jobs/kairos-migrations/src/main/resources/db/";
     private static final String CONTROL_SCHEMA = MIGRATIONS + "control/V2026_10_20_0900__create_control_schema.sql";
@@ -184,6 +192,12 @@ public final class EngineFixtures {
                 Priority.of(5),
                 null,
                 call());
+    }
+
+    private static String randomSecret() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return HexFormat.of().formatHex(bytes);
     }
 
     private static void apply(DataSource owner, String script, String appRole) {
