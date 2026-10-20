@@ -262,7 +262,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | todo |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
-| T-106 | Database migrations | kairos-migrations | review |
+| T-106 | Database migrations | kairos-migrations | done |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | todo |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | todo |
@@ -416,7 +416,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** round-trip tests for every message; the compatibility check fails when a field number is changed in a test branch.
 
 ### T-106 Database migrations
-**Status:** review · **Needs:** T-002 · **Owns:** `jobs/kairos-migrations/**`
+**Status:** done · **Needs:** T-002 · **Owns:** `jobs/kairos-migrations/**`
 
 - [x] Flyway (from the Spring Boot BOM) with two locations: `db/control` and `db/cell`. The job migrates the control database, then every cell listed in its configuration (`KAIROS_CELL_<n>_DB_URL`), then exits with code 0. Any failure exits non-zero. Flyway is driven directly, one instance per database, with `clean` disabled and an `afterMigrate` callback that takes the application role's access to the history table away.
 - [x] Control DDL for every table in LLD section 2.2 with the stated types, primary keys, unique constraints and checks (slug and name patterns, value ranges). `audit_log` is range-partitioned by day.
