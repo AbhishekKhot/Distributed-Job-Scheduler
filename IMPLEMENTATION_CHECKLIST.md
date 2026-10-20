@@ -266,8 +266,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-107 | Persistence foundation and cell routing | kairos-persistence | done |
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | done |
-| T-110 | Outbound HTTP client and target policy | kairos-http | todo |
-| T-111 | Redis run lock and sent markers | kairos-engine | review |
+| T-110 | Outbound HTTP client and target policy | kairos-http | in progress (Abhishek) |
+| T-111 | Redis run lock and sent markers | kairos-engine | done |
 | T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | done |
 | T-201 | API foundation | kairos-api | todo |
@@ -476,7 +476,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** known-answer tests for Argon2id; a JWT signed with a different key, `alg: none`, HS256 or an expired timestamp is rejected; refresh reuse revokes the family; ciphertext with swapped associated data fails to decrypt; no secret value appears in any `toString()` (a test checks).
 
 ### T-110 Outbound HTTP client and target policy
-**Status:** todo · **Needs:** T-101 · **Owns:** `libs/kairos-http/**`
+**Status:** in progress (Abhishek) · **Needs:** T-101 · **Owns:** `libs/kairos-http/**`
 
 - [ ] `TargetPolicy` from configuration (`kairos.target-policy.*`): HTTPS only; allowed DNS suffixes (for example `.svc.cluster.local`, `.internal`) and exact hosts; allowed CIDRs; allowed ports. The fixed deny list cannot be configured away: loopback, link-local (including `169.254.169.254`), metadata hostnames, the Kubernetes API service address, `0.0.0.0/8`, multicast, and the Kairos infrastructure addresses provided at startup.
 - [ ] `ValidatingDnsResolver` for Apache HttpClient 5. It resolves, checks every address against the policy, and returns only checked addresses, so the connection goes to the checked IP. TLS hostname verification still uses the original host name (SNI and certificate check). This blocks DNS rebinding.
@@ -489,7 +489,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** tests with a local TLS server (Testcontainers or an in-JVM server) show that `http://` is refused, a host resolving to `127.0.0.1` or `169.254.169.254` is refused, a rebinding resolver (first public, then private) is refused, a 302 is not followed, a 300 KB body is cut off, a wrong certificate host fails, and a team CA bundle is trusted only for that client.
 
 ### T-111 Redis run lock and sent markers
-**Status:** review · **Needs:** T-003 · **Owns:** `libs/kairos-engine` package `dev.kairos.engine.lock`
+**Status:** done · **Needs:** T-003 · **Owns:** `libs/kairos-engine` package `dev.kairos.engine.lock`
 
 - [x] Lettuce client configuration: ACL username and password from environment variables, command timeout 500 ms, and TLS when `kairos.redis.tls=true` (production). Bound from `kairos.redis.*` (`RedisProperties`: `host`, `port`, `username`, `password`, `tls`, `trust-certificate`, `command-timeout`, `connect-timeout`, `reconnect-delay`, `node-id`); TLS verifies chain and host name (TLS 1.3/1.2) against the JDK trust store or a PEM CA file. Commands are rejected at once while disconnected; the first connection opens in the background so a service starts while Redis is down. `RunLockConfiguration` is imported explicitly by the services (no auto-configuration); the node id defaults to `HOSTNAME` (validated) or a random id.
 - [x] Lua scripts, loaded once and called by SHA with automatic reload:
