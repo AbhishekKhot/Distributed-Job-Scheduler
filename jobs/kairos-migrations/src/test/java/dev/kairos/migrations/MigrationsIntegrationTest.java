@@ -75,6 +75,20 @@ class MigrationsIntegrationTest {
                 :scheduledAt, 5, 1)
             """;
 
+    private static final String INSERT_DEAD_LETTER_PREFIX = """
+            INSERT INTO scheduler.dead_letters (dlq_id, team_id, run_id, shard_id, scheduled_at, target_type,
+                definition_id, definition_version, target_id, endpoint_id, endpoint_version, attempt, infra_attempt,
+                priority, reason, created_at""";
+
+    private static final String DEAD_LETTER_VALUES = """
+            VALUES (:dlqId, :teamId, :runId, 200, :at, 1, :jobId, 1, :jobId, :endpointId, 1, 6, 0, 5, 1, :at""";
+
+    private static final String INSERT_DEAD_LETTER_WITH_FENCE =
+            INSERT_DEAD_LETTER_PREFIX + ", fence) " + DEAD_LETTER_VALUES + ", :fence)";
+
+    private static final String INSERT_DEAD_LETTER_WITHOUT_FENCE =
+            INSERT_DEAD_LETTER_PREFIX + ") " + DEAD_LETTER_VALUES + ")";
+
     @Autowired
     private MigrationRunner runner;
 
@@ -198,6 +212,35 @@ class MigrationsIntegrationTest {
     }
 
     @Test
+    void deadLetterKeepsTheFenceTheRunHadAndRequiresIt() {
+        JdbcClient app = JdbcClient.create(KairosPostgres.get().cellDataSource(1));
+        UUID jobId = UUID.randomUUID();
+        UUID kept = UUID.randomUUID();
+        try {
+            insertDeadLetter(app, INSERT_DEAD_LETTER_WITH_FENCE, kept, jobId, 7);
+            assertThat(app.sql("SELECT fence FROM scheduler.dead_letters WHERE dlq_id = :dlqId")
+                            .param("dlqId", kept)
+                            .query(Integer.class)
+                            .single())
+                    .isEqualTo(7);
+
+            assertThatThrownBy(() ->
+                            insertDeadLetter(app, INSERT_DEAD_LETTER_WITHOUT_FENCE, UUID.randomUUID(), jobId, null))
+                    .isInstanceOf(DataAccessException.class)
+                    .rootCause()
+                    .hasMessageContaining("fence");
+            assertThatThrownBy(() -> insertDeadLetter(app, INSERT_DEAD_LETTER_WITH_FENCE, UUID.randomUUID(), jobId, -1))
+                    .isInstanceOf(DataAccessException.class)
+                    .rootCause()
+                    .hasMessageContaining("dead_letters_fence_ck");
+        } finally {
+            app.sql("DELETE FROM scheduler.dead_letters WHERE target_id = :jobId")
+                    .param("jobId", jobId)
+                    .update();
+        }
+    }
+
+    @Test
     void partitionFunctionRejectsTablesOutsideItsAllowList() {
         JdbcClient owner = JdbcClient.create(KairosPostgres.get().cellOwnerDataSource(0));
         assertThatThrownBy(() -> owner.sql("SELECT scheduler.create_day_partition(:table, DATE '2026-12-01')")
@@ -246,6 +289,20 @@ class MigrationsIntegrationTest {
                 .param("endpointId", UUID.randomUUID())
                 .param("scheduledAt", scheduledAt.atOffset(ZoneOffset.UTC))
                 .update();
+    }
+
+    private static void insertDeadLetter(JdbcClient app, String sql, UUID dlqId, UUID jobId, Integer fence) {
+        JdbcClient.StatementSpec statement = app.sql(sql)
+                .param("dlqId", dlqId)
+                .param("teamId", UUID.randomUUID())
+                .param("runId", UUID.randomUUID())
+                .param("at", Instant.parse("2026-10-20T10:00:00Z").atOffset(ZoneOffset.UTC))
+                .param("jobId", jobId)
+                .param("endpointId", UUID.randomUUID());
+        if (fence != null) {
+            statement = statement.param("fence", fence);
+        }
+        statement.update();
     }
 
     private static List<String> columns(DataSource dataSource) {
