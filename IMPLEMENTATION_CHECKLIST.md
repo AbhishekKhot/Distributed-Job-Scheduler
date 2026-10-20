@@ -267,7 +267,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-108 | Messaging foundation | kairos-messaging | todo |
 | T-109 | Security library | kairos-security | done |
 | T-110 | Outbound HTTP client and target policy | kairos-http | todo |
-| T-111 | Redis run lock and sent markers | kairos-engine | in progress (Abhishek) |
+| T-111 | Redis run lock and sent markers | kairos-engine | review |
 | T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | done |
 | T-201 | API foundation | kairos-api | todo |
@@ -489,18 +489,18 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** tests with a local TLS server (Testcontainers or an in-JVM server) show that `http://` is refused, a host resolving to `127.0.0.1` or `169.254.169.254` is refused, a rebinding resolver (first public, then private) is refused, a 302 is not followed, a 300 KB body is cut off, a wrong certificate host fails, and a team CA bundle is trusted only for that client.
 
 ### T-111 Redis run lock and sent markers
-**Status:** in progress (Abhishek) · **Needs:** T-003 · **Owns:** `libs/kairos-engine` package `dev.kairos.engine.lock`
+**Status:** review · **Needs:** T-003 · **Owns:** `libs/kairos-engine` package `dev.kairos.engine.lock`
 
-- [ ] Lettuce client configuration: ACL username and password from environment variables, command timeout 500 ms, and TLS when `kairos.redis.tls=true` (production).
-- [ ] Lua scripts, loaded once and called by SHA with automatic reload:
+- [x] Lettuce client configuration: ACL username and password from environment variables, command timeout 500 ms, and TLS when `kairos.redis.tls=true` (production). Bound from `kairos.redis.*` (`RedisProperties`: `host`, `port`, `username`, `password`, `tls`, `trust-certificate`, `command-timeout`, `connect-timeout`, `reconnect-delay`, `node-id`); TLS verifies chain and host name (TLS 1.3/1.2) against the JDK trust store or a PEM CA file. Commands are rejected at once while disconnected; the first connection opens in the background so a service starts while Redis is down. `RunLockConfiguration` is imported explicitly by the services (no auto-configuration); the node id defaults to `HOSTNAME` (validated) or a random id.
+- [x] Lua scripts, loaded once and called by SHA with automatic reload:
   - `acquire`: `SET key token NX PX ttl`; the token encodes fence, node id and random bytes;
   - `remaining`: returns the TTL left only if the caller still owns the lock (used by the send-time guard);
   - `release`: compare-and-delete;
   - `extend`: compare-and-extend, for long calls.
-- [ ] `RunLockPort` and `SentMarkerPort` interfaces, plus Lettuce adapters. Keys follow LLD section 4.3 (`kairos:lock:run:{runId}`, `kairos:sent:{runId}:{attempt}:{infraAttempt}` with a 48h TTL).
-- [ ] Fail-closed behaviour: any Redis error or timeout makes `acquire` return `UNAVAILABLE`. Callers then do not call the target.
-- [ ] `RedisTopologyProbe`: reads the replication id and role (`INFO replication`, allowed by the ACL) for the failover monitor (T-225).
-- [ ] Metrics: acquire outcome counts, script latency, unavailable count.
+- [x] `RunLockPort` and `SentMarkerPort` interfaces, plus Lettuce adapters. Keys follow LLD section 4.3 (`kairos:lock:run:{runId}`, `kairos:sent:{runId}:{attempt}:{infraAttempt}` with a 48h TTL). Sealed results (`AcquireResult`, `RemainingResult`, `LockInspection`) and enums (`ReleaseResult`, `ExtendResult`, `MarkResult`, `MarkerCheck`); `RunLockPort.inspect` reads the holder for the lease sweeper. Lock TTLs are capped at 1h.
+- [x] Fail-closed behaviour: any Redis error or timeout makes `acquire` return `UNAVAILABLE`. Callers then do not call the target. The other operations fail closed the same way; nothing throws for a Redis failure.
+- [x] `RedisTopologyProbe`: reads the replication id and role (`INFO replication`, allowed by the ACL) for the failover monitor (T-225).
+- [x] Metrics: acquire outcome counts, script latency, unavailable count (`kairos_run_lock_acquire_total{outcome}`, `kairos_redis_script_duration_seconds{script}`, `kairos_redis_unavailable_total`, counted on every failed command).
 
 **Acceptance:** Testcontainers tests show that two concurrent acquires yield exactly one owner; release by a non-owner is a no-op; `remaining` returns nothing after expiry; with Redis stopped, `acquire` returns `UNAVAILABLE` within the timeout.
 
