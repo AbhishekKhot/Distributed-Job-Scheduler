@@ -1,6 +1,6 @@
 package dev.kairos.engine.outbox;
 
-import java.util.regex.Pattern;
+import dev.kairos.messaging.trace.TraceHeaders;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -8,19 +8,15 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A value is {@code version-traceId-parentId-flags}: 2, 32, 16 and 2 lower-case hex digits, 55 characters in all
  * (W3C Trace Context, section 3.2). Version {@code ff} and all-zero trace or parent ids are invalid. The length is
- * checked before the pattern runs, and the pattern has no nested quantifiers.
+ * checked before the pattern runs, and the pattern has no nested quantifiers. The rules live in
+ * {@link TraceHeaders#isValid(String)}, so a value stored here is always accepted when the relay puts it in a header.
  *
  * <p>Stateless and thread-safe.
  */
 public final class TraceParents {
 
     /** Length of a version-00 {@code traceparent}. */
-    public static final int LENGTH = 55;
-
-    private static final Pattern FORMAT = Pattern.compile("^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$");
-    private static final String INVALID_VERSION = "ff";
-    private static final String ZERO_TRACE_ID = "0".repeat(32);
-    private static final String ZERO_PARENT_ID = "0".repeat(16);
+    public static final int LENGTH = TraceHeaders.TRACEPARENT_LENGTH;
 
     private TraceParents() {}
 
@@ -31,12 +27,7 @@ public final class TraceParents {
      * @return true if it is well formed and has a usable version, trace id and parent id
      */
     public static boolean isValid(String value) {
-        if (value.length() != LENGTH || !FORMAT.matcher(value).matches()) {
-            return false;
-        }
-        return !value.startsWith(INVALID_VERSION)
-                && !value.substring(3, 35).equals(ZERO_TRACE_ID)
-                && !value.substring(36, 52).equals(ZERO_PARENT_ID);
+        return TraceHeaders.isValid(value);
     }
 
     /**
