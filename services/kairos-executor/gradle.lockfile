@@ -2,12 +2,15 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :services:kairos-executor:dependencies --write-locks
+aopalliance:aopalliance:1.0=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+at.yawk.lz4:lz4-java:1.10.1=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 biz.aQute.bnd:biz.aQute.bnd.annotation:7.1.0=compileClasspath,testCompileClasspath
 ch.qos.logback:logback-classic:1.5.38=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 ch.qos.logback:logback-core:1.5.38=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.fasterxml.jackson.core:jackson-annotations:2.21=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.fasterxml:classmate:1.7.3=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.3.1=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
+com.github.luben:zstd-jni:1.5.6-10=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 com.google.android:annotations:4.1.1.4=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 com.google.api-client:google-api-client:2.7.2=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 com.google.api.grpc:proto-google-cloud-kms-v1:2.96.0=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
@@ -127,6 +130,7 @@ org.apache.httpcomponents.core5:httpcore5-h2:5.4.3=compileClasspath,productionRu
 org.apache.httpcomponents.core5:httpcore5:5.4.3=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.httpcomponents:httpclient:4.5.14=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.apache.httpcomponents:httpcore:4.4.16=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
+org.apache.kafka:kafka-clients:4.2.1=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.logging.log4j:log4j-api:2.25.5=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.logging.log4j:log4j-to-slf4j:2.25.5=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.tomcat.embed:tomcat-embed-core:11.0.24=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
@@ -219,6 +223,7 @@ org.springframework:spring-web:7.0.9=compileClasspath,productionRuntimeClasspath
 org.springframework:spring-webmvc:7.0.9=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.threeten:threeten-extra:1.8.0=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.threeten:threetenbp:1.7.0=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
+org.xerial.snappy:snappy-java:1.1.10.7=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.xmlunit:xmlunit-core:2.11.0=testCompileClasspath,testRuntimeClasspath
 org.yaml:snakeyaml:2.6=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 redis.clients.authentication:redis-authx-core:0.1.1-beta2=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath

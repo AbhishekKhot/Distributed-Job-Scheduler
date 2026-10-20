@@ -2,6 +2,8 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :services:kairos-api:dependencies --write-locks
+aopalliance:aopalliance:1.0=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+at.yawk.lz4:lz4-java:1.10.1=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 biz.aQute.bnd:biz.aQute.bnd.annotation:7.1.0=compileClasspath,testCompileClasspath
 ch.qos.logback:logback-classic:1.5.38=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 ch.qos.logback:logback-core:1.5.38=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
@@ -13,6 +15,7 @@ com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.1=compileClasspath,p
 com.fasterxml.jackson:jackson-bom:2.22.1=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.fasterxml:classmate:1.7.3=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.3.1=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
+com.github.luben:zstd-jni:1.5.6-10=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 com.google.android:annotations:4.1.1.4=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 com.google.api-client:google-api-client:2.7.2=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 com.google.api.grpc:proto-google-cloud-kms-v1:2.96.0=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
@@ -122,6 +125,7 @@ net.minidev:json-smart:2.6.0=testCompileClasspath,testRuntimeClasspath
 org.apache.commons:commons-lang3:3.20.0=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.httpcomponents:httpclient:4.5.14=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.apache.httpcomponents:httpcore:4.4.16=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
+org.apache.kafka:kafka-clients:4.2.1=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.logging.log4j:log4j-api:2.25.5=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.logging.log4j:log4j-to-slf4j:2.25.5=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.apache.tomcat.embed:tomcat-embed-core:11.0.24=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
@@ -222,6 +226,7 @@ org.threeten:threeten-extra:1.8.0=productionRuntimeClasspath,runtimeClasspath,te
 org.threeten:threetenbp:1.7.0=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.webjars:swagger-ui:5.32.14=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.webjars:webjars-locator-lite:1.1.4=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.xerial.snappy:snappy-java:1.1.10.7=productionRuntimeClasspath,runtimeClasspath,testRuntimeClasspath
 org.xmlunit:xmlunit-core:2.11.0=testCompileClasspath,testRuntimeClasspath
 org.yaml:snakeyaml:2.6=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 tools.jackson.core:jackson-core:3.1.5=compileClasspath,productionRuntimeClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
