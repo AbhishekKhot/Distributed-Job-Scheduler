@@ -2,6 +2,7 @@
 plugins {
     id("kairos.java-conventions")
     id("org.springframework.boot")
+    id("kairos.observability-conventions")
 }
 
 dependencies {
