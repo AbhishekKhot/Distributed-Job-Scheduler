@@ -1,0 +1,15 @@
+# Provisions the Kairos dashboards from the JSON files next to this file. They are read-only in the
+# UI: changes go through the JSON in the repository.
+apiVersion: 1
+
+providers:
+  - name: kairos
+    folder: Kairos
+    type: file
+    disableDeletion: true
+    editable: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /etc/grafana/provisioning/dashboards/kairos
+      foldersFromFilesStructure: false
