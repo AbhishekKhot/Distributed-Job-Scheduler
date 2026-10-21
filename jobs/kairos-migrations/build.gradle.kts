@@ -6,6 +6,8 @@ description = "Kairos database migrations job"
 
 dependencies {
     implementation(project(":libs:kairos-persistence"))
+    // Creates the platform access-token signing keyset after the control schema is migrated.
+    implementation(project(":libs:kairos-security"))
     // Flyway is driven directly, one instance per database; the Spring Boot Flyway
     // auto-configuration, which assumes a single data source, is deliberately not on the classpath.
     implementation("org.flywaydb:flyway-core")

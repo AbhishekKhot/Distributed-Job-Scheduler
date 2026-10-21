@@ -29,6 +29,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -41,6 +42,7 @@ import org.springframework.test.context.DynamicPropertySource;
  * when the test runs.
  */
 @SpringBootTest(properties = "management.server.port=0")
+@ActiveProfiles("local")
 class MigrationsIntegrationTest {
 
     private static final Instant NOW = Instant.parse("2026-10-20T23:30:00Z");
@@ -102,6 +104,8 @@ class MigrationsIntegrationTest {
             int number = cell;
             registry.add("kairos.cell[" + cell + "].db.url", () -> postgres.cellJdbcUrl(number));
         }
+        // The job also creates the platform signing keyset, sealed by a local key encryption key made for this run.
+        registry.add("kairos.security.kek.local-key", TestKek::localKey);
     }
 
     @Test
