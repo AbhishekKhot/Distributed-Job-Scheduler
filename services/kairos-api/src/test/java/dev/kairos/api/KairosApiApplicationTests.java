@@ -1,14 +1,17 @@
 package dev.kairos.api;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import static org.assertj.core.api.Assertions.assertThat;
 
-/** Verifies that the application context starts with the default configuration. */
-@SpringBootTest(properties = "management.server.port=0")
-class KairosApiApplicationTests {
+import java.net.http.HttpResponse;
+import org.junit.jupiter.api.Test;
+
+/** Verifies that the application starts against the real databases and Redis, with its health endpoints open. */
+class KairosApiApplicationTests extends ApiApplicationTest {
 
     @Test
-    void contextLoads() {
-        // Fails if any bean cannot be created.
+    void contextLoadsAndProtectsTheApi() {
+        HttpResponse<String> response = send("GET", "/v1/jobs", null, null);
+
+        assertThat(response.statusCode()).isEqualTo(401);
     }
 }
