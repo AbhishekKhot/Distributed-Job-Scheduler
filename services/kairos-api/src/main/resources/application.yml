@@ -112,6 +112,13 @@ kairos:
       wait-timeout: 2s
       poll-interval: 50ms
       max-body-bytes: 16777216
+    accounts:
+      # Progressive login lockout: after `threshold` consecutive failures each further failure locks the account
+      # for base * 2^(failures - threshold), at most `max`. Attempts while locked are refused and not counted.
+      lockout:
+        threshold: 5
+        base: 1m
+        max: 1h
     # CIDRs of the load balancers or ingress proxies whose X-Forwarded-For is trusted. Empty: the header is ignored.
     trusted-proxies: []
     # Token buckets in Redis (kairos:rl:*). capacity requests per period, refilled evenly.
