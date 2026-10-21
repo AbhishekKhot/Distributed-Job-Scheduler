@@ -271,8 +271,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-111 | Redis run lock and sent markers | kairos-engine | done |
 | T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | done |
-| T-201 | API foundation | kairos-api | review |
-| T-202 | Accounts APIs (1–7) | kairos-api | todo |
+| T-201 | API foundation | kairos-api | done |
+| T-202 | Accounts APIs (1–7) | kairos-api | in progress (abhishekkhot) |
 | T-203a | Team and members APIs (8–12) | kairos-api | todo |
 | T-203b | API key APIs (13–15) | kairos-api | todo |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | todo |
@@ -562,7 +562,7 @@ The single place where runs and their outbox rows are created, used by the API (
 ### 8.1 kairos-api
 
 ### T-201 API foundation
-**Status:** review · **Needs:** T-107, T-109, T-111 · **Owns:** `dev.kairos.api.support.*`, `dev.kairos.api.config.*`, `dev.kairos.api.security.*`
+**Status:** done · **Needs:** T-107, T-109, T-111 · **Owns:** `dev.kairos.api.support.*`, `dev.kairos.api.config.*`, `dev.kairos.api.security.*`
 
 - [x] `ProblemDetailsAdvice` (`@RestControllerAdvice`): maps `KairosException` subtypes, validation errors, malformed JSON, unknown fields, unsupported media type, missing headers and 404/405 into RFC 9457 bodies with the LLD codes. Unknown errors become a generic 500 with `traceId`, and the details are logged server-side. Unknown paths and unsupported methods both answer 404 `not-found`, and an unsupported or unacceptable media type answers 400 `validation`, so no status outside the LLD catalogue is used; an unreachable or timed-out database answers 503 `unavailable` with `Retry-After`. Field errors carry only the path and a stable code (`required`, `length`, `pattern`, `range`, `format`, `unknown-field`); client-chosen names that are not plain identifiers are reported as `body`. `ProblemErrorController` answers the container's `/error` dispatch the same way.
 - [x] `RequestIdFilter`: `X-Request-Id` (accepts a valid incoming value of ≤ 64 characters from an allow-listed character set, otherwise generates one), stored in MDC and echoed. Generated ids are 32 random hex characters; the MDC key is `requestId`.
@@ -580,7 +580,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** web-slice tests for each error mapping; a request without a token returns 401 with the problem body; a JWT for a user without a team returns 403 `no-team`; the rate-limit test returns 429 with `Retry-After`, and 503 with Redis stopped; idempotent replay returns the identical body.
 
 ### T-202 Accounts APIs (LLD APIs 1–7)
-**Status:** todo · **Needs:** T-201 · **Owns:** `dev.kairos.api.accounts`
+**Status:** in progress (abhishekkhot) · **Needs:** T-201 · **Owns:** `dev.kairos.api.accounts`
 
 - [ ] 1 `POST /v1/auth/signup`: email normalised (lower-case, ≤ 254, simple structural check), password policy, Argon2id; `409 email-taken` for an existing account; rate-limited per IP. The new user has no team.
 - [ ] 2 `POST /v1/auth/login`: generic `invalid-credentials` error; progressive lockout (`failed_logins`, `locked_until`); constant-time path for unknown emails (hash a dummy password); creates a session family; returns the access and refresh tokens.
