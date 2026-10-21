@@ -10,11 +10,20 @@ spring:
     timeout-per-shutdown-phase: 30s
   mvc:
     problemdetails:
-      enabled: true
+      # Problem bodies are written by dev.kairos.api.support.problem with the LLD error codes.
+      enabled: false
+  web:
+    resources:
+      # The API serves no static content; unknown paths become 404 problems.
+      add-mappings: false
   jackson:
     deserialization:
       # Request bodies with unknown fields are rejected (no mass assignment).
       fail-on-unknown-properties: true
+  autoconfigure:
+    exclude:
+      # Bearer tokens and API keys only: no in-memory user and no generated password.
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
 
 server:
   port: 8080
@@ -36,6 +45,10 @@ management:
       probes:
         enabled: true
       show-details: never
+      group:
+        readiness:
+          # The control database and both cells, and the Redis that every rate limit needs (fail closed).
+          include: readinessState, kairosDatabases, redis
   info:
     env:
       enabled: false
@@ -45,6 +58,7 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+    # Off in production (Helm sets KAIROS_SWAGGER_UI_ENABLED=false).
     enabled: ${KAIROS_SWAGGER_UI_ENABLED:true}
     operations-sorter: method
     tags-sorter: alpha
@@ -55,3 +69,96 @@ logging:
   structured:
     format:
       console: ecs
+
+kairos:
+  datasource:
+    control:
+      url: ${KAIROS_CONTROL_DB_URL}
+      username: ${KAIROS_DB_USERNAME}
+      password: ${KAIROS_DB_PASSWORD}
+    cells:
+      - url: ${KAIROS_CELL_0_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
+      - url: ${KAIROS_CELL_1_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
+  redis:
+    host: ${KAIROS_REDIS_HOST}
+    port: ${KAIROS_REDIS_PORT:6379}
+    username: ${KAIROS_REDIS_USERNAME}
+    password: ${KAIROS_REDIS_PASSWORD}
+    tls: ${KAIROS_REDIS_TLS:false}
+  security:
+    api-key:
+      # HMAC pepper of API key hashes (64 hex characters).
+      pepper: ${KAIROS_API_KEY_PEPPER}
+  api:
+    auth:
+      # Revoked sessions and removed members stop working within this time (at most 30s).
+      session-cache-ttl: 30s
+      # Revoked API keys stop working within this time (at most 60s).
+      api-key-cache-ttl: 60s
+      cache-maximum-size: 100000
+    cursor:
+      # HMAC key that authenticates pagination cursors (64 hex characters).
+      hmac-key: ${KAIROS_CURSOR_HMAC_KEY}
+    idempotency:
+      # Idempotency-Key records are honoured for 24 hours (LLD section 2.2).
+      ttl: 24h
+      # An in-progress record older than this belongs to a crashed request and is taken over.
+      stale-after: 60s
+      # A concurrent repeat waits this long for the first request, then gets 409.
+      wait-timeout: 2s
+      poll-interval: 50ms
+      max-body-bytes: 16777216
+    # CIDRs of the load balancers or ingress proxies whose X-Forwarded-For is trusted. Empty: the header is ignored.
+    trusted-proxies: []
+    # Token buckets in Redis (kairos:rl:*). capacity requests per period, refilled evenly.
+    rate-limits:
+      login-per-ip:
+        capacity: 20
+        period: 1m
+      login-per-account:
+        capacity: 10
+        period: 15m
+      signup-per-ip:
+        capacity: 10
+        period: 1h
+      password-change-per-user:
+        capacity: 5
+        period: 15m
+      team-create-per-user:
+        capacity: 5
+        period: 1h
+      member-add-per-user:
+        capacity: 30
+        period: 1h
+      endpoint-test-per-team:
+        capacity: 10
+        period: 1m
+      team-api:
+        capacity: 300
+        period: 1s
+
+---
+# Local stack: keysets are sealed with the local key encryption key (64 hex characters).
+spring:
+  config:
+    activate:
+      on-profile: local
+kairos:
+  security:
+    kek:
+      local-key: ${KAIROS_LOCAL_KEK}
+
+---
+# Production: keysets are sealed with the Cloud KMS key.
+spring:
+  config:
+    activate:
+      on-profile: "!local"
+kairos:
+  security:
+    kek:
+      uri: ${KAIROS_KEK_URI}
