@@ -31,9 +31,9 @@ import tools.jackson.databind.json.JsonMapper;
  */
 class OpenApiDocumentTest extends ApiApplicationTest {
 
-    /** LLD operation numbers whose feature tasks (T-202 to T-207) are not merged yet. */
+    /** LLD operation numbers whose feature tasks (T-203a to T-207) are not merged yet; T-202 added 1 to 7. */
     static final Set<Integer> NOT_YET_IMPLEMENTED =
-            Set.copyOf(IntStream.rangeClosed(1, 68).boxed().toList());
+            Set.copyOf(IntStream.rangeClosed(8, 68).boxed().toList());
 
     private static final Pattern OPERATION = Pattern.compile(
             "^<summary><b>(\\d{1,2})\\. [^<]{1,80}</b> &nbsp; <code>(GET|POST|PUT|PATCH|DELETE) (/[^<\\s]{1,120})</code></summary>$");

@@ -52,8 +52,10 @@ public final class ApiTestFixtures {
     public static final String CURSOR_KEY = randomHex();
 
     private static final String MIGRATIONS = "jobs/kairos-migrations/src/main/resources/db/";
-    private static final List<String> CONTROL_SCRIPTS =
-            List.of(MIGRATIONS + "control/V2026_10_20_0900__create_control_schema.sql");
+    // The day-partition script adds the default partition of audit_log, which the accounts audit entries need.
+    private static final List<String> CONTROL_SCRIPTS = List.of(
+            MIGRATIONS + "control/V2026_10_20_0900__create_control_schema.sql",
+            MIGRATIONS + "control/V2026_10_20_0905__add_day_partitions.sql");
     private static final List<String> CELL_SCRIPTS = List.of(
             MIGRATIONS + "cell/V2026_10_20_0910__create_cell_schema.sql",
             MIGRATIONS + "cell/V2026_10_20_0915__partition_cell_tables.sql");
