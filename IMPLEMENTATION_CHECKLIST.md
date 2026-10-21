@@ -271,7 +271,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-111 | Redis run lock and sent markers | kairos-engine | done |
 | T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | done |
-| T-201 | API foundation | kairos-api | todo |
+| T-201 | API foundation | kairos-api | in progress (abhishekkhot) |
 | T-202 | Accounts APIs (1–7) | kairos-api | todo |
 | T-203a | Team and members APIs (8–12) | kairos-api | todo |
 | T-203b | API key APIs (13–15) | kairos-api | todo |
@@ -561,7 +561,7 @@ The single place where runs and their outbox rows are created, used by the API (
 ### 8.1 kairos-api
 
 ### T-201 API foundation
-**Status:** todo · **Needs:** T-107, T-109, T-111 · **Owns:** `dev.kairos.api.support.*`, `dev.kairos.api.config.*`, `dev.kairos.api.security.*`
+**Status:** in progress (abhishekkhot) · **Needs:** T-107, T-109, T-111 · **Owns:** `dev.kairos.api.support.*`, `dev.kairos.api.config.*`, `dev.kairos.api.security.*`
 
 - [ ] `ProblemDetailsAdvice` (`@RestControllerAdvice`): maps `KairosException` subtypes, validation errors, malformed JSON, unknown fields, unsupported media type, missing headers and 404/405 into RFC 9457 bodies with the LLD codes. Unknown errors become a generic 500 with `traceId`, and the details are logged server-side.
 - [ ] `RequestIdFilter`: `X-Request-Id` (accepts a valid incoming value of ≤ 64 characters from an allow-listed character set, otherwise generates one), stored in MDC and echoed.
