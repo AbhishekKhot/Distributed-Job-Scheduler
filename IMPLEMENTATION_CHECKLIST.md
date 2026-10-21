@@ -272,7 +272,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | done |
 | T-201 | API foundation | kairos-api | done |
-| T-202 | Accounts APIs (1–7) | kairos-api | in progress (abhishekkhot) |
+| T-202 | Accounts APIs (1–7) | kairos-api | review |
 | T-203a | Team and members APIs (8–12) | kairos-api | todo |
 | T-203b | API key APIs (13–15) | kairos-api | todo |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | todo |
@@ -580,17 +580,17 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** web-slice tests for each error mapping; a request without a token returns 401 with the problem body; a JWT for a user without a team returns 403 `no-team`; the rate-limit test returns 429 with `Retry-After`, and 503 with Redis stopped; idempotent replay returns the identical body.
 
 ### T-202 Accounts APIs (LLD APIs 1–7)
-**Status:** in progress (abhishekkhot) · **Needs:** T-201 · **Owns:** `dev.kairos.api.accounts`
+**Status:** review · **Needs:** T-201 · **Owns:** `dev.kairos.api.accounts`
 
-- [ ] 1 `POST /v1/auth/signup`: email normalised (lower-case, ≤ 254, simple structural check), password policy, Argon2id; `409 email-taken` for an existing account; rate-limited per IP. The new user has no team.
-- [ ] 2 `POST /v1/auth/login`: generic `invalid-credentials` error; progressive lockout (`failed_logins`, `locked_until`); constant-time path for unknown emails (hash a dummy password); creates a session family; returns the access and refresh tokens.
-- [ ] 3 `POST /v1/auth/refresh`: rotation, reuse detection (revokes the family), picks up a new team id into the JWT.
-- [ ] 4 `POST /v1/auth/logout`: revokes the session; unknown or already revoked tokens also return 204.
-- [ ] 5 `GET /v1/me`: profile, including the team (nullable).
-- [ ] 6 `POST /v1/me/password`: verifies the current password (`400 invalid-current-password`), applies the policy, is rate-limited, and revokes all other sessions of the user.
-- [ ] 7 `GET /.well-known/jwks.json`: public keys with caching headers.
-- [ ] Audit entries for login failure bursts, password change and logout-all.
-- [ ] Swagger annotations with examples copied from the LLD.
+- [x] 1 `POST /v1/auth/signup`: email normalised (lower-case, ≤ 254, simple structural check), password policy, Argon2id; `409 email-taken` for an existing account; rate-limited per IP. The new user has no team.
+- [x] 2 `POST /v1/auth/login`: generic `invalid-credentials` error; progressive lockout (`failed_logins`, `locked_until`); constant-time path for unknown emails (hash a dummy password); creates a session family; returns the access and refresh tokens. Lockout (`kairos.api.accounts.lockout.*`): from 5 consecutive failures each failure locks for 1m doubling up to 1h; attempts while locked are refused without being counted. Every path spends one Argon2id verification (the real one even for a locked or disabled account). Rate limits per IP and per typed email come first; `kairos_login_failures_total` counts refusals.
+- [x] 3 `POST /v1/auth/refresh`: rotation, reuse detection (revokes the family), picks up a new team id into the JWT.
+- [x] 4 `POST /v1/auth/logout`: revokes the session; unknown or already revoked tokens also return 204.
+- [x] 5 `GET /v1/me`: profile, including the team (nullable). `/v1/me` and `/v1/me/password` called with an API key answer 401 `unauthenticated` with the LLD's "A valid access token is required."
+- [x] 6 `POST /v1/me/password`: verifies the current password (`400 invalid-current-password`), applies the policy, is rate-limited, and revokes all other sessions of the user.
+- [x] 7 `GET /.well-known/jwks.json`: public keys with caching headers.
+- [x] Audit entries for login failure bursts, password change and logout-all. Actions `LOGIN_LOCKED` (actor `system:login-lockout`), `PASSWORD_CHANGED`, and `SESSIONS_REVOKED` (other sessions revoked by a password change, or a family revoked by refresh-token reuse, actor `system:refresh-reuse`); resource type `user`. Written by the feature's own `AccountAudit` port on `audit_log`, in the same transaction as the change, until T-203d's `AuditWriter` exists.
+- [x] Swagger annotations with examples copied from the LLD.
 
 **Acceptance:** web and integration tests for every success and error row in LLD section 3.3; login timing for unknown and known emails is within 20% (benchmark test); refresh reuse revokes every token in the family.
 
