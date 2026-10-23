@@ -94,6 +94,12 @@ kairos:
       # HMAC pepper of API key hashes (64 hex characters).
       pepper: ${KAIROS_API_KEY_PEPPER}
   api:
+    signing:
+      # Previous target-verification key overlap; the returned deadline is persisted per rotation.
+      overlap: 24h
+      # Expired previous keys are removed in bounded, replica-safe batches.
+      prune-interval: 60s
+      prune-batch-size: 100
     auth:
       # Revoked sessions and removed members stop working within this time (at most 30s).
       session-cache-ttl: 30s
