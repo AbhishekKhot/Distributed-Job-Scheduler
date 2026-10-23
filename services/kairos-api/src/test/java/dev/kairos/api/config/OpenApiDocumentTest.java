@@ -33,10 +33,12 @@ class OpenApiDocumentTest extends ApiApplicationTest {
 
     /**
      * LLD operation numbers whose feature tasks (T-203c to T-207) are not implemented yet; T-202 added 1 to 7,
-     * T-203a 8 to 12, and T-203b 13 to 15.
+     * T-203a 8 to 12, T-203b 13 to 15, and T-203d 23 to 24.
      */
-    static final Set<Integer> NOT_YET_IMPLEMENTED =
-            Set.copyOf(IntStream.rangeClosed(16, 68).boxed().toList());
+    static final Set<Integer> NOT_YET_IMPLEMENTED = Set.copyOf(IntStream.rangeClosed(16, 68)
+            .filter(number -> number != 23 && number != 24)
+            .boxed()
+            .toList());
 
     private static final Pattern OPERATION = Pattern.compile(
             "^<summary><b>(\\d{1,2})\\. [^<]{1,80}</b> &nbsp; <code>(GET|POST|PUT|PATCH|DELETE) (/[^<\\s]{1,120})</code></summary>$");

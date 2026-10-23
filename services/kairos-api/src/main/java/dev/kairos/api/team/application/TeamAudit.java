@@ -8,7 +8,7 @@ import java.util.Objects;
  * Writes the team feature's entries to {@code audit_log} (LLD section 2.2), in the caller's transaction. Details
  * never contain secrets, keys, tokens or emails.
  *
- * <p>Interim port of this feature: it is replaced by the shared {@code AuditWriter} once T-203d provides it.
+ * <p>Feature port adapted to the shared audit writer; existing use cases keep their typed event contracts.
  */
 public interface TeamAudit {
 

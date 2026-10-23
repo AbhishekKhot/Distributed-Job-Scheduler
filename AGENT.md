@@ -37,19 +37,21 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 
 ## Progress and next steps (update at the end of every session)
 
-**Status at end of session (2026-10-23).** Phase 1 (libraries) is complete except T-104. T-102 schedules (#21), T-203a teams/members (#20), and the session-team-refresh fix (#22) are merged; local `develop` base is `2d99c6c`. T-203b API key management is implemented on `t-203b-api-keys`, with checklist status `review`, awaiting PR review and merge into `develop`. Other runtime services remain skeletons.
+**Status at end of session (2026-10-23).** T-203b API keys is merged into `develop` through PR #23 (`672a3c9`); its checklist status is now `done`. T-203d signing-key rotation, audit queries and the shared audit writer are implemented on `t-203d-signing-audit`, with checklist status `review`, awaiting PR review and merge. Phase 1 remains complete except T-104; other runtime services remain skeletons.
 
-**T-203b verification:** Docker `make bg BG_NAME=kairos-gradle-t203b ARGS="spotlessApply build check"` passed: 2,067 tests, zero failures/skips, API line coverage 93.78%. An isolated Compose stack on port 18080 became healthy and passed signup/login/team/refresh/key create/authenticate/list/revoke, then was removed. All three management endpoints require a user token. Usage tracking is a feature-local interceptor plus bounded Caffeine coalescing and a SQL one-minute guard; the existing authentication cache enforces the 60s revocation bound. Creation/revocation audit entries commit with the mutation; migrate the local audit writer to T-203d later. Pagination uses the existing `(team_id, created_at, key_id)` index and team/list-bound HMAC cursors. No dependency versions or lockfiles changed; Gradle generated missing Bouncy Castle 1.84 and JUnit 5.13.1 BOM `.module` checksums. Unrelated local configuration changes and the lesson PDF are excluded from the task commits.
+**T-203d verification:** Docker `make bg BG_NAME=kairos-gradle-t203d ARGS="spotlessApply build check"` passed: 2,088 tests, no failures/skips; API line coverage 94.24%. A fresh isolated Compose stack applied the overlap migration, became healthy, and passed onboarding, two signing rotations, API-key refusal on rotation, audit reads with an API key, action filtering and cursor pagination, then was removed. Rotation uses optimistic keyset replacement and atomic audit writes, with KEK operations outside transactions. `team_keysets.previous_key_valid_until` persists the returned deadline (new Flyway migration `V2026_10_23_1530__signing_key_overlap.sql`). Defaults: `kairos.api.signing.overlap=24h`, `prune-interval=60s`, `prune-batch-size=100`. Cleanup removes non-primary keys after the persisted deadline and cannot overwrite concurrent rotations. Targets must enforce their own verification-key deadlines. Existing account/team/API-key audit adapters delegate to `AuditWriter`; details accept bounded scalar metadata and reject secret fields/objects. Audit cursors retain the original time/action filter snapshot and are team-bound. No dependency changes. Unrelated local configuration edits and the lesson PDF remain excluded.
 
-**Done, merged to `develop` (18 tasks + 5 follow-ups):**
-- API: T-201 foundation (#18), T-202 accounts APIs 1–7 (#19), T-203a teams/members APIs 8–12 (#20).
+**T-203b verification:** Docker `make bg BG_NAME=kairos-gradle-t203b ARGS="spotlessApply build check"` passed: 2,067 tests, zero failures/skips, API line coverage 93.78%. An isolated Compose stack on port 18080 became healthy and passed signup/login/team/refresh/key create/authenticate/list/revoke, then was removed. All three management endpoints require a user token. Usage tracking is a feature-local interceptor plus bounded Caffeine coalescing and a SQL one-minute guard; the existing authentication cache enforces the 60s revocation bound. Creation/revocation audit entries commit with the mutation; T-203d now routes these through the shared writer. Pagination uses the existing `(team_id, created_at, key_id)` index and team/list-bound HMAC cursors. No dependency versions or lockfiles changed; Gradle generated missing Bouncy Castle 1.84 and JUnit 5.13.1 BOM `.module` checksums. Unrelated local configuration changes and the lesson PDF are excluded from the task commits.
+
+**Done, merged to `develop` (19 tasks + 5 follow-ups):**
+- API: T-201 foundation (#18), T-202 accounts APIs 1–7 (#19), T-203a teams/members APIs 8–12 (#20), T-203b API keys APIs 13–15 (#23).
 - Tooling: T-001 skeleton, T-002 quality gates (PR #2), T-003 test support (#1), T-112 observability (#6).
 - Libraries: T-101 ids/shards (#4), T-102 schedules (#21), T-103 retry/outcomes/run state machine (#8), T-105 proto contracts (#3), T-106 migrations (#5), T-107 persistence + cell routing (#7), T-108 messaging (#15), T-109 security (#10), T-110 outbound HTTP client + target policy (#12), T-111 Redis run lock + sent markers (#11), T-113 run creation + outbox writer (#9).
 - Follow-ups: dead-letter `fence` column + LLD/checklist fixes (#13); engine Spring configuration `OutboxConfiguration`/`RunCreationConfiguration` (#14); trace/key docs (#16); migrations create the JWT signing keyset after migrating (#17, closes old open item 1).
 
-**Not yet merged (33 tasks; T-203b awaits PR review):**
+**Not yet merged (32 tasks; T-203d awaits PR review):**
 - Libraries: T-104 workflow DAG validation and templates.
-- `kairos-api`: T-203b API keys (review), T-203c secrets/CA bundles, T-203d signing keys/audit, T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
+- `kairos-api`: T-203c secrets/CA bundles, T-203d signing keys/audit (review), T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
 - `kairos-watcher`: T-221 shard leases, T-222 fire poller, T-223 delayed poller, T-224 outbox relay, T-225 recovery sweepers, T-226 singleton tasks.
 - `kairos-executor`: T-241 dispatch consumers, T-242 execution gates, T-243 render/call/classify/publish, T-244 cancel + drain.
 - `kairos-state`: T-261 result settler, T-262 workflow progression, T-263 stats aggregator.
@@ -57,15 +59,15 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 - Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Ready after the user selects the next task:** T-203c, T-203d, T-104, T-207, T-221, T-241, T-261, T-281, T-282, T-301, T-402, T-403. T-204 still needs T-203c secret lookup and its endpoint-test operation needs the T-243 executor interface. Land T-203d's shared AuditWriter early to replace feature-local audit writers. T-102 and T-203a checklist statuses were reconciled to `done` based on their merged PRs. Wait for user go-ahead before another task.
+**Ready after the user selects the next task:** T-203c, T-104, T-207, T-221, T-241, T-261, T-281, T-282, T-301, T-402, T-403. T-204 still needs T-203c secret lookup and its endpoint-test operation needs the T-243 executor interface. Recommended next: T-203c secrets/CA bundles, using the shared AuditWriter once T-203d merges. T-102 and T-203a checklist statuses were reconciled to `done` based on their merged PRs. Wait for user go-ahead before another task.
 
 **Open items:**
 1. Done (#17): migrations bootstrap the JWT keyset.
 2. T-243 needs an adapter from Jackson `JsonNode` (T-110) to T-104's plain-Java output extraction.
 3. T-111 metric names `kairos_run_lock_acquire_total` and `kairos_redis_script_duration_seconds` are not yet in the T-112 metric table; the Redis readiness health indicator is left to a service task.
 4. `kairos.engine.runs.dispatch-horizon` (default 5s) must equal the fire poller look-ahead (T-222 should read the same property). The engine's `OutboxConfiguration` owns the single `KairosIdFactory` bean; services inject it and never define their own.
-5. Signing-key pruning after `previousKeyValidUntil` is left to T-203d.
-6. T-202 has its own `AccountAudit` port + JDBC adapter in `dev.kairos.api.accounts.infrastructure`; switch it to T-203d's `AuditWriter` when T-203d lands.
+5. Implemented in T-203d: signing-key pruning uses the persisted `previousKeyValidUntil`.
+6. Implemented in T-203d: account/team/API-key audit adapters delegate to the shared AuditWriter, preserving existing typed feature ports and transaction boundaries.
 8. T-201 session-cache fix is merged (#22): a refreshed token whose team differs from the cached state re-reads once. Still open from T-203a: `addedAt` = `users.created_at` until a `users.team_joined_at` migration.
 7. T-202's `LoginTimingIntegrationTest` compares wall-clock medians (unknown vs known email within 20%) and may be flaky on a loaded CI runner (watch in T-403).
 

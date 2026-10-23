@@ -14,10 +14,25 @@ public interface AuditWriter {
     void record(Entry entry);
 
     /** Validated metadata; a null team supports account events before onboarding. */
-    record Entry(@Nullable TeamId team, String actor, String action, @Nullable String resourceType,
-            @Nullable String resourceId, Map<String, Object> details) {
-        private static final Set<String> SENSITIVE = Set.of("password", "passwordhash", "secret", "secretvalue",
-                "token", "accesstoken", "refreshtoken", "apikey", "signingkey", "authorization", "ciphertext");
+    record Entry(
+            @Nullable TeamId team,
+            String actor,
+            String action,
+            @Nullable String resourceType,
+            @Nullable String resourceId,
+            Map<String, Object> details) {
+        private static final Set<String> SENSITIVE = Set.of(
+                "password",
+                "passwordhash",
+                "secret",
+                "secretvalue",
+                "token",
+                "accesstoken",
+                "refreshtoken",
+                "apikey",
+                "signingkey",
+                "authorization",
+                "ciphertext");
 
         public Entry {
             Objects.requireNonNull(actor, "actor");
@@ -29,16 +44,21 @@ public interface AuditWriter {
                 throw new IllegalArgumentException("invalid audit action");
             }
             if ((resourceType != null && resourceType.length() > 64)
-                    || (resourceId != null && resourceId.length() > 128) || details.size() > 32) {
+                    || (resourceId != null && resourceId.length() > 128)
+                    || details.size() > 32) {
                 throw new IllegalArgumentException("audit metadata is too large");
             }
             details.forEach((key, value) -> {
-                if (key.length() > 64 || !key.matches("^[A-Za-z][A-Za-z0-9]{0,63}$")
+                if (key.length() > 64
+                        || !key.matches("^[A-Za-z][A-Za-z0-9]{0,63}$")
                         || SENSITIVE.contains(key.toLowerCase(java.util.Locale.ROOT))) {
                     throw new IllegalArgumentException("invalid audit detail name");
                 }
-                if (!(value instanceof String || value instanceof Boolean || value instanceof Integer
-                        || value instanceof Long || value instanceof Short)
+                if (!(value instanceof String
+                                || value instanceof Boolean
+                                || value instanceof Integer
+                                || value instanceof Long
+                                || value instanceof Short)
                         || (value instanceof String text && text.length() > 1024)) {
                     throw new IllegalArgumentException("audit details must be bounded scalar metadata");
                 }

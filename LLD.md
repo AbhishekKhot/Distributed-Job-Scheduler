@@ -87,7 +87,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | created_by | uuid | FK → users |
 | created_at, expires_at, revoked_at, last_used_at | timestamptz | |
 
-**team_keysets** (PK `team_id, purpose`): `team_id` uuid, `purpose` text (`SECRETS`, `OUTPUTS`, `SIGNING`), `encrypted_keyset` bytea (sealed by Cloud KMS), `kek_uri` text, `updated_at` timestamptz.
+**team_keysets** (PK `team_id, purpose`): `team_id` uuid, `purpose` text (`SECRETS`, `OUTPUTS`, `SIGNING`), `encrypted_keyset` bytea (sealed by Cloud KMS), `kek_uri` text, `updated_at` timestamptz, `previous_key_valid_until` timestamptz (nullable; SIGNING only, persisted overlap deadline).
 
 **team_secrets** (PK `team_id, name, version`): `team_id` uuid, `name` text, `version` int, `kind` text (`BASIC`, `BEARER`, `API_KEY`, `OAUTH2_CLIENT`), `ciphertext` bytea (≤ 16 KB), `created_at` timestamptz, `disabled_at` timestamptz.
 
@@ -1443,7 +1443,7 @@ Content-Type: application/problem+json
 {"type": "/errors/forbidden-for-api-key", "title": "Not allowed for API keys", "status": 403, "detail": "This operation requires a user access token."}
 ```
 
-**Background effect:** Requests are signed with the new key at once; targets should accept both keys until `previousKeyValidUntil`.
+**Background effect:** Requests are signed with the new key at once; targets should accept both keys until `previousKeyValidUntil` (default overlap 24h). The overlap deadline is persisted. Each rotation retains the immediately previous key; the expiry job removes non-primary keys after the deadline. Targets enforce the returned deadline for their own verification keys.
 
 </details>
 
@@ -4677,6 +4677,7 @@ Content-Type: application/problem+json
 | Cancel listener | kairos-executor | Continuous | Topic `kairos.run.cancel`, one consumer group per pod | Aborts the matching in-flight call |
 | Result settler | kairos-state | Continuous | Topic `kairos.run.result`, ≤ 1K records per batch, one transaction per cell; retries 5, base 30s, cap 10 min, max age 24h; auto-pause after 3 dead runs | Writes history, schedules retries, dead-letters, advances workflows, writes follow-up outbox rows |
 | Stats aggregator | kairos-state | Every 10s | Per minute and node | Flushes `endpoint_health_minute` and `team_stats_minute` |
+| Signing-key expiry | kairos-api | Every 60s | Overlap 24h; batch 100 teams; optimistic replacement per keyset | Removes expired non-primary signing keys and audits the change; safe across API replicas |
 | Partition manager | kairos-maintenance | Daily (CronJob) | Create partitions 3 days ahead; drop after 7 days (audit 90 days) | Manages `run_history`, `task_outputs` and `audit_log` partitions |
 | Operator commands | kairos-maintenance | On demand | `team set-quota`, `user disable`, `user reset-password` | Audited operator actions |
 
