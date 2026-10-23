@@ -619,7 +619,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-23):** Docker `spotlessApply build check` passed (2,067 tests; API line coverage 93.78%). Integration tests cover expiry/revocation with an injected clock, team-scoped authenticated cursors, concurrent revocation, throttled usage updates and atomic audit rollback. An isolated Compose stack became healthy and passed signup → login → team → refresh → key creation/authentication/listing/revocation; its test containers and volumes were removed. Implementation is on `t-203b-api-keys`, ready for PR review against `develop`. Gradle regenerated two missing BOM metadata checksums; dependency versions and lockfiles are unchanged.
 
 ### T-203c Secrets and CA bundle APIs (LLD APIs 16–22)
-**Status:** todo · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
+**Status:** in progress (abhishekkhot) · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
 
 - [ ] 16 `POST /v1/secrets`: name, kind and value validated per kind; encrypted with the team's `SECRETS` keyset (keyset created on first use); version 1. Never returned.
 - [ ] 17 `GET /v1/secrets`: names, kinds, versions and dates only.
@@ -632,7 +632,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** stored ciphertext decrypts only with the right associated data; no secret value appears in responses, logs or audit details (asserted with a canary value across the whole test).
 
 ### T-203d Signing key and audit log APIs (LLD APIs 23–24)
-**Status:** review · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.signing`, `dev.kairos.api.audit`
+**Status:** done · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.signing`, `dev.kairos.api.audit`
 
 **Integration scope:** existing account/team/API-key audit adapters and wiring, the security library's key-pruning method, and a new signing-overlap migration with its schema fixtures.
 
