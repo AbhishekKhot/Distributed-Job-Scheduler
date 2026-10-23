@@ -152,6 +152,30 @@ public final class KeysetService {
     }
 
     /**
+     * Removes every non-primary request-signing key after the caller has checked the persisted overlap deadline.
+     * The current version and its key bytes stay unchanged; the returned keyset is sealed for the same team.
+     *
+     * @param team the owning team
+     * @param current the stored SIGNING keyset
+     * @return a sealed keyset containing only the current primary
+     * @throws KeysetException if the keyset cannot be opened or sealed
+     */
+    public SealedKeyset pruneSigningKeys(TeamId team, SealedKeyset current) {
+        KeysetHandle handle = open(current, teamAssociatedData(team, KeyPurpose.SIGNING));
+        KeysetHandle.Builder builder = KeysetHandle.newBuilder(handle);
+        for (int i = builder.size() - 1; i >= 0; i--) {
+            if (!builder.getAt(i).isPrimary()) {
+                builder.deleteAt(i);
+            }
+        }
+        try {
+            return seal(builder.build(), teamAssociatedData(team, KeyPurpose.SIGNING));
+        } catch (GeneralSecurityException e) {
+            throw new KeysetException("cannot prune a signing keyset", e);
+        }
+    }
+
+    /**
      * Opens a team's request-signing key.
      *
      * @param team the team

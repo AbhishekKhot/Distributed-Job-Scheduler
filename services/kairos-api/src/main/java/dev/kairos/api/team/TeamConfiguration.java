@@ -1,6 +1,7 @@
 package dev.kairos.api.team;
 
 import dev.kairos.api.accounts.application.AccountRateLimits;
+import dev.kairos.api.audit.application.AuditWriter;
 import dev.kairos.api.team.application.AddMemberUseCase;
 import dev.kairos.api.team.application.CreateTeamUseCase;
 import dev.kairos.api.team.application.RemoveMemberUseCase;
@@ -66,16 +67,12 @@ public class TeamConfiguration {
     /**
      * The team audit entries on {@code audit_log}.
      *
-     * @param control the control database's client
-     * @param ids the process's id factory
-     * @param clock the clock
-     * @param json the JSON mapper
+     * @param writer the shared audit writer
      * @return the writer
      */
     @Bean
-    public TeamAudit teamAudit(
-            @Qualifier("controlJdbcClient") JdbcClient control, KairosIdFactory ids, Clock clock, JsonMapper json) {
-        return new JdbcTeamAudit(control, ids, clock, json);
+    public TeamAudit teamAudit(AuditWriter writer) {
+        return new JdbcTeamAudit(writer);
     }
 
     /**

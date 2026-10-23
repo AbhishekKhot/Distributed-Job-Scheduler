@@ -67,6 +67,7 @@ team_keysets|purpose|text|NO
 team_keysets|encrypted_keyset|bytea|NO
 team_keysets|kek_uri|text|NO
 team_keysets|updated_at|timestamp with time zone|NO
+team_keysets|previous_key_valid_until|timestamp with time zone|YES
 team_secrets|team_id|uuid|NO
 team_secrets|name|text|NO
 team_secrets|version|integer|NO

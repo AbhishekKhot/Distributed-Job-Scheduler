@@ -6,8 +6,8 @@ import dev.kairos.api.apikeys.application.ApiKeysUseCase;
 import dev.kairos.api.apikeys.infrastructure.JdbcApiKeyStore;
 import dev.kairos.api.apikeys.infrastructure.ThrottledApiKeyUsage;
 import dev.kairos.api.apikeys.web.ApiKeyUsageInterceptor;
+import dev.kairos.api.audit.application.AuditWriter;
 import dev.kairos.api.config.ApiProperties;
-import dev.kairos.domain.id.KairosIdFactory;
 import dev.kairos.persistence.tx.ControlTransactions;
 import dev.kairos.security.apikey.ApiKeyService;
 import java.time.Clock;
@@ -24,8 +24,8 @@ public class ApiKeysConfiguration {
 
     @Bean
     public ApiKeyStore apiKeyStore(
-            @Qualifier("controlJdbcClient") JdbcClient control, ControlTransactions transactions, KairosIdFactory ids) {
-        return new JdbcApiKeyStore(control, transactions, ids);
+            @Qualifier("controlJdbcClient") JdbcClient control, ControlTransactions transactions, AuditWriter writer) {
+        return new JdbcApiKeyStore(control, transactions, writer);
     }
 
     @Bean
