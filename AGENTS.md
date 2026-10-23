@@ -1,41 +1,164 @@
-# Repository Guidelines
+# Kairos: Repository Guide and Project Context
 
-## Project Structure & Module Organization
+This is the single contributor and project-context guide, consolidated from AGENT.md and AGENTS.md on 2026-10-23. Read [HLD.md](HLD.md), [LLD.md](LLD.md), and [IMPLEMENTATION_CHECKLIST.md](IMPLEMENTATION_CHECKLIST.md) before implementation. The older AGENT.md has been removed; maintain current context here.
+
+## Repository structure and contributor conventions
 
 Kairos is a Java 25 / Spring Boot 4 distributed HTTP job scheduler built with Gradle Kotlin DSL. `services/` contains the API, watcher, executor, and state services; `libs/` holds shared domain, persistence, messaging, security, HTTP, engine, Protobuf, and test-support modules. `jobs/` contains migrations and maintenance; `tools/` provides the mock target and benchmark CLI.
 
 Modules use `src/main/java`, `src/main/resources`, and `src/test/java`. Shared build conventions live in `build-logic/`, architecture checks in `config/archunit/`, deployment files in `deploy/`, and diagrams in `assets/`.
 
-## Build, Test, and Development Commands
+Follow `.editorconfig`: four-space indentation, two spaces for YAML/JSON/TOML, tabs for Makefiles, UTF-8, and LF endings. Use PascalCase types and camelCase methods. Document public library types and methods with Javadoc. Use JUnit Jupiter, AssertJ, and shared helpers from `libs/kairos-test-support`; name unit tests `*Test` and integration tests `*IntegrationTest`. Cover added SQL, Kafka flows, and Redis scripts with Testcontainers.
 
-Install Docker with Compose v2, make, bash, and openssl. Builds use a pinned JDK 25 container; no local JDK is required.
+Never commit secrets or generated `.env` files. Each PR lists acceptance criteria and verification results, updates checklist items, and documents contract changes in `LLD.md`. Consult `HLD.md` for architecture.
 
-- `make env`: generate local credentials in `deploy/compose/.env`.
-- `make up`: build images and start the local stack.
-- `make build`: compile, run unit tests and quality gates, and package applications.
-- `make test`: run all checks, including Testcontainers integration tests.
-- `make gradle ARGS=":libs:kairos-domain:test"`: test a specific module.
-- `make gradle ARGS=spotlessApply`: format Java and Gradle scripts.
-- `make locks`: refresh dependency locks and checksums after dependency changes.
+## Commands (Docker only, never JDK/Gradle on the host)
 
-## Coding Style & Naming Conventions
+The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is required. Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image (see `Makefile`). The Gradle home is the `kairos-gradle-home` volume, and the Docker socket is mounted so Testcontainers can start Postgres, Kafka and Redis.
 
-Follow `.editorconfig`: four-space indentation, two spaces for YAML/JSON/TOML, tabs for Makefiles, UTF-8, and LF endings. Spotless applies Palantir Java Format and ktlint. Compilation warnings fail the build; libraries also use Error Prone and NullAway.
+| Task | Command |
+|---|---|
+| Generate local credentials (gitignored `deploy/compose/.env`) | `make env` |
+| Compile, unit tests, all quality gates, boot jars | `make build` |
+| Fix formatting (the build fails on unformatted code) | `make gradle ARGS=spotlessApply` |
+| All checks incl. Testcontainers ITs | `make test` |
+| One module's tests | `make gradle ARGS=":libs:kairos-domain:test"` |
+| One test class/method | `make gradle ARGS=":libs:kairos-domain:test --tests '*Cron*'"` |
+| Long runs, detached (preferred) | `make bg ARGS=check`, then `make bg-logs` / `make bg-wait` (container `kairos-gradle`) |
+| After adding/upgrading a dependency | `make locks` (rewrites `*.lockfile` + `gradle/verification-metadata.xml`; never hand-edit them) |
+| Stack (detached, `--wait`) | `make up` (API on `127.0.0.1:8080`, Swagger at `/swagger-ui.html`), `make up-all` adds Prometheus/Grafana |
+| Status / logs / stop | `make ps`, `make logs S=kairos-executor`, `make down`, `make clean` (also drops volumes) |
 
-Use `dev.kairos.<service>.<feature>` packages with `web`, `application`, and `infrastructure` layers. Keep domain code framework-free and follow ArchUnit dependency rules. Use PascalCase types and camelCase methods. Document public library types and methods with Javadoc.
+- The compiler runs with `-Xlint:all -Werror`, so any warning fails the build. Generated protobuf code is exempt.
+- **Quality gates (T-002), all run by `make build`:** Spotless (palantir-java-format for Java, ktlint for `*.gradle.kts` and `build-logic` Kotlin); Error Prone + NullAway in JSpecify mode on `libs/*` (every `dev.kairos` package is null-marked, so a nullable reference needs `@Nullable`; NullAway is off for test code); doclint Javadoc on `libs/*` public API (skipped while a module has only `package-info.java`); JaCoCo line coverage of 80% for `libs/*` and 70% elsewhere (`*Application` classes and generated proto excluded; aggregated report is the root `testCodeCoverageReport`); ArchUnit rules from `config/archunit/` compiled into **every** module's `test` task, so new modules are covered automatically. Gradle configuration cache is on.
+- Dependencies are added to `gradle/libs.versions.toml` with exact versions, in alphabetical order, from Maven Central or the Gradle Plugin Portal only.
+- Infra ports are not published. Use `docker compose -f deploy/compose/docker-compose.yml exec postgres psql -U postgres -d kairos_cell0`.
+- Branches are `t-<id>-<name>`, one checklist task per PR, against `develop`. Commits use Conventional Commits scoped by module (`feat(api): ...`). A task is claimed by setting its checklist status to `in progress (name)` (statuses: `todo` → `in progress` → `review` → `done`), and sub-task boxes are ticked in the PR that completes them. Only T-002/T-003 add modules to `settings.gradle.kts`.
 
-## Testing Guidelines
+## Code architecture
 
-Use JUnit Jupiter, AssertJ, and shared helpers from `libs/kairos-test-support`. Name tests `*Test` and integration tests `*IntegrationTest`. Cover added SQL, Kafka flows, and Redis scripts with Testcontainers. JaCoCo enforces minimum line coverage of 80% for libraries and 70% for applications.
+- **Build:** `settings.gradle.kts` lists every module. Shared configuration lives in the `build-logic/` convention plugins: `kairos.java-conventions` (toolchain, locking, Spring Boot BOM, `-Werror`), `kairos.library-conventions` (`libs/*`: Error Prone, Javadoc, 80% coverage), `kairos.formatting-conventions`, `kairos.coverage-conventions`, `kairos.archunit-conventions`, `kairos.root-conventions` (root formatting + aggregated coverage), `kairos.errorprone-conventions`, `kairos.dependency-locking` (`resolveAndLockAll`, used by `make locks`), `kairos.proto-conventions` and `kairos.service-conventions` (Spring Boot, actuator, Prometheus, `bootJar` named `app.jar` so the single `deploy/docker/Dockerfile` can build any module).
+- **Module dependency rules** (enforced by ArchUnit, T-002): `kairos-domain` is plain Java (JDK, Guava hashing, cron-utils only; no Spring, Jakarta, JDBC or Jackson). `kairos-proto` holds the Protobuf Kafka contracts. `persistence`/`messaging`/`security`/`http` depend on domain and proto. `kairos-engine` (run lock, claims, outbox) builds on all of them. Services, jobs and tools depend on libs, never on each other.
+- **Integration tests (T-003):** `libs/kairos-test-support` (`testImplementation` only) supplies `@KairosIntegrationTest(postgres=…, kafka=…, redis=…)`, which starts shared Testcontainers once per JVM, pinned to the compose images, and tags the class `integration`. Plain JUnit tests inject `KairosPostgres`/`KairosKafka`/`KairosRedis`. Spring tests get `kairos.datasource.*`/`kafka.*`/`redis.*` bound automatically, so they need no `@DynamicPropertySource`. Turn off the containers a test doesn't use. The module also has a mutable clock and `Awaits` polling helpers.
+- **Service packages are feature slices:** `dev.kairos.<service>.<feature>.{web,application,infrastructure}` plus `config/` and `support/`. `web` → `application` only. `application` uses ports and never touches Spring web, JDBC or Kafka types. Only `infrastructure` touches `JdbcClient`, `KafkaTemplate` or Lettuce.
+- **Runtime flow:** `kairos-api` (REST) → `kairos-watcher` (shard leases, fire/delayed pollers, outbox relay to Kafka, sweepers) → `kairos-executor` (four ordered execution gates: Redis lock, fenced DB claim, send-time guard, sent marker; then the HTTPS call) → `kairos-state` (batched settlement, retries/DLQ, DAG advancement). The control DB holds teams, users and endpoints. Cell DBs (shards 0–127 and 128–255) hold definitions, schedules and runs. Every cell call goes through `CellRouter`, and no transaction spans two DBs.
+- **Conventions that matter:** no JPA (use `JdbcClient` with named params and set-based SQL, `FOR UPDATE SKIP LOCKED`), no Lombok, constructor injection, records and sealed result types, an injected `Clock` (never `Instant.now()`), `@ConfigurationProperties` records under `kairos.*`, and Flyway scripts only in `jobs/kairos-migrations`, named by timestamp (`V2026_10_20_1530__x.sql`) and never edited after merge. REST contracts must match `LLD.md` section 3 exactly, and a contract change updates LLD.md in the same PR.
+- **Source of truth:** `LLD.md` > `IMPLEMENTATION_CHECKLIST.md` (tasks, "Owns" paths, definition of done, engineering standards in section 4) > this file. Only modify the paths a task owns.
+- **State (2026-10-23):** see the "Progress and next steps" section below.
 
-## Commit & Pull Request Guidelines
+## Progress and next steps (update at the end of every session)
 
-Use Conventional Commits with module scopes, matching history: `feat(api): ...`, `fix(engine): ...`, `test(domain): ...`. Create `t-<id>-<short-name>` branches and target `develop`. Keep each PR focused on one checklist task; list acceptance criteria and verification results. Update checklist items and document contract changes in `LLD.md` within the same PR. Consult `HLD.md` for architecture.
+**Verified repository state (2026-10-23):** `origin/develop` points to `e31d78b`, which merges T-222 fire poller through PR #28 (`97a5729`). T-221 shard leases/node registry merged through PR #27 (`f3c6a33`); T-203c through PR #25 (`055e6d8`), and T-104 through PR #26 (`5e0e5b7`). There are **51 checklist tasks: 23 done, 1 review (merged T-222), and 27 todo**. The next task branch should mark T-222 `done` in the checklist.
 
-## Security & Configuration
+**Implementation boundary:** repository/build tooling and all Phase 1 library tasks are merged, with one unchecked T-109 configuration-example follow-up recorded below. The API implements foundation and APIs 1–24; APIs 25–68 remain pending. The watcher has lease/node support and the fire poller; delayed polling, outbox relay and recovery remain pending. Executor, state, maintenance, mock target and benchmark CLI remain application skeletons. The end-to-end scheduler, resilience guarantees under load, and 20K / 50K capacity have not yet been demonstrated.
 
-Never commit secrets or generated `.env` files. Keep dependency versions in `gradle/libs.versions.toml` and refresh verification metadata through `make locks`.
+**Verification provenance:** the results below are recorded from prior implementation sessions. This consolidation checked Git history, checklist headers/subtasks, source layout, and documentation consistency; it did not rerun the application test suite.
 
-## Project Context
+**T-221 verification:** Docker `make bg BG_NAME=kairos-gradle-t221-final ARGS="spotlessApply build check"` passed: 2,144 tests, no failures/errors/skips; watcher line coverage 88.82%. PostgreSQL-backed integration tests verify two-watcher sharing, lease release and takeover, stale-generation rejection, and callback transactions protected by the lease row lock. The watcher owns a generation-fenced lease for at most 15 seconds, refreshes every 5 seconds, stops work 3 seconds before expiry, and releases writable-cell leases on shutdown. The node is live for 15 seconds after its last heartbeat. No schema migrations or production dependency versions changed; Testcontainers is test-only.
 
-Read [AGENT.md](AGENT.md) for architecture decisions, task status, workflow rules, and design references before starting work.
+**T-221 integration contract:** Poller tasks register a bounded name, interval, and per-shard callback with `ShardedPoller`; the callback runs in a cell transaction after an owner/generation check and holds a row lock through commit. Poller tasks should use the shared group size of eight and default jitter up to 200 ms. Fair shares use the configured cell shard range and live watcher count, with a two-lease surplus. `READ_ONLY` cells are not leased; `DRAINING` cells remain active until their shard range moves. T-222 through T-226 build on this support.
+
+**T-222 verification and integration contract:** Docker `make bg BG_NAME=kairos-gradle-t222-final2 ARGS="spotlessApply build check"` passed: 2,153 tests, no failures, errors or skips. PostgreSQL integration tests cover 10K cron schedules, one-time and workflow materialization, rollback, held schedules, outbox back-pressure, concurrent claims, committed notifications and a forced lease handover. Both watcher replicas and the rest of an isolated Compose stack became healthy; the stack and volumes were removed. `FirePoller` uses `ShardedPoller` for one-second, eight-shard periodic work and a PostgreSQL listener for wakeups. It reads the shared `RunCreationProperties.dispatchHorizon`; watcher configuration sets 5s. Schedule claims, run and outbox creation, and schedule advancement commit in one lease-guarded cell transaction. The outbox relay (T-224) is still required to publish dispatches.
+
+**T-104 verification:** Docker `make bg BG_NAME=kairos-gradle-t104 ARGS="spotlessApply build check"` passed with strict dependency verification: 2,136 tests, no failures/errors/skips; domain line coverage 99.55%. New tests cover bounded DAG plans, cycles, ancestor references, injection rejection, typed JSON insertion, sensitivity and output limits, plus 300 generated valid-DAG and 100 back-edge trials. No dependency, migration or service wiring changes.
+
+**T-104 integration contract:** T-206 resolves endpoint output declarations before constructing `WorkflowTask` and rejects duplicate JSON task keys before converting to maps. `WorkflowValidator` computes the immutable trusted plan; independent roots are valid. T-243 adapts Jackson trees through plain Java values to `JsonValue`, uses `OutputExtractor`, seals sensitive outputs before storage/publication, and handles extraction error classes and rendering `RENDER_FAILED`. PATH/QUERY renderer results are already percent-encoded: preserve these components when assembling HTTP requests; `OutboundRequest.withQueryParameter` accepts raw values and would double encode them. A null request body means no body; `JsonValue.NullValue` means explicit JSON null. See LLD section 3.7 for resource bounds and selector syntax.
+
+**T-203c verification:** Docker `make bg BG_NAME=kairos-gradle-t203c ARGS="spotlessApply build check"` passed with strict dependency verification: 2,108 tests, no failures/skips; API line coverage 94.89%. The fresh isolated Compose CRUD smoke test passed, including API-key management of encrypted secrets and public CA bundles, duplicate/invalid-input errors and audit redaction; its containers and volumes were removed. Additional integration cases verify deletion protection for retained endpoint versions. Credentials are bound by AES-GCM associated data to team/name/version; only metadata is returned. Lazy keyset initialization and optimistic rotation retries are race-safe; every mutation and audit entry commits together. Credential fields have explicit JSON string type checks, bounded sizes and kind-specific shapes; diagnostic strings are redacted. CA input must be certificate PEM only, at most 64 KiB and 10 currently valid CA certificates, with certificate-signing usage when present. Both lists paginate by name with team/list-bound cursors. No migration or production dependency changes; existing pinned Bouncy Castle artifacts were added to API test dependencies and the module lockfile regenerated. Test private keys stay in memory.
+
+**T-204 integration contract:** inject SecretLookup and CaBundleLookup for metadata-only validation. Lock the caller's team row FOR UPDATE in the endpoint mutation's control transaction before validating or changing references; T-203c deletion uses that same lock. Deletion checks current endpoint specs and retained api_endpoint_versions so pinned configurations retain credentials/trust anchors. The LLD records credential-name/value limits and clarifies that PUT secret rotation creates a version without If-Match. T-243 still owns credential loading/decryption and its 60s cache; T-203c makes new versions durable immediately.
+
+**T-203d verification:** Docker `make bg BG_NAME=kairos-gradle-t203d ARGS="spotlessApply build check"` passed: 2,088 tests, no failures/skips; API line coverage 94.24%. A fresh isolated Compose stack applied the overlap migration, became healthy, and passed onboarding, two signing rotations, API-key refusal on rotation, audit reads with an API key, action filtering and cursor pagination, then was removed. Rotation uses optimistic keyset replacement and atomic audit writes, with KEK operations outside transactions. `team_keysets.previous_key_valid_until` persists the returned deadline (new Flyway migration `V2026_10_23_1530__signing_key_overlap.sql`). Defaults: `kairos.api.signing.overlap=24h`, `prune-interval=60s`, `prune-batch-size=100`. Cleanup removes non-primary keys after the persisted deadline and cannot overwrite concurrent rotations. Targets must enforce their own verification-key deadlines. Existing account/team/API-key audit adapters delegate to `AuditWriter`; details accept bounded scalar metadata and reject secret fields/objects. Audit cursors retain the original time/action filter snapshot and are team-bound. No dependency changes.
+
+**T-203b verification:** Docker `make bg BG_NAME=kairos-gradle-t203b ARGS="spotlessApply build check"` passed: 2,067 tests, zero failures/skips, API line coverage 93.78%. An isolated Compose stack on port 18080 became healthy and passed signup/login/team/refresh/key create/authenticate/list/revoke, then was removed. All three management endpoints require a user token. Usage tracking is a feature-local interceptor plus bounded Caffeine coalescing and a SQL one-minute guard; the existing authentication cache enforces the 60s revocation bound. Creation/revocation audit entries commit with the mutation; T-203d now routes these through the shared writer. Pagination uses the existing `(team_id, created_at, key_id)` index and team/list-bound HMAC cursors. No dependency versions or lockfiles changed; Gradle generated missing Bouncy Castle 1.84 and JUnit 5.13.1 BOM `.module` checksums.
+
+**Marked done and merged to `develop` (23 tasks + 5 follow-up PRs; T-109 has the follow-up noted below):**
+
+- API: T-201 foundation (#18), T-202 accounts APIs 1–7 (#19), T-203a teams/members APIs 8–12 (#20), T-203b API keys APIs 13–15 (#23), T-203d signing/audit APIs 23–24 (#24), T-203c secrets/CA bundles APIs 16–22 (#25).
+- Watcher: T-221 shard leases and node registry (#27).
+- Tooling: T-001 skeleton, T-002 quality gates (PR #2), T-003 test support (#1), T-112 observability (#6).
+- Libraries: T-101 ids/shards (#4), T-102 schedules (#21), T-103 retry/outcomes/run state machine (#8), T-104 workflow DAG validation/templates (#26), T-105 proto contracts (#3), T-106 migrations (#5), T-107 persistence + cell routing (#7), T-108 messaging (#15), T-109 security (#10), T-110 outbound HTTP client + target policy (#12), T-111 Redis run lock + sent markers (#11), T-113 run creation + outbox writer (#9).
+- Follow-ups: dead-letter `fence` column + LLD/checklist fixes (#13); engine Spring configuration `OutboxConfiguration`/`RunCreationConfiguration` (#14); trace/key docs (#16); migrations create the JWT signing keyset after migrating (#17, closes old open item 1); API session/team refresh correction (#22).
+
+**Merged and awaiting checklist status update:** T-222 fire poller (#28) is `review`; its implementation and acceptance tests are merged.
+
+**Pending (27 tasks, all `todo`):**
+
+- `kairos-api`: T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
+- `kairos-watcher`: T-223 delayed poller, T-224 outbox relay, T-225 recovery sweepers, T-226 singleton tasks.
+- `kairos-executor`: T-241 dispatch consumers, T-242 execution gates, T-243 render/call/classify/publish, T-244 cancel + drain.
+- `kairos-state`: T-261 result settler, T-262 workflow progression, T-263 stats aggregator.
+- `kairos-maintenance`: T-281 partition manager, T-282 operator commands.
+- Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
+- Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
+
+**Next after the user selects a task:** T-223 delayed poller is the recommended continuation; T-221 and T-113 are merged. T-224 through T-226 are also ready by their declared dependencies. Other ready tasks are T-207, T-241, T-261, T-281, T-282, T-301, T-402 and T-403. T-204 has all declared checklist dependencies merged and can use the metadata lookup ports; completing its endpoint-test operation still needs the T-243 internal executor interface. Resolve that integration dependency explicitly when planning T-204. Work one task at a time and wait for the user’s go-ahead before starting another.
+
+**Open items:**
+
+1. T-243 must wire T-104's JSON adapter/output extraction, sensitive-output sealing and already-encoded HTTP components (see integration contract above).
+2. T-111 metric names `kairos_run_lock_acquire_total` and `kairos_redis_script_duration_seconds` are not yet in the T-112 metric table; the Redis readiness health indicator is left to a service task.
+3. From T-203a: `addedAt` = `users.created_at` until a `users.team_joined_at` migration.
+4. T-202's `LoginTimingIntegrationTest` compares wall-clock medians (unknown vs known email within 20%) and may be flaky on a loaded CI runner (watch in T-403).
+5. T-109 is merged and marked `done`, but its configuration-example subtask remains unchecked: `deploy/compose/.env.example` lacks `KAIROS_LOCAL_KEK`, `KAIROS_API_KEY_PEPPER` and `KAIROS_CURSOR_HMAC_KEY`. Their names are present in `scripts/dev-env.sh` and Compose. Keep this as a visible follow-up; do not claim all merged-task acceptance boxes are complete.
+
+**T-202 choices (accepted by user, 2026-10-21):** login lockout from 5 consecutive failures, 1m doubling to 1h (`kairos.api.accounts.lockout.*`); API keys on `/v1/me` and `/v1/me/password` get 401 `unauthenticated` (LLD rows), not 403; missing `refreshToken` is 400 `validation`, a bad one 401 `invalid-refresh-token`; bulk revocations (password change, refresh reuse) audited as `SESSIONS_REVOKED`, lockout as `LOGIN_LOCKED`; test fixtures also apply the day-partitions migration so `audit_log` has partitions.
+
+**Accepted integration decisions (user, 2026-10-20/21):** T-110 auth formats (`API_KEY {location: HEADER|QUERY, name}`, OAuth2 `{tokenUrl, scope?}`), whole-exchange deadline = `timeoutMs`, token-endpoint failures classified by the token endpoint's own status, all in LLD; libraries expose explicit `@Configuration(proxyBeanMethods = false)` classes that services `@Import` (checklist section 4.3, not LLD). **Work one task at a time and wait for the user's go-ahead before starting the next (user, 2026-10-21).**
+
+**How work is run in this project:** work one task at a time on a `t-<id>-<name>` branch based on `origin/develop`. Use an isolated worktree when needed to preserve unrelated work. Build with a unique container name (`make bg BG_NAME=kairos-gradle-t<id> ARGS=...`, same for `bg-wait`/`bg-logs`) so builds do not collide. The first commit claims the task (and flips any merged-but-`review` statuses), the last ticks sub-tasks and sets `review`. Before reporting, verify the pushed branch: the configured Git identity, no assistant-attribution trailers, no secrets, paths limited to the task's "Owns", and `git merge-tree` against `develop` and any related active branch. When rebasing onto a newer `develop`, take either side of lockfile/`verification-metadata.xml` conflicts and regenerate them with `make locks`, run the full check, then `git push --force-with-lease=<branch>:<old-sha>`. The user opens and merges PRs themselves (no `gh` CLI on this machine).
+
+## Accepted product and architecture decisions
+
+- **Workflow the user set:** HLD → user review and confirmation → LLD → implementation. HLD and LLD are approved, so implementation follows `IMPLEMENTATION_CHECKLIST.md`. Still get the user's confirmation before starting each new stage.
+- **Goal:** a production-grade distributed job scheduler (Airflow/Temporal/Celery style), built with best practices and design patterns.
+- **Decisions made by the user (2026-10-12):**
+  - **Baseline design = the original PDF lesson**. Production research is used only for explicit, justified deviations, which are now recorded neutrally in HLD section 14 (Key decisions).
+  - **Jobs are synchronous HTTP API calls to internal endpoints only.** No script, shell or container execution.
+  - **API configuration lives in a per-tenant `api_endpoints` registry**, scoped by `team_id` (the early design called this tenant scope) rather than one physical table per team. Jobs and tasks reference endpoints by name. Auth type `NONE` must be supported.
+  - **Retries:** 5 retries at queue level with exponential backoff and jitter (30s base, 10-minute cap, about 15 minutes before the DLQ; confirmed). After that, the run goes to the DLQ for manual triage, with auto-protection (HLD section 10).
+  - **DAG workflows are in scope, with data passing.** Upstream response outputs (body or headers) can be injected into downstream request body, headers, path or query (LLD section 2/3, workflows).
+  - **Deployment target: Kubernetes on GCP** (GKE, Cloud SQL, Managed Kafka, Secret Manager and KMS) with Terraform and Helm. This is a learning project and will **not be deployed**, but it must be production grade. Validate locally on `kind`.
+  - **Auth for the scheduler API: per-tenant API keys** with scopes, stored as HMAC-SHA256 hashes with a pepper from Secret Manager, shown once, rotatable (HLD section 7).
+  - **Auto-protection on by default:** endpoint auto-suspend and job auto-pause (after 3 consecutive dead-lettered runs), with opt-out per endpoint or job.
+  - **Retention: 7 days** for run history, task outputs, resolved DLQ entries and deleted jobs/workflows; audit logs are kept for 90 days. Unresolved DLQ entries are never purged automatically.
+  - **Stack: Java, Spring Boot, PostgreSQL, Kafka, Redis.** Redis was re-added in HLD v1.1 for execution locks, sent markers and API rate limits.
+  - **NON-NEGOTIABLE (user, 2026-10-12): at-least-once execution via the transactional outbox pattern (explicit `outbox` table + relay), and no duplicate job execution via a Redis distributed lock.** The design is in HLD section 6 (Execution guarantees): a fence-aware Redis lock + fenced DB claim + send-time guard + sent marker + `unknownOutcomePolicy`. Never remove or weaken either mechanism.
+  - **Target (revised 2026-10-13): 20K executions/s sustained and 50K/s peak (design for the peak).** Reference production: control DB + 2 cells (shards 0–127, 128–255). Infra and resource sizing deferred.
+  - **Teams, kept simple (revised 2026-10-13, replaces organizations):** an **internal platform**. **Signup = email + password; login = email + password. No email verification, no invitation or reset emails, nothing sends email** (user, 2026-10-13). A new user has no team (403 `no-team` on scheduling APIs) and either creates one (`POST /v1/teams`) or is added by any existing member by email (`POST /v1/team/members`); refresh picks up the team into the JWT. One team per user (`users.team_id` nullable). **No roles** (every member equal; any member can pause/cancel/delete jobs, add/remove members). Team comes from the token/API key only; flat routes `/v1/jobs` etc.; cross-team ids return 404. **No egress rules or approval**: any internal API may be scheduled, guarded only by a platform-wide target policy (internal suffixes/CIDRs, ports, fixed deny list, DNS-rebinding defence). **No platform admin API**: quotas from config defaults; operators use the `kairos-maintenance` CLI (`team set-quota`, `user disable`, `user reset-password`). Jobs/workflows can be deleted (status DELETED, name reusable). Focus is the core scheduler, not user management.
+  - **Database choice (2026-10-13):** stay on sharded PostgreSQL cells, not Cassandra (HLD sections 8 and 14): the outbox, fenced claims, unique occurrences and atomic settlement need transactions. Distributed SQL (Spanner/CockroachDB) is the fallback. Cell count (2, or 4 of 64 shards) must be confirmed by the pending T-306 per-cell write test.
+  - **Repo shape:** a monorepo with four microservices (`services/kairos-api`, `kairos-watcher`, `kairos-executor`, `kairos-state`), one image each, plus `libs/*` (domain, proto, persistence, messaging, security, http, engine), `jobs/*` (migrations, maintenance) and `tools/*` (mock-target, bench-cli).
+  - **Sharding:** `shard = murmur3(team_id + name) mod 256`; names are immutable; job, workflow, run and DLQ ids embed the shard in their low 8 bits; `api_idempotency` lives in the database that owns the resource.
+  - **Lost-response default:** `unknownOutcomePolicy = RETRY_WITH_IDEMPOTENCY_KEY`.
+  - **Project name: Kairos.** Java package root `dev.kairos`; Gradle modules and deployables `kairos-*` (e.g. `kairos-domain`, `kairos-api`); config prefix `kairos.*`; env prefix `KAIROS_`; metrics `kairos_*`; Redis keys `kairos:*`; Kafka topics `kairos.run.*`; HTTP headers `X-Kairos-*`. SQL schema, table and role names stay functional (`scheduler`, `sched_*`).
+- **Security:** every code artefact follows the security checklist in IMPLEMENTATION_CHECKLIST section 4.8. In particular: HTTPS-only targets, parameterised SQL only, no hardcoded secrets, and API keys stored as HMAC hashes. See HLD section 11 and IMPLEMENTATION_CHECKLIST section 4.8.
+- **Current design:** approved HLD/LLD and the implementation checklist supersede the original lesson. Its 3-retry defaults, arbitrary-code execution, `/v1/api` routes, 20s polling and older scale assumptions are not implementation requirements.
+
+## Documentation conventions (user requirement, 2026-10-12)
+
+- **Repository documentation:** `AGENTS.md` is the single contributor guide, project context and status record (consolidated at the user’s request, 2026-10-23). Keep it alongside the design documents, implementation checklist, and `assets/kairos-flow.svg`. Keep the LLD in one file. The lesson PDF and `.local/` tooling remain local; do not add them to commits.
+- **Keep docs lean (user, 2026-10-13):** the LLD contains only (1) database design: entity relationships plus each table's columns and data types, (2) the API list with contracts, each API as a collapsible `<details>` block with an `http` request code block (URL, headers, path/query params, body), the success response, an errors table plus problem+json bodies, and the background effect, generated by `.local/apigen/gen.py` so every JSON example is valid, (3) background jobs with their parameters, plus Kafka topics and Redis keys. No SQL queries, no pseudo-code, no repo layout or milestones. The HLD is short and built around **one** end-to-end diagram (onboarding, registering and scheduling, execution, retries and DLQ, dependent tasks) using real Kairos names.
+- **Write throughput as 20K / 50K**, never 20,000 / 50,000. **Never use the section-sign symbol** in any document; write "section 7" or "part 05, section 2".
+- **HLD and LLD must read as production design documents written by an engineer.** That means:
+  - no mentions of the lesson, PDF, research notes, "baseline", deviations, AI tools or review conversations;
+  - no "you" or "your decision" phrasing;
+  - decisions are recorded neutrally (HLD section 14 "Key decisions", LLD section 1), and revision history tables are fine.
+- **Diagrams are hand-drawn (Excalidraw-style) SVGs, not Mermaid code blocks.**
+  - The source is `.local/diagram-src/kairos-flow.mmd` and the rendered SVG is `assets/kairos-flow.svg`, referenced as an image from HLD.md and README.md.
+  - Render with `.local/diagram-tools/render.cjs`: Mermaid "handDrawn" look, the Virgil font embedded, white background, valid XML, labels as SVG text.
+  - Command: `NM=<node_modules containing puppeteer + mermaid> node .local/diagram-tools/render.cjs .local/diagram-tools/cfg.json .local/diagram-tools/Virgil.woff2 assets .local/diagram-src/kairos-flow.mmd`
+  - Visually check with `shot.cjs`.
+  - Use class styles with fill only (`fill:#a5d8ff` and so on); setting `stroke` darkens the hatching.
+  - Sequence diagrams don't support the hand-drawn look, so draw flows as flowcharts with numbered steps.
+  - To lay out a row inside a subgraph, link subgraph to subgraph rather than node to node.
+
+## Design references and historical provenance
+
+The original lesson informed the design; its detailed historical notes were removed during consolidation because they contain superseded implementation instructions. Git history retains them. Use the approved design documents for current requirements.
+
+- Lesson: InterviewWithBunny, *System Design 9: Design Distributed Job Scheduler like Airflow | Temporal | Celery*: https://www.interviewwithbunny.com/systemdesign/09
+- Local reference: the 25-page PDF print in the repository root; keep it untracked. Its design diagram did not render in the PDF.
+- Video: https://youtu.be/hLvB2haod5w
+- Original diagram: https://ik.imagekit.io/interviewwithbunny/kjn24ht84tyq384tq3t4o3gb4og42b.jpeg
+- Historical SPA content source: `https://ik.imagekit.io/interviewwithbunny/courses21_7.json`, under `courses.systemdesign.videos[id="09"].refresher`; recorded cheat-sheet update 2026-01-20.
+- [PRODUCTION_RESEARCH.md](PRODUCTION_RESEARCH.md) compares production schedulers and failure cases. Read it before changing architecture; accepted decisions are recorded neutrally in HLD section 14.
