@@ -259,7 +259,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-002 | Build quality gates | build-logic | done |
 | T-003 | Shared test support | libs/kairos-test-support | done |
 | T-101 | Identifiers, shards and domain types | kairos-domain | done |
-| T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
+| T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | review |
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | done |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
@@ -368,14 +368,14 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** jqwik properties hold (`shardOf(newId(shard)) == shard` for all shards; ids sort by creation time); golden shard vectors pass; ArchUnit confirms no framework imports.
 
 ### T-102 Schedules: cron, interval, time zones, misfire
-**Status:** todo · **Needs:** T-101 · **Owns:** `dev.kairos.domain.schedule`
+**Status:** review · **Needs:** T-101 · **Owns:** `dev.kairos.domain.schedule`
 
-- [ ] `ScheduleSpec` sealed hierarchy: `Immediate`, `OneTime(at)`, `Cron(expression, zone)`, `Interval(every)`, validated as in LLD section 3.6 (5-field cron via cron-utils with Unix semantics; IANA zone ids only; interval ≥ 1s; one-time at least now − 60s).
-- [ ] `ScheduleCalculator` strategy per kind: `nextFire(after, lastFiredLocal)` returns the next UTC instant plus the local time it represents.
-- [ ] DST handling (`dst_policy`): for a local time that falls in a gap, the default is to run at the first valid instant after the gap. For a time that occurs twice in an overlap, the default is to run once, at the first occurrence. Both are configurable per the LLD. `last_fired_local` prevents double firing in overlaps.
-- [ ] `spread_ms`: a deterministic offset in [0, min(60s, period/10)) derived from the job id, to smooth top-of-minute spikes.
-- [ ] Misfire handling (`RUN_LATEST` default, `RUN_ALL` capped by `max_catchup` (default 100), `SKIP`) given `now`, `next_fire_at` and the 60s misfire threshold, returning the list of occurrences to create.
-- [ ] Preview helper used by the API: next N fire times (N ≤ 10).
+- [x] `ScheduleSpec` sealed hierarchy: `Immediate`, `OneTime(at)`, `Cron(expression, zone)`, `Interval(every)`, validated as in LLD section 3.6 (5-field cron via cron-utils with Unix semantics; IANA zone ids only; interval ≥ 1s; one-time at least now − 60s). `ScheduleRequest.toSpec(now)` validates the API `schedule` object and reports every invalid field (`schedule.type` `required`/`enum`, `schedule.expression` `invalid-cron`, `schedule.timezone` `format` for non-region ids such as `+05:30`, `schedule.everySec` `range` 1 s to 366 days, `schedule.at` `format`/`range`).
+- [x] `ScheduleCalculator` strategy per kind: `nextFire(after, lastFiredLocal)` returns the next UTC instant plus the local time it represents (`Fire`). Cron matches local wall-clock times and maps them to instants; intervals count whole periods from an anchor (creation time or the stored `next_fire_at`).
+- [x] DST handling (`dst_policy`): for a local time that falls in a gap, the default is to run at the first valid instant after the gap. For a time that occurs twice in an overlap, the default is to run once, at the first occurrence. Both are configurable per the LLD. `last_fired_local` prevents double firing in overlaps. Several local times in one gap shift to one fire; under `BOTH` the two passes of a repeated hour interleave in instant order.
+- [x] `spread_ms`: a deterministic offset in [0, min(60s, period/10)) derived from the job id, to smooth top-of-minute spikes (`murmur3_32_fixed` of the UUID bytes; the cron period is the shortest gap between matches; one-time schedules get 0).
+- [x] Misfire handling (`RUN_LATEST` default, `RUN_ALL` capped by `max_catchup` (default 100), `SKIP`) given `now`, `next_fire_at` and the 60s misfire threshold, returning the list of occurrences to create (`FirePlan`: fires, new `next_fire_at` and `last_fired_local`, misfired flag). `RUN_ALL` keeps the most recent `max_catchup` misfired occurrences (0 to 1,000), `RUN_LATEST` runs the latest one only when nothing falls in the on-time window, and long backlogs are found by looking back in doubling windows rather than one by one.
+- [x] Preview helper used by the API: next N fire times (N ≤ 10).
 
 **Acceptance:** tests for New York, London, Sydney, Kolkata and Lord Howe (30-minute DST) across both transitions; `0 2 * * *` on DST-start day follows the gap policy; `30 1 * * *` on DST-end day fires once; jqwik property: fire times are strictly increasing and never skip a valid occurrence.
 
