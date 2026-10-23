@@ -368,7 +368,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** jqwik properties hold (`shardOf(newId(shard)) == shard` for all shards; ids sort by creation time); golden shard vectors pass; ArchUnit confirms no framework imports.
 
 ### T-102 Schedules: cron, interval, time zones, misfire
-**Status:** review · **Needs:** T-101 · **Owns:** `dev.kairos.domain.schedule`
+**Status:** done · **Needs:** T-101 · **Owns:** `dev.kairos.domain.schedule`
 
 - [x] `ScheduleSpec` sealed hierarchy: `Immediate`, `OneTime(at)`, `Cron(expression, zone)`, `Interval(every)`, validated as in LLD section 3.6 (5-field cron via cron-utils with Unix semantics; IANA zone ids only; interval ≥ 1s; one-time at least now − 60s). `ScheduleRequest.toSpec(now)` validates the API `schedule` object and reports every invalid field (`schedule.type` `required`/`enum`, `schedule.expression` `invalid-cron`, `schedule.timezone` `format` for non-region ids such as `+05:30`, `schedule.everySec` `range` 1 s to 366 days, `schedule.at` `format`/`range`).
 - [x] `ScheduleCalculator` strategy per kind: `nextFire(after, lastFiredLocal)` returns the next UTC instant plus the local time it represents (`Fire`). Cron matches local wall-clock times and maps them to instants; intervals count whole periods from an anchor (creation time or the stored `next_fire_at`).
@@ -595,7 +595,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** web and integration tests for every success and error row in LLD section 3.3; login timing for unknown and known emails is within 20% (benchmark test); refresh reuse revokes every token in the family.
 
 ### T-203a Team and members APIs (LLD APIs 8–12)
-**Status:** review · **Needs:** T-201, T-202 (user repository) · **Owns:** `dev.kairos.api.team`
+**Status:** done · **Needs:** T-201, T-202 (user repository) · **Owns:** `dev.kairos.api.team`
 
 - [x] 8 `POST /v1/teams`: only for a user without a team (`409 already-in-team`). Creates the team with default quotas, makes the caller a member and creates the team's encryption and signing keysets, in one transaction on the control database. The `signingKey` is returned only once. `409 team-name-taken` on a slug conflict; rate-limited per user. The caller refreshes to get a token carrying the team.
 - [x] 9 `GET /v1/team`.
@@ -607,14 +607,16 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** tests for each LLD row; a removed member's access token is rejected within 30s, without waiting for it to expire.
 
 ### T-203b API key APIs (LLD APIs 13–15)
-**Status:** todo · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.apikeys`
+**Status:** review · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.apikeys`
 
-- [ ] 13 `POST /v1/api-keys`: user tokens only (`403 forbidden-for-api-key`); returns the full key once; stores only the HMAC; optional expiry.
-- [ ] 14 `GET /v1/api-keys`: metadata only (`keyId`, name, created, last used, expiry).
-- [ ] 15 `DELETE /v1/api-keys/{keyId}`: user tokens only; revokes the key. Cached key lookups expire within 60s, after which the key is rejected everywhere.
-- [ ] `last_used_at` updated at most once per minute per key (no write per request).
+- [x] 13 `POST /v1/api-keys`: user tokens only (`403 forbidden-for-api-key`); returns the full key once; stores only the HMAC; optional expiry.
+- [x] 14 `GET /v1/api-keys`: metadata only (`keyId`, name, created, last used, expiry).
+- [x] 15 `DELETE /v1/api-keys/{keyId}`: user tokens only; revokes the key. Cached key lookups expire within 60s, after which the key is rejected everywhere.
+- [x] `last_used_at` updated at most once per minute per key (no write per request).
 
 **Acceptance:** a created key authenticates; a revoked key returns 401 within 60s; the stored hash never equals the secret; the list never shows the secret.
+
+**Verification (2026-10-23):** Docker `spotlessApply build check` passed (2,067 tests; API line coverage 93.78%). Integration tests cover expiry/revocation with an injected clock, team-scoped authenticated cursors, concurrent revocation, throttled usage updates and atomic audit rollback. An isolated Compose stack became healthy and passed signup → login → team → refresh → key creation/authentication/listing/revocation; its test containers and volumes were removed. Implementation is on `t-203b-api-keys`, ready for PR review against `develop`. Gradle regenerated two missing BOM metadata checksums; dependency versions and lockfiles are unchanged.
 
 ### T-203c Secrets and CA bundle APIs (LLD APIs 16–22)
 **Status:** todo · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
