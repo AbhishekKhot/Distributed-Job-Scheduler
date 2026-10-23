@@ -139,10 +139,7 @@ class TeamIntegrationTest extends ApiApplicationTest {
         JsonNode tokens = json.readTree(refreshed.body());
         assertThat(tokens.path("teamId").isNull()).isFalse();
 
-        // The session check caches (user, session) for up to 30s with the team it saw (none) when this login
-        // created the team, so a refreshed token carrying the team is refused until that entry expires. Drop the
-        // cache instead of waiting; see the T-201 follow-up in the T-203a notes.
-        authenticator.invalidateAll();
+        // No cache reset: the refreshed token was issued after the cached "no team" state, so it is re-read at once.
         HttpResponse<String> team =
                 send("GET", "/v1/team", tokens.path("accessToken").asString(), null);
 

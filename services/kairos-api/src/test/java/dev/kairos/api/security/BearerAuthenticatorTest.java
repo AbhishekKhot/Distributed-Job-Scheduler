@@ -119,6 +119,56 @@ class BearerAuthenticatorTest {
     }
 
     @Test
+    void aTokenRefreshedAfterJoiningATeamIsAcceptedAtOnce() {
+        sessions.state = new SessionLookup.SessionState(true, true, null);
+        assertThat(authenticator.authenticate(token(null))).isInstanceOf(Authenticated.class);
+
+        clock.advance(Duration.ofSeconds(2));
+        sessions.state = new SessionLookup.SessionState(true, true, team);
+
+        assertThat(authenticator.authenticate(token(team)))
+                .isEqualTo(new Authenticated(new UserPrincipal(user, team, session)));
+        assertThat(sessions.reads.get()).isEqualTo(2);
+    }
+
+    @Test
+    void anOlderTokenWithAnotherTeamIsRejectedWithoutReReading() {
+        String old = token(null);
+        clock.advance(Duration.ofSeconds(2));
+        sessions.state = new SessionLookup.SessionState(true, true, team);
+        assertThat(authenticator.authenticate(token(team))).isInstanceOf(Authenticated.class);
+
+        for (int i = 0; i < 3; i++) {
+            assertThat(authenticator.authenticate(old)).isEqualTo(new Rejected(Reason.TEAM_CHANGED));
+        }
+        assertThat(sessions.reads.get()).isEqualTo(1);
+    }
+
+    @Test
+    void aReReadThatStillDisagreesIsRejectedAndNotRepeated() {
+        sessions.state = new SessionLookup.SessionState(true, true, null);
+        authenticator.authenticate(token(null));
+        clock.advance(Duration.ofSeconds(2));
+        String refreshed = token(team);
+        clock.advance(Duration.ofSeconds(1));
+
+        assertThat(authenticator.authenticate(refreshed)).isEqualTo(new Rejected(Reason.TEAM_CHANGED));
+        assertThat(authenticator.authenticate(refreshed)).isEqualTo(new Rejected(Reason.TEAM_CHANGED));
+        assertThat(sessions.reads.get()).isEqualTo(2);
+    }
+
+    @Test
+    void aRevokedSessionIsNotReReadOnATeamMismatch() {
+        sessions.state = new SessionLookup.SessionState(false, true, null);
+        authenticator.authenticate(token(null));
+        clock.advance(Duration.ofSeconds(2));
+        sessions.state = new SessionLookup.SessionState(true, true, team);
+
+        assertThat(authenticator.authenticate(token(team))).isEqualTo(new Rejected(Reason.SESSION_REVOKED));
+        assertThat(sessions.reads.get()).isEqualTo(1);
+    }
+
+    @Test
     void anApiKeyAuthenticatesItsTeam() {
         IssuedApiKey key = apiKeys.issue();
         keys.store(key, team, null, null);
