@@ -37,7 +37,11 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 
 ## Progress and next steps (update at the end of every session)
 
-**Status at end of session (2026-10-23).** T-203d is merged into `develop` through PR #24 (`9c44363`); its checklist status is now `done`. T-203c secrets/CA bundle APIs 16–22 are implemented on `t-203c-secrets-ca-bundles`, with checklist status `review`, awaiting PR review and merge. Phase 1 remains complete except T-104; other runtime services remain skeletons.
+**Status at end of session (2026-10-23).** T-203c is merged into `develop` through PR #25 (`055e6d8`); its checklist status is `done`. T-104 workflow DAG validation and templates are implemented on `t-104-workflow-templates`, with checklist status `review`, awaiting PR review and merge. All Phase 1 library tasks are implemented; other runtime services remain skeletons.
+
+**T-104 verification:** Docker `make bg BG_NAME=kairos-gradle-t104 ARGS="spotlessApply build check"` passed with strict dependency verification: 2,136 tests, no failures/errors/skips; domain line coverage 99.55%. New tests cover bounded DAG plans, cycles, ancestor references, injection rejection, typed JSON insertion, sensitivity and output limits, plus 300 generated valid-DAG and 100 back-edge trials. No dependency, migration or service wiring changes.
+
+**T-104 integration contract:** T-206 resolves endpoint output declarations before constructing `WorkflowTask` and rejects duplicate JSON task keys before converting to maps. `WorkflowValidator` computes the immutable trusted plan; independent roots are valid. T-243 adapts Jackson trees through plain Java values to `JsonValue`, uses `OutputExtractor`, seals sensitive outputs before storage/publication, and handles extraction error classes and rendering `RENDER_FAILED`. PATH/QUERY renderer results are already percent-encoded: preserve these components when assembling HTTP requests; `OutboundRequest.withQueryParameter` accepts raw values and would double encode them. A null request body means no body; `JsonValue.NullValue` means explicit JSON null. See LLD section 3.7 for resource bounds and selector syntax.
 
 **T-203c verification:** Docker `make bg BG_NAME=kairos-gradle-t203c ARGS="spotlessApply build check"` passed with strict dependency verification: 2,108 tests, no failures/skips; API line coverage 94.89%. The fresh isolated Compose CRUD smoke test passed, including API-key management of encrypted secrets and public CA bundles, duplicate/invalid-input errors and audit redaction; its containers and volumes were removed. Additional integration cases verify deletion protection for retained endpoint versions. Credentials are bound by AES-GCM associated data to team/name/version; only metadata is returned. Lazy keyset initialization and optimistic rotation retries are race-safe; every mutation and audit entry commits together. Credential fields have explicit JSON string type checks, bounded sizes and kind-specific shapes; diagnostic strings are redacted. CA input must be certificate PEM only, at most 64 KiB and 10 currently valid CA certificates, with certificate-signing usage when present. Both lists paginate by name with team/list-bound cursors. No migration or production dependency changes; existing pinned Bouncy Castle artifacts were added to API test dependencies and the module lockfile regenerated. Test private keys stay in memory.
 
@@ -47,15 +51,15 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 
 **T-203b verification:** Docker `make bg BG_NAME=kairos-gradle-t203b ARGS="spotlessApply build check"` passed: 2,067 tests, zero failures/skips, API line coverage 93.78%. An isolated Compose stack on port 18080 became healthy and passed signup/login/team/refresh/key create/authenticate/list/revoke, then was removed. All three management endpoints require a user token. Usage tracking is a feature-local interceptor plus bounded Caffeine coalescing and a SQL one-minute guard; the existing authentication cache enforces the 60s revocation bound. Creation/revocation audit entries commit with the mutation; T-203d now routes these through the shared writer. Pagination uses the existing `(team_id, created_at, key_id)` index and team/list-bound HMAC cursors. No dependency versions or lockfiles changed; Gradle generated missing Bouncy Castle 1.84 and JUnit 5.13.1 BOM `.module` checksums. Unrelated local configuration changes and the lesson PDF are excluded from the task commits.
 
-**Done, merged to `develop` (20 tasks + 5 follow-ups):**
-- API: T-201 foundation (#18), T-202 accounts APIs 1–7 (#19), T-203a teams/members APIs 8–12 (#20), T-203b API keys APIs 13–15 (#23), T-203d signing/audit APIs 23–24 (#24).
+**Done, merged to `develop` (21 tasks + 5 follow-ups):**
+- API: T-201 foundation (#18), T-202 accounts APIs 1–7 (#19), T-203a teams/members APIs 8–12 (#20), T-203b API keys APIs 13–15 (#23), T-203d signing/audit APIs 23–24 (#24), T-203c secrets/CA bundles APIs 16–22 (#25).
 - Tooling: T-001 skeleton, T-002 quality gates (PR #2), T-003 test support (#1), T-112 observability (#6).
 - Libraries: T-101 ids/shards (#4), T-102 schedules (#21), T-103 retry/outcomes/run state machine (#8), T-105 proto contracts (#3), T-106 migrations (#5), T-107 persistence + cell routing (#7), T-108 messaging (#15), T-109 security (#10), T-110 outbound HTTP client + target policy (#12), T-111 Redis run lock + sent markers (#11), T-113 run creation + outbox writer (#9).
 - Follow-ups: dead-letter `fence` column + LLD/checklist fixes (#13); engine Spring configuration `OutboxConfiguration`/`RunCreationConfiguration` (#14); trace/key docs (#16); migrations create the JWT signing keyset after migrating (#17, closes old open item 1).
 
-**Not yet merged (31 tasks; T-203c awaits PR review):**
-- Libraries: T-104 workflow DAG validation and templates.
-- `kairos-api`: T-203c secrets/CA bundles (review), T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
+**Not yet merged (30 tasks; T-104 awaits PR review):**
+- Libraries: T-104 workflow DAG validation and templates (review).
+- `kairos-api`: T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
 - `kairos-watcher`: T-221 shard leases, T-222 fire poller, T-223 delayed poller, T-224 outbox relay, T-225 recovery sweepers, T-226 singleton tasks.
 - `kairos-executor`: T-241 dispatch consumers, T-242 execution gates, T-243 render/call/classify/publish, T-244 cancel + drain.
 - `kairos-state`: T-261 result settler, T-262 workflow progression, T-263 stats aggregator.
@@ -63,11 +67,11 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 - Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Ready after the user selects the next task:** T-104, T-207, T-221, T-241, T-261, T-281, T-282, T-301, T-402, T-403. After T-203c merges, T-204 can use the metadata lookup ports; its endpoint-test operation still needs the T-243 executor interface. T-104 is the remaining library task and can start independently. Confirm the next task with the user before proceeding. T-102 and T-203a checklist statuses were reconciled to `done` based on their merged PRs. Wait for user go-ahead before another task.
+**Ready after the user selects the next task:** T-207, T-221, T-241, T-261, T-281, T-282, T-301, T-402, T-403. T-204 can use the merged metadata lookup ports; its endpoint-test operation still needs the T-243 executor interface. T-221 shard leases and T-241 dispatch consumers are independent entry points into the next runtime services. Wait for user go-ahead before another task.
 
 **Open items:**
 1. Done (#17): migrations bootstrap the JWT keyset.
-2. T-243 needs an adapter from Jackson `JsonNode` (T-110) to T-104's plain-Java output extraction.
+2. T-243 must wire T-104's JSON adapter/output extraction, sensitive-output sealing and already-encoded HTTP components (see integration contract above).
 3. T-111 metric names `kairos_run_lock_acquire_total` and `kairos_redis_script_duration_seconds` are not yet in the T-112 metric table; the Redis readiness health indicator is left to a service task.
 4. `kairos.engine.runs.dispatch-horizon` (default 5s) must equal the fire poller look-ahead (T-222 should read the same property). The engine's `OutboxConfiguration` owns the single `KairosIdFactory` bean; services inject it and never define their own.
 5. Implemented in T-203d: signing-key pruning uses the persisted `previousKeyValidUntil`.
