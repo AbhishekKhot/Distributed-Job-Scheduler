@@ -119,6 +119,16 @@ kairos:
         threshold: 5
         base: 1m
         max: 1h
+    team:
+      # Quotas of a new team (stored in teams.quotas, changed later with the maintenance CLI). Also used for any
+      # quota a team's row does not set.
+      default-quotas:
+        max-jobs: 10000
+        max-exec-per-sec: 2000
+        max-inflight: 2000
+        max-workflow-tasks: 200
+        backfill-per-sec: 100
+        redrive-per-sec: 100
     # CIDRs of the load balancers or ingress proxies whose X-Forwarded-For is trusted. Empty: the header is ignored.
     trusted-proxies: []
     # Token buckets in Redis (kairos:rl:*). capacity requests per period, refilled evenly.
