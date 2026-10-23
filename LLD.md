@@ -3113,6 +3113,11 @@ Content-Type: application/problem+json
 
 Workflow body rules: `name` follows the job name rule; task keys match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; acyclic, at most 200 tasks and 10 levels; placeholders (`{{ tasks.<task>.outputs.<name> }}`, `{{ run.id }}`) may reference only declared outputs of ancestor tasks and never the URL host; `onTaskFailure` is `BLOCK_FOR_REVIEW` (default) or `FAIL_FAST`.
 
+Template values support only `{{ run.id }}` and `{{ tasks.<task>.outputs.<name> }}`. The producer must be an ancestor and the named output must be declared by its resolved endpoint configuration. A single placeholder used as a JSON value preserves its type; mixed text accepts scalar values only. JSON property names, URL hosts and schemes cannot contain placeholders. Sensitive outputs may render into headers or body values, never path or query values. Path segments and query values use UTF-8 percent encoding exactly once; path traversal, pre-encoded path separators/traversal sequences, and header control characters are rejected. Templates are limited to 16384 characters per field, rendered scalar fields to 64 KiB, and JSON trees to 32 nested levels and 16384 nodes; rendered bodies remain capped at 1 MiB. Total request-template bytes across a workflow cannot exceed 512 KiB.
+
+Tasks use at most 256 declared outputs. BODY selectors support `$`, dot properties and non-negative array indexes such as `$.data.items[0].id`; recursive searches, wildcards and expressions are unsupported. HEADER selectors match names without case sensitivity and require a single unambiguous value. STATUS produces a JSON number. Missing required values fail extraction; missing optional values are omitted, while an explicit JSON null remains a value. The 24 KiB output limit includes serialized names, JSON structure and sensitive values. Multiple independent roots are valid; a cyclic component is invalid even when other roots are reachable.
+
+
 <details>
 <summary><b>46. Create a workflow</b> &nbsp; <code>POST /v1/workflows</code></summary>
 
