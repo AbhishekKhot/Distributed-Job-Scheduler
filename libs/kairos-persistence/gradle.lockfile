@@ -4,6 +4,7 @@
 # To regenerate this file, run: ./gradlew :libs:kairos-persistence:dependencies --write-locks
 ch.qos.logback:logback-classic:1.5.38=testRuntimeClasspath
 ch.qos.logback:logback-core:1.5.38=testRuntimeClasspath
+com.cronutils:cron-utils:9.2.1=runtimeClasspath,testRuntimeClasspath
 com.fasterxml.jackson.core:jackson-annotations:2.21=compileClasspath,testCompileClasspath,testRuntimeClasspath
 com.fasterxml:classmate:1.7.3=testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.0.5=testAnnotationProcessor
