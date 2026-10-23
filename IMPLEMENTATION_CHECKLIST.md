@@ -619,17 +619,21 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-23):** Docker `spotlessApply build check` passed (2,067 tests; API line coverage 93.78%). Integration tests cover expiry/revocation with an injected clock, team-scoped authenticated cursors, concurrent revocation, throttled usage updates and atomic audit rollback. An isolated Compose stack became healthy and passed signup → login → team → refresh → key creation/authentication/listing/revocation; its test containers and volumes were removed. Implementation is on `t-203b-api-keys`, ready for PR review against `develop`. Gradle regenerated two missing BOM metadata checksums; dependency versions and lockfiles are unchanged.
 
 ### T-203c Secrets and CA bundle APIs (LLD APIs 16–22)
-**Status:** in progress (abhishekkhot) · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
+**Status:** review · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
 
-- [ ] 16 `POST /v1/secrets`: name, kind and value validated per kind; encrypted with the team's `SECRETS` keyset (keyset created on first use); version 1. Never returned.
-- [ ] 17 `GET /v1/secrets`: names, kinds, versions and dates only.
-- [ ] 18 `PUT /v1/secrets/{name}`: adds a new version; new calls use it within 60s (executor secret cache TTL).
-- [ ] 19 `DELETE /v1/secrets/{name}`: `409 secret-in-use` while an endpoint references it.
-- [ ] 20 `POST /v1/ca-bundles`: PEM parsed and validated (certificates only, CA flag set, not expired, ≤ 64 KB, at most 10 certificates); failures return the LLD `400` message; `409 ca-bundle-exists` for a duplicate name.
-- [ ] 21 `GET /v1/ca-bundles`, 22 `DELETE /v1/ca-bundles/{name}` (`409 ca-bundle-in-use` while referenced).
-- [ ] Audit entries for every change (without values).
+**Integration scope:** API wiring/OpenAPI verification, credential-field rejection in the shared audit writer, and test-only certificate-generation dependencies with their generated lockfile.
+
+- [x] 16 `POST /v1/secrets`: name, kind and value validated per kind; encrypted with the team's `SECRETS` keyset (keyset created on first use); version 1. Never returned.
+- [x] 17 `GET /v1/secrets`: names, kinds, versions and dates only.
+- [x] 18 `PUT /v1/secrets/{name}`: adds a new version; new calls use it within 60s (executor secret cache TTL).
+- [x] 19 `DELETE /v1/secrets/{name}`: `409 secret-in-use` while a current or retained immutable endpoint version references it.
+- [x] 20 `POST /v1/ca-bundles`: PEM parsed and validated (certificates only, CA flag set, not expired, ≤ 64 KB, at most 10 certificates); failures return the LLD `400` message; `409 ca-bundle-exists` for a duplicate name.
+- [x] 21 `GET /v1/ca-bundles`, 22 `DELETE /v1/ca-bundles/{name}` (`409 ca-bundle-in-use` while referenced by a current or retained endpoint version).
+- [x] Audit entries for every change (without values).
 
 **Acceptance:** stored ciphertext decrypts only with the right associated data; no secret value appears in responses, logs or audit details (asserted with a canary value across the whole test).
+
+**Verification (2026-10-23):** Docker `spotlessApply build check` passed with strict dependency verification: 2,108 tests, no failures/skips; API line coverage 94.89%. Integration tests cover row-bound decryption, all credential kinds, strict value types, redaction canaries, concurrent creation/rotation, current and retained endpoint references, team isolation, pagination and audit rollback. A fresh isolated Compose stack became healthy and passed API-key secret create/rotate/list/delete, generated-CA create/list/delete, duplicate/invalid-input handling, and audit redaction; its test containers and volumes were removed. No schema migration or production dependency changes; certificate fixtures are generated in memory using existing pinned Bouncy Castle versions as test dependencies.
 
 ### T-203d Signing key and audit log APIs (LLD APIs 23–24)
 **Status:** done · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.signing`, `dev.kairos.api.audit`
@@ -655,6 +659,7 @@ The single place where runs and their outbox rows are created, used by the API (
 - [ ] 31 suspend and 32 resume (`409 invalid-state` when already in that state): update the endpoint status in the control database, then set or clear `schedules.status = 3` for that endpoint's schedules in every cell (cross-database: control first, then cells, idempotently; a sweeper reconciles). Retries of its runs are deferred by the state processor while it is suspended. On resume, fires missed while suspended follow each job's misfire policy.
 - [ ] 33 health: aggregates `endpoint_health_minute` over the window (5m–24h).
 - [ ] Audit entries for create, update, delete, suspend and resume.
+- [ ] Secret and CA bundle reference validation uses the T-203c metadata lookup ports inside the endpoint mutation's control transaction, after locking the team row `FOR UPDATE`; this serializes reference changes with credential deletion.
 
 **Acceptance:** tests for every LLD row; registering `https://169.254.169.254/` or `http://...` fails with the LLD error; resume after suspend fires held schedules again.
 
