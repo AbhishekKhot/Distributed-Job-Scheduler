@@ -272,8 +272,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-112 | Observability baseline | build-logic, deploy | done |
 | T-113 | Run creation and outbox writer | kairos-engine | done |
 | T-201 | API foundation | kairos-api | done |
-| T-202 | Accounts APIs (1–7) | kairos-api | review |
-| T-203a | Team and members APIs (8–12) | kairos-api | todo |
+| T-202 | Accounts APIs (1–7) | kairos-api | done |
+| T-203a | Team and members APIs (8–12) | kairos-api | in progress (abhishekkhot) |
 | T-203b | API key APIs (13–15) | kairos-api | todo |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | todo |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | todo |
@@ -580,7 +580,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** web-slice tests for each error mapping; a request without a token returns 401 with the problem body; a JWT for a user without a team returns 403 `no-team`; the rate-limit test returns 429 with `Retry-After`, and 503 with Redis stopped; idempotent replay returns the identical body.
 
 ### T-202 Accounts APIs (LLD APIs 1–7)
-**Status:** review · **Needs:** T-201 · **Owns:** `dev.kairos.api.accounts`
+**Status:** done · **Needs:** T-201 · **Owns:** `dev.kairos.api.accounts`
 
 - [x] 1 `POST /v1/auth/signup`: email normalised (lower-case, ≤ 254, simple structural check), password policy, Argon2id; `409 email-taken` for an existing account; rate-limited per IP. The new user has no team.
 - [x] 2 `POST /v1/auth/login`: generic `invalid-credentials` error; progressive lockout (`failed_logins`, `locked_until`); constant-time path for unknown emails (hash a dummy password); creates a session family; returns the access and refresh tokens. Lockout (`kairos.api.accounts.lockout.*`): from 5 consecutive failures each failure locks for 1m doubling up to 1h; attempts while locked are refused without being counted. Every path spends one Argon2id verification (the real one even for a locked or disabled account). Rate limits per IP and per typed email come first; `kairos_login_failures_total` counts refusals.
@@ -595,7 +595,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** web and integration tests for every success and error row in LLD section 3.3; login timing for unknown and known emails is within 20% (benchmark test); refresh reuse revokes every token in the family.
 
 ### T-203a Team and members APIs (LLD APIs 8–12)
-**Status:** todo · **Needs:** T-201, T-202 (user repository) · **Owns:** `dev.kairos.api.team`
+**Status:** in progress (abhishekkhot) · **Needs:** T-201, T-202 (user repository) · **Owns:** `dev.kairos.api.team`
 
 - [ ] 8 `POST /v1/teams`: only for a user without a team (`409 already-in-team`). Creates the team with default quotas, makes the caller a member and creates the team's encryption and signing keysets, in one transaction on the control database. The `signingKey` is returned only once. `409 team-name-taken` on a slug conflict; rate-limited per user. The caller refreshes to get a token carrying the team.
 - [ ] 9 `GET /v1/team`.
