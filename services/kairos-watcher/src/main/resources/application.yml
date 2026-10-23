@@ -49,6 +49,9 @@ kairos:
     shard-group-size: 8
     poll-jitter: 200ms
     version: ${KAIROS_VERSION:dev}
+  engine:
+    runs:
+      dispatch-horizon: 5s
   datasource:
     control:
       url: ${KAIROS_CONTROL_DB_URL}
