@@ -13,6 +13,7 @@ import dev.kairos.api.accounts.application.UserAccounts;
 import dev.kairos.api.accounts.infrastructure.ControlAccountTransactions;
 import dev.kairos.api.accounts.infrastructure.JdbcAccountAudit;
 import dev.kairos.api.accounts.infrastructure.JdbcUserAccounts;
+import dev.kairos.api.audit.application.AuditWriter;
 import dev.kairos.api.support.ratelimit.RateLimiter;
 import dev.kairos.domain.id.KairosIdFactory;
 import dev.kairos.persistence.tx.ControlTransactions;
@@ -30,7 +31,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Wiring of the accounts APIs (IMPLEMENTATION_CHECKLIST T-202).
@@ -61,16 +61,12 @@ public class AccountsConfiguration {
     /**
      * The accounts audit entries on {@code audit_log}.
      *
-     * @param control the control database's client
-     * @param ids the process's id factory
-     * @param clock the clock
-     * @param json the JSON mapper
+     * @param writer the shared audit writer
      * @return the writer
      */
     @Bean
-    public AccountAudit accountAudit(
-            @Qualifier("controlJdbcClient") JdbcClient control, KairosIdFactory ids, Clock clock, JsonMapper json) {
-        return new JdbcAccountAudit(control, ids, clock, json);
+    public AccountAudit accountAudit(AuditWriter writer) {
+        return new JdbcAccountAudit(writer);
     }
 
     /**

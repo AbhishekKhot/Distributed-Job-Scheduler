@@ -2,15 +2,16 @@ package dev.kairos.api.apikeys;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import dev.kairos.api.ApiApplicationTest;
 import dev.kairos.api.ApiTestFixtures;
 import dev.kairos.api.apikeys.application.ApiKeyStore;
 import dev.kairos.api.apikeys.infrastructure.JdbcApiKeyStore;
+import dev.kairos.api.audit.application.AuditWriter;
 import dev.kairos.api.support.paging.CursorCodec;
-import dev.kairos.domain.id.KairosIdFactory;
 import dev.kairos.domain.id.TeamId;
 import dev.kairos.persistence.tx.ControlTransactions;
 import dev.kairos.security.apikey.ApiKeyService;
@@ -322,9 +323,11 @@ class ApiKeysIntegrationTest extends ApiApplicationTest {
         Caller user = newUser(ApiTestFixtures.insertTeam());
         IssuedApiKey issued = keys.issue();
         // Fail while producing the audit entry, after the key mutation has already executed.
-        KairosIdFactory unavailableIds = mock(KairosIdFactory.class);
-        when(unavailableIds.newId()).thenThrow(new IllegalStateException("audit unavailable"));
-        ApiKeyStore failingAudit = new JdbcApiKeyStore(control, transactions, unavailableIds);
+        AuditWriter unavailableAudit = mock(AuditWriter.class);
+        doThrow(new IllegalStateException("audit unavailable"))
+                .when(unavailableAudit)
+                .record(any());
+        ApiKeyStore failingAudit = new JdbcApiKeyStore(control, transactions, unavailableAudit);
         assertThatThrownBy(
                         () -> failingAudit.create(user.team(), user.user(), "rollback", issued, null, clock.instant()))
                 .isInstanceOf(RuntimeException.class);

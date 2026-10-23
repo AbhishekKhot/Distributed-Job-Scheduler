@@ -101,6 +101,27 @@ class KeysetServiceTest {
     }
 
     @Test
+    void pruningDropsPreviousKeysWithoutChangingThePrimary() throws Exception {
+        NewSigningKey first = keysets.createSigningKey(team);
+        NewSigningKey rotated = keysets.rotateSigningKey(team, first.sealed());
+        byte[] message = {2, 0, 3};
+        byte[] previousTag = keysets.signingKey(team, first.sealed()).mac().computeMac(message);
+        byte[] currentTag = keysets.signingKey(team, rotated.sealed()).mac().computeMac(message);
+        SealedKeyset pruned = keysets.pruneSigningKeys(team, rotated.sealed());
+        TeamSigningKey opened = SecurityFixtures.keysetService(kek).signingKey(team, pruned);
+        assertThat(opened.version()).isEqualTo(2);
+        assertThat(opened.mac().computeMac(message)).isEqualTo(currentTag);
+        opened.mac().verifyMac(currentTag, message);
+        assertThatThrownBy(() -> opened.mac().verifyMac(previousTag, message))
+                .isInstanceOf(java.security.GeneralSecurityException.class);
+        assertThatThrownBy(() -> keysets.pruneSigningKeys(TestIds.teamId(), pruned))
+                .isInstanceOf(KeysetException.class);
+        assertThat(keysets.signingKey(team, keysets.pruneSigningKeys(team, pruned))
+                        .version())
+                .isEqualTo(2);
+    }
+
+    @Test
     void jwtKeysetsRotateKeepingThePreviousKey() {
         SealedKeyset first = keysets.createJwtSigningKeyset();
         KeysetHandle handle = keysets.openPlatformKeyset(PlatformKeyPurpose.JWT_SIGNING, first);

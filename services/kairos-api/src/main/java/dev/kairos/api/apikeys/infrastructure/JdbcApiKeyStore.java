@@ -1,7 +1,7 @@
 package dev.kairos.api.apikeys.infrastructure;
 
 import dev.kairos.api.apikeys.application.ApiKeyStore;
-import dev.kairos.domain.id.KairosIdFactory;
+import dev.kairos.api.audit.application.AuditWriter;
 import dev.kairos.domain.id.TeamId;
 import dev.kairos.domain.id.UserId;
 import dev.kairos.persistence.tx.ControlTransactions;
@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -41,20 +42,14 @@ public final class JdbcApiKeyStore implements ApiKeyStore {
                AND (expires_at IS NULL OR expires_at > :now)
                AND (last_used_at IS NULL OR last_used_at <= :before)
             """;
-    private static final String AUDIT = """
-            INSERT INTO scheduler.audit_log
-                (audit_id, at, team_id, actor, action, resource_type, resource_id, details)
-            VALUES (:id, :now, :team, :actor, :action, 'API_KEY', :keyId, '{}'::jsonb)
-            """;
-
     private final JdbcClient control;
     private final ControlTransactions transactions;
-    private final KairosIdFactory ids;
+    private final AuditWriter writer;
 
-    public JdbcApiKeyStore(JdbcClient control, ControlTransactions transactions, KairosIdFactory ids) {
+    public JdbcApiKeyStore(JdbcClient control, ControlTransactions transactions, AuditWriter writer) {
         this.control = control;
         this.transactions = transactions;
-        this.ids = ids;
+        this.writer = writer;
     }
 
     @Override
@@ -130,15 +125,7 @@ public final class JdbcApiKeyStore implements ApiKeyStore {
     }
 
     private void audit(TeamId team, UserId actor, String keyId, String action, Instant now) {
-        // TODO(T-203d): replace this feature-local writer with the shared AuditWriter.
-        control.sql(AUDIT)
-                .param("id", ids.newId())
-                .param("now", utc(now))
-                .param("team", team.value())
-                .param("actor", "user:" + actor.value())
-                .param("action", action)
-                .param("keyId", keyId)
-                .update();
+        writer.record(new AuditWriter.Entry(team, "user:" + actor.value(), action, "API_KEY", keyId, Map.of()));
     }
 
     private static @Nullable Instant instant(ResultSet rs, String name) throws SQLException {
