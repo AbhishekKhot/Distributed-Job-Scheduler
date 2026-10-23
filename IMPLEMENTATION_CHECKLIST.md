@@ -607,7 +607,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** tests for each LLD row; a removed member's access token is rejected within 30s, without waiting for it to expire.
 
 ### T-203b API key APIs (LLD APIs 13–15)
-**Status:** review · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.apikeys`
+**Status:** done · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.apikeys`
 
 - [x] 13 `POST /v1/api-keys`: user tokens only (`403 forbidden-for-api-key`); returns the full key once; stores only the HMAC; optional expiry.
 - [x] 14 `GET /v1/api-keys`: metadata only (`keyId`, name, created, last used, expiry).
@@ -632,7 +632,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** stored ciphertext decrypts only with the right associated data; no secret value appears in responses, logs or audit details (asserted with a canary value across the whole test).
 
 ### T-203d Signing key and audit log APIs (LLD APIs 23–24)
-**Status:** todo · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.signing`, `dev.kairos.api.audit`
+**Status:** in progress (abhishekkhot) · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.signing`, `dev.kairos.api.audit`
 
 - [ ] 23 `POST /v1/team/signing-key:rotate`: user tokens only. Requests are signed with the new key at once; the response carries the new key and `previousKeyValidUntil`, until which targets should accept both keys.
 - [ ] 24 `GET /v1/audit-log`: time range (default last 24h, at most 90 days back), action filter, cursor pagination; team-scoped.
