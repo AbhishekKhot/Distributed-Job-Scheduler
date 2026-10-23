@@ -259,7 +259,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-002 | Build quality gates | build-logic | done |
 | T-003 | Shared test support | libs/kairos-test-support | done |
 | T-101 | Identifiers, shards and domain types | kairos-domain | done |
-| T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | todo |
+| T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | in progress (abhishekkhot) |
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | done |
 | T-104 | Workflow DAG validation and templates | kairos-domain | todo |
 | T-105 | Protobuf message contracts | kairos-proto | done |
@@ -368,7 +368,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** jqwik properties hold (`shardOf(newId(shard)) == shard` for all shards; ids sort by creation time); golden shard vectors pass; ArchUnit confirms no framework imports.
 
 ### T-102 Schedules: cron, interval, time zones, misfire
-**Status:** todo · **Needs:** T-101 · **Owns:** `dev.kairos.domain.schedule`
+**Status:** in progress (abhishekkhot) · **Needs:** T-101 · **Owns:** `dev.kairos.domain.schedule`
 
 - [ ] `ScheduleSpec` sealed hierarchy: `Immediate`, `OneTime(at)`, `Cron(expression, zone)`, `Interval(every)`, validated as in LLD section 3.6 (5-field cron via cron-utils with Unix semantics; IANA zone ids only; interval ≥ 1s; one-time at least now − 60s).
 - [ ] `ScheduleCalculator` strategy per kind: `nextFire(after, lastFiredLocal)` returns the next UTC instant plus the local time it represents.
