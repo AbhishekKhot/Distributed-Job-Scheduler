@@ -273,7 +273,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-113 | Run creation and outbox writer | kairos-engine | done |
 | T-201 | API foundation | kairos-api | done |
 | T-202 | Accounts APIs (1–7) | kairos-api | done |
-| T-203a | Team and members APIs (8–12) | kairos-api | in progress (abhishekkhot) |
+| T-203a | Team and members APIs (8–12) | kairos-api | review |
 | T-203b | API key APIs (13–15) | kairos-api | todo |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | todo |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | todo |
@@ -595,14 +595,14 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** web and integration tests for every success and error row in LLD section 3.3; login timing for unknown and known emails is within 20% (benchmark test); refresh reuse revokes every token in the family.
 
 ### T-203a Team and members APIs (LLD APIs 8–12)
-**Status:** in progress (abhishekkhot) · **Needs:** T-201, T-202 (user repository) · **Owns:** `dev.kairos.api.team`
+**Status:** review · **Needs:** T-201, T-202 (user repository) · **Owns:** `dev.kairos.api.team`
 
-- [ ] 8 `POST /v1/teams`: only for a user without a team (`409 already-in-team`). Creates the team with default quotas, makes the caller a member and creates the team's encryption and signing keysets, in one transaction on the control database. The `signingKey` is returned only once. `409 team-name-taken` on a slug conflict; rate-limited per user. The caller refreshes to get a token carrying the team.
-- [ ] 9 `GET /v1/team`.
-- [ ] 10 `GET /v1/team/members` with cursor pagination.
-- [ ] 11 `POST /v1/team/members`: adds an existing user (by email) who has no team; no emails are sent. Errors as in the LLD: `404 user-not-found`, `409 user-in-another-team`, `403 forbidden-for-api-key` (user tokens only), `429 rate-limited`. The added user gets the team on the next token refresh.
-- [ ] 12 `DELETE /v1/team/members/{userId}`: remove a member, or leave (own id); user tokens only (`403 forbidden-for-api-key`). A team must keep at least one member (`409 last-member`). The user's team is cleared and all their sessions are revoked, so existing access tokens stop working within 30s (session check in T-201).
-- [ ] Audit entries for team creation and membership changes.
+- [x] 8 `POST /v1/teams`: only for a user without a team (`409 already-in-team`). Creates the team with default quotas, makes the caller a member and creates the team's encryption and signing keysets, in one transaction on the control database. The `signingKey` is returned only once. `409 team-name-taken` on a slug conflict; rate-limited per user. The caller refreshes to get a token carrying the team.
+- [x] 9 `GET /v1/team`.
+- [x] 10 `GET /v1/team/members` with cursor pagination.
+- [x] 11 `POST /v1/team/members`: adds an existing user (by email) who has no team; no emails are sent. Errors as in the LLD: `404 user-not-found`, `409 user-in-another-team`, `403 forbidden-for-api-key` (user tokens only), `429 rate-limited`. The added user gets the team on the next token refresh.
+- [x] 12 `DELETE /v1/team/members/{userId}`: remove a member, or leave (own id); user tokens only (`403 forbidden-for-api-key`). A team must keep at least one member (`409 last-member`). The user's team is cleared and all their sessions are revoked, so existing access tokens stop working within 30s (session check in T-201).
+- [x] Audit entries for team creation and membership changes.
 
 **Acceptance:** tests for each LLD row; a removed member's access token is rejected within 30s, without waiting for it to expire.
 
