@@ -259,7 +259,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-002 | Build quality gates | build-logic | done |
 | T-003 | Shared test support | libs/kairos-test-support | done |
 | T-101 | Identifiers, shards and domain types | kairos-domain | done |
-| T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | review |
+| T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | done |
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | done |
 | T-104 | Workflow DAG validation and templates | kairos-domain | done |
 | T-105 | Protobuf message contracts | kairos-proto | done |
@@ -273,7 +273,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-113 | Run creation and outbox writer | kairos-engine | done |
 | T-201 | API foundation | kairos-api | done |
 | T-202 | Accounts APIs (1–7) | kairos-api | done |
-| T-203a | Team and members APIs (8–12) | kairos-api | review |
+| T-203a | Team and members APIs (8–12) | kairos-api | done |
 | T-203b | API key APIs (13–15) | kairos-api | done |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | done |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
@@ -281,8 +281,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-205 | Job APIs (34–45) | kairos-api | todo |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | todo |
-| T-221 | Shard lease manager and node registry | kairos-watcher | review |
-| T-222 | Fire poller | kairos-watcher | in progress (AbhishekKhot) |
+| T-221 | Shard lease manager and node registry | kairos-watcher | done |
+| T-222 | Fire poller | kairos-watcher | review |
 | T-223 | Delayed poller | kairos-watcher | todo |
 | T-224 | Outbox relay | kairos-watcher | todo |
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | todo |
@@ -393,7 +393,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** a table-driven test covers every status code class and error type; jqwik shows backoff stays in bounds and is non-decreasing in expectation; illegal state transitions throw.
 
 ### T-104 Workflow DAG validation and templates
-**Status:** review · **Needs:** T-101 · **Owns:** `dev.kairos.domain.workflow`, `dev.kairos.domain.template`
+**Status:** done · **Needs:** T-101 · **Owns:** `dev.kairos.domain.workflow`, `dev.kairos.domain.template`
 
 - [x] `WorkflowSpec` model: tasks (key, endpoint name, request values, outputs mapping), edges, `onTaskFailure` (`BLOCK_FOR_REVIEW` default, `FAIL_FAST`).
 - [x] Validation: acyclic (Kahn's algorithm, reporting the cycle path), ≤ 200 tasks, ≤ 10 levels, unknown task references, duplicate keys, unreachable tasks, and at least one root.
@@ -708,7 +708,7 @@ The single place where runs and their outbox rows are created, used by the API (
 All watcher components live in `services/kairos-watcher` under `dev.kairos.watcher.<feature>`. They build on the `ShardedPoller` template from T-221.
 
 ### T-221 Shard lease manager and node registry
-**Status:** review · **Needs:** T-107, T-113 · **Owns:** `dev.kairos.watcher.lease`, `dev.kairos.watcher.node`, `dev.kairos.watcher.config`, `dev.kairos.watcher.support.ShardedPoller`, watcher build/runtime configuration and tests
+**Status:** done · **Needs:** T-107, T-113 · **Owns:** `dev.kairos.watcher.lease`, `dev.kairos.watcher.node`, `dev.kairos.watcher.config`, `dev.kairos.watcher.support.ShardedPoller`, watcher build/runtime configuration and tests
 
 - [x] Node registry: insert or update `scheduler_nodes` every 5s; node id `{service}-{pod}-{startMillis}`; clean up stale rows.
 - [x] Lease manager every 5s per cell: renew owned leases (TTL 15s) with `generation` checks; acquire free or expired leases up to the fair share `ceil(cell shard count / live watchers)`; release the surplus above fair share + 2, oldest first.
@@ -721,15 +721,17 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t221-final ARGS="spotlessApply build check"` passed: 2,144 tests, no failures/errors/skips; watcher line coverage 88.82%. PostgreSQL integration tests cover two-watcher sharing, release and takeover generation, stale-owner fencing, and poller work inside a lease-guarded transaction. No migrations or production dependency versions changed; Testcontainers is test-only.
 
 ### T-222 Fire poller
-**Status:** in progress (AbhishekKhot) · **Needs:** T-221, T-102, T-113 · **Owns:** `dev.kairos.watcher.fire`
+**Status:** review · **Needs:** T-221, T-102, T-113 · **Owns:** `dev.kairos.watcher.fire`
 
-- [ ] Every 1s (±20%) per group of 8 owned shards, and on `NOTIFY`: select due schedules (`next_fire_at <= now + 5s look-ahead`, status active, ≤ 250 per shard) with `FOR UPDATE SKIP LOCKED`.
-- [ ] For each schedule: compute occurrences with the misfire policy (60s threshold), create runs or workflow runs plus root tasks and outbox rows through T-113, and advance `next_fire_at` and `last_fired_local`. One-time schedules are deleted after firing. All of this happens in one cell transaction per batch.
-- [ ] Back-pressure: skip claiming when the oldest due outbox row in the cell is more than 10s old (Kafka or relay trouble), and expose a metric.
-- [ ] Held schedules (endpoint suspended) and paused ones are never selected.
-- [ ] Metrics: fires per second, poll duration, schedules per batch, misfires by policy.
+- [x] Every 1s (±20%) per group of 8 owned shards, and on `NOTIFY`: select due schedules (`next_fire_at <= now + 5s look-ahead`, status active, ≤ 250 per shard) with `FOR UPDATE SKIP LOCKED`.
+- [x] For each schedule: compute occurrences with the misfire policy (60s threshold), create runs or workflow runs plus root tasks and outbox rows through T-113, and advance `next_fire_at` and `last_fired_local`. One-time schedules are deleted after firing. All of this happens in one cell transaction per batch.
+- [x] Back-pressure: skip claiming when the oldest due outbox row in the cell is more than 10s old (Kafka or relay trouble), and expose a metric.
+- [x] Held schedules (endpoint suspended) and paused ones are never selected.
+- [x] Metrics: fires per second, poll duration, schedules per batch, misfires by policy.
 
 **Acceptance:** 10K cron schedules due in the same minute fire once each (unique constraint plus a test count); with two watchers and a forced lease handover mid-run, no occurrence is created twice or skipped.
+
+**Verification:** Docker `make bg BG_NAME=kairos-gradle-t222-final2 ARGS="spotlessApply build check"` passed: 2,153 tests, no failures, errors or skips. Watcher PostgreSQL integration tests cover 10K cron schedules, one-time and workflow materialization, transactional rollback, held schedules, outbox back-pressure, concurrent claims, committed notifications and a forced lease handover that creates one occurrence. Both watchers and all other services became healthy in an isolated detached Compose stack.
 
 ### T-223 Delayed poller
 **Status:** todo · **Needs:** T-221, T-113 · **Owns:** `dev.kairos.watcher.delayed`
