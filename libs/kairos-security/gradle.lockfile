@@ -4,6 +4,7 @@
 # To regenerate this file, run: ./gradlew :libs:kairos-security:dependencies --write-locks
 ch.qos.logback:logback-classic:1.5.38=testRuntimeClasspath
 ch.qos.logback:logback-core:1.5.38=testRuntimeClasspath
+com.cronutils:cron-utils:9.2.1=runtimeClasspath,testRuntimeClasspath
 com.fasterxml.jackson.core:jackson-annotations:2.21=testRuntimeClasspath
 com.fasterxml:classmate:1.7.3=testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.0.5=testAnnotationProcessor
@@ -131,6 +132,7 @@ org.pcollections:pcollections:4.0.1=annotationProcessor,testAnnotationProcessor
 org.postgresql:postgresql:42.7.13=testRuntimeClasspath
 org.rnorth.duct-tape:duct-tape:1.0.8=testRuntimeClasspath
 org.slf4j:jul-to-slf4j:2.0.18=testRuntimeClasspath
+org.slf4j:slf4j-api:2.0.18=runtimeClasspath
 org.slf4j:slf4j-api:2.0.19=testCompileClasspath,testRuntimeClasspath
 org.springframework.boot:spring-boot-autoconfigure:4.1.1=testRuntimeClasspath
 org.springframework.boot:spring-boot-dependencies:4.1.1=annotationProcessor,compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
