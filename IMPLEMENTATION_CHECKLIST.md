@@ -393,7 +393,7 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** a table-driven test covers every status code class and error type; jqwik shows backoff stays in bounds and is non-decreasing in expectation; illegal state transitions throw.
 
 ### T-104 Workflow DAG validation and templates
-**Status:** todo · **Needs:** T-101 · **Owns:** `dev.kairos.domain.workflow`, `dev.kairos.domain.template`
+**Status:** in progress (abhishekkhot) · **Needs:** T-101 · **Owns:** `dev.kairos.domain.workflow`, `dev.kairos.domain.template`
 
 - [ ] `WorkflowSpec` model: tasks (key, endpoint name, request values, outputs mapping), edges, `onTaskFailure` (`BLOCK_FOR_REVIEW` default, `FAIL_FAST`).
 - [ ] Validation: acyclic (Kahn's algorithm, reporting the cycle path), ≤ 200 tasks, ≤ 10 levels, unknown task references, duplicate keys, unreachable tasks, and at least one root.
@@ -619,7 +619,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-23):** Docker `spotlessApply build check` passed (2,067 tests; API line coverage 93.78%). Integration tests cover expiry/revocation with an injected clock, team-scoped authenticated cursors, concurrent revocation, throttled usage updates and atomic audit rollback. An isolated Compose stack became healthy and passed signup → login → team → refresh → key creation/authentication/listing/revocation; its test containers and volumes were removed. Implementation is on `t-203b-api-keys`, ready for PR review against `develop`. Gradle regenerated two missing BOM metadata checksums; dependency versions and lockfiles are unchanged.
 
 ### T-203c Secrets and CA bundle APIs (LLD APIs 16–22)
-**Status:** review · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
+**Status:** done · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
 
 **Integration scope:** API wiring/OpenAPI verification, credential-field rejection in the shared audit writer, and test-only certificate-generation dependencies with their generated lockfile.
 
