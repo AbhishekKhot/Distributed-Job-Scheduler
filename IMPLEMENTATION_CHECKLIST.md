@@ -393,17 +393,19 @@ Add the checks every later task relies on, so standards are enforced by the buil
 **Acceptance:** a table-driven test covers every status code class and error type; jqwik shows backoff stays in bounds and is non-decreasing in expectation; illegal state transitions throw.
 
 ### T-104 Workflow DAG validation and templates
-**Status:** todo · **Needs:** T-101 · **Owns:** `dev.kairos.domain.workflow`, `dev.kairos.domain.template`
+**Status:** review · **Needs:** T-101 · **Owns:** `dev.kairos.domain.workflow`, `dev.kairos.domain.template`
 
-- [ ] `WorkflowSpec` model: tasks (key, endpoint name, request values, outputs mapping), edges, `onTaskFailure` (`BLOCK_FOR_REVIEW` default, `FAIL_FAST`).
-- [ ] Validation: acyclic (Kahn's algorithm, reporting the cycle path), ≤ 200 tasks, ≤ 10 levels, unknown task references, duplicate keys, unreachable tasks, and at least one root.
-- [ ] `WorkflowPlan`: topological levels, roots, `remaining_deps` per task, and a downstream adjacency list, stored with the version.
-- [ ] Template engine (no expression language and no reflection): a hand-written tokenizer for `{{ tasks.<task>.outputs.<name> }}` and `{{ run.id }}` only. Input length is capped and nested braces are rejected.
-- [ ] Template validation: a placeholder may only reference declared outputs of ancestor tasks, and never the URL host or scheme. Placeholders are allowed in path parameters, query, headers and body values.
-- [ ] Rendering with encoding per target: path segments percent-encoded, query values encoded, header values rejected if they contain CR or LF, and JSON body values inserted as JSON values (never as raw text). Sensitive outputs render only into headers or body, never into the URL.
-- [ ] Output extraction spec: `from` `BODY` (a JSON Pointer subset, `$.a.b[0]`), `HEADER` or `STATUS`; `required`; `sensitive`; and the 24 KB total cap per task.
+- [x] `WorkflowSpec` model: tasks (key, endpoint name, request values, outputs mapping), edges, `onTaskFailure` (`BLOCK_FOR_REVIEW` default, `FAIL_FAST`).
+- [x] Validation: acyclic (Kahn's algorithm, reporting the cycle path), ≤ 200 tasks, ≤ 10 levels, unknown task references, duplicate keys, unreachable tasks, and at least one root.
+- [x] `WorkflowPlan`: topological levels, roots, `remaining_deps` per task, and a downstream adjacency list, stored with the version.
+- [x] Template engine (no expression language and no reflection): a hand-written tokenizer for `{{ tasks.<task>.outputs.<name> }}` and `{{ run.id }}` only. Input length is capped and nested braces are rejected.
+- [x] Template validation: a placeholder may only reference declared outputs of ancestor tasks, and never the URL host or scheme. Placeholders are allowed in path parameters, query, headers and body values.
+- [x] Rendering with encoding per target: path segments percent-encoded, query values encoded, header values rejected if they contain CR or LF, and JSON body values inserted as JSON values (never as raw text). Sensitive outputs render only into headers or body, never into the URL.
+- [x] Output extraction spec: `from` `BODY` (a JSON Pointer subset, `$.a.b[0]`), `HEADER` or `STATUS`; `required`; `sensitive`; and the 24 KB total cap per task.
 
 **Acceptance:** DAG fixtures (diamond, wide fan-out of 200, chain of 10, chain of 11 rejected, self-loop and cycle rejected with path); template injection attempts (CR/LF, `../` in a path, `}}{{`, a host placeholder) are rejected; jqwik: any valid random DAG passes, and adding a back edge fails.
+
+**Verification:** Docker `make bg BG_NAME=kairos-gradle-t104 ARGS="spotlessApply build check"` passed: 2,136 tests, no failures/errors/skips; domain line coverage 99.55%. Includes 300 generated DAG trials and 100 back-edge trials, immutable plan checks, typed JSON insertion, output bounds and injection rejection. No production dependencies, migrations or service wiring changed. T-206 resolves endpoint output declarations before domain validation; T-243 owns JSON adaptation, sealing sensitive outputs and HTTP assembly without double encoding.
 
 ### T-105 Protobuf message contracts
 **Status:** done · **Needs:** T-002 · **Owns:** `libs/kairos-proto/src/main/proto/kairos/v1/*`, `dev.kairos.proto`
@@ -619,7 +621,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-23):** Docker `spotlessApply build check` passed (2,067 tests; API line coverage 93.78%). Integration tests cover expiry/revocation with an injected clock, team-scoped authenticated cursors, concurrent revocation, throttled usage updates and atomic audit rollback. An isolated Compose stack became healthy and passed signup → login → team → refresh → key creation/authentication/listing/revocation; its test containers and volumes were removed. Implementation is on `t-203b-api-keys`, ready for PR review against `develop`. Gradle regenerated two missing BOM metadata checksums; dependency versions and lockfiles are unchanged.
 
 ### T-203c Secrets and CA bundle APIs (LLD APIs 16–22)
-**Status:** review · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
+**Status:** done · **Needs:** T-201, T-109 · **Owns:** `dev.kairos.api.secrets`, `dev.kairos.api.cabundles`
 
 **Integration scope:** API wiring/OpenAPI verification, credential-field rejection in the shared audit writer, and test-only certificate-generation dependencies with their generated lockfile.
 
