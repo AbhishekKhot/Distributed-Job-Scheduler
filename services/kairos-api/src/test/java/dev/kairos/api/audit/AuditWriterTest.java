@@ -31,6 +31,8 @@ class AuditWriterTest {
         for (Map<String, Object> details : java.util.List.<Map<String, Object>>of(
                 Map.of("signingKey", "canary"),
                 Map.of("PASSWORD", "canary"),
+                Map.of("clientSecret", "canary"),
+                Map.of("key", "canary"),
                 Map.of("payload", SecretValue.of("canary")),
                 Map.of("nested", Map.of("x", 1)),
                 Map.of("name", "x".repeat(1025)),
