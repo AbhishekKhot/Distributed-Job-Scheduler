@@ -26,6 +26,9 @@ dependencies {
     implementation("org.postgresql:postgresql")
 
     testImplementation(project(":libs:kairos-test-support"))
+    // Throwaway CA and invalid-certificate fixtures; private keys never leave test memory.
+    testImplementation(libs.bouncycastle)
+    testImplementation(libs.bouncycastle.pkix)
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.testcontainers:testcontainers")

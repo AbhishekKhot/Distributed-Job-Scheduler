@@ -26,6 +26,8 @@ public interface AuditWriter {
                 "passwordhash",
                 "secret",
                 "secretvalue",
+                "clientsecret",
+                "key",
                 "token",
                 "accesstoken",
                 "refreshtoken",

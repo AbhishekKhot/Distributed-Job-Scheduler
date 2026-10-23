@@ -277,7 +277,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 |---|---|
 | Base URL | `https://kairos.<internal-domain>/v1` |
 | Authentication | `Authorization: Bearer <accessToken>` or `Authorization: Bearer <apiKey>` on every endpoint except signup, login, refresh and JWKS |
-| Request headers | `Content-Type: application/json`; `Idempotency-Key: <1–64 chars>` (optional, on creates marked *idempotent*); `If-Match: "<version>"` (required on `PUT`); `traceparent` (optional) |
+| Request headers | `Content-Type: application/json`; `Idempotency-Key: <1–64 chars>` (optional, on creates marked *idempotent*); `If-Match: "<version>"` (required on versioned resource updates; secret rotation adds a version without this header); `traceparent` (optional) |
 | Response headers | `Content-Type: application/json` (or `application/problem+json` for errors); `ETag: "<version>"` on single resources; `Location` on `201`; `X-Request-Id`; `Retry-After` on `429` and `503` |
 | Errors | RFC 9457 problem details: `{"type", "title", "status", "detail", "instance", "traceId", "errors": [{"field", "code"}]}`. Unknown fields in a request are rejected with `400`. |
 | Common statuses | `400` validation, `401` not authenticated, `403` `no-team` (user without a team), `404` not found or another team's resource, `409` conflict, `412` version mismatch, `429` rate limit or quota |
@@ -1088,6 +1088,8 @@ Content-Type: application/problem+json
 **Background effect:** Cached key lookups expire within 60s, after which the key is rejected everywhere.
 
 </details>
+
+Credential resource names (`secrets` and `ca-bundles`) are 1–128 characters matching `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`. Secret fields are strings, at most 8192 characters each, without control characters; bearer tokens use printable ASCII without spaces, and BASIC usernames cannot contain a colon. The serialized plaintext is capped at 16320 bytes so the sealed value fits the 16 KB database limit. Secret metadata lists the current version and the original creation time. Secret rotation creates a new version and does not require `If-Match`. CA bundles contain 1–10 currently valid X.509 CA certificates (certificate blocks only), at most 64 KB; a key-usage extension, when present, must allow certificate signing. Both lists support the common cursor pagination contract. Deletion checks both current endpoint specifications and retained immutable endpoint versions, so configurations pinned by runs keep their credentials and trust anchors.
 
 <details>
 <summary><b>16. Create a secret</b> &nbsp; <code>POST /v1/secrets</code></summary>
