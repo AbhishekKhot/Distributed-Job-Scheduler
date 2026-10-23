@@ -37,7 +37,11 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 
 ## Progress and next steps (update at the end of every session)
 
-**Status at end of session (2026-10-23).** T-203c is merged into `develop` through PR #25 (`055e6d8`); its checklist status is `done`. T-104 workflow DAG validation and templates are implemented on `t-104-workflow-templates`, with checklist status `review`, awaiting PR review and merge. All Phase 1 library tasks are implemented; other runtime services remain skeletons.
+**Status at end of session (2026-10-23).** T-203c is merged through PR #25 (`055e6d8`), and T-104 workflow DAG validation/templates through PR #26 (`5e0e5b7`); both checklist statuses are `done`. T-221 shard leases and node registry is implemented on `t-221-shard-leases`, with checklist status `review`, awaiting PR review and merge. All Phase 1 library tasks are merged; other runtime services remain skeletons.
+
+**T-221 verification:** Docker `make bg BG_NAME=kairos-gradle-t221-final ARGS="spotlessApply build check"` passed: 2,144 tests, no failures/errors/skips; watcher line coverage 88.82%. PostgreSQL-backed integration tests verify two-watcher sharing, lease release and takeover, stale-generation rejection, and callback transactions protected by the lease row lock. The watcher owns a generation-fenced lease for at most 15 seconds, refreshes every 5 seconds, stops work 3 seconds before expiry, and releases writable-cell leases on shutdown. The node is live for 15 seconds after its last heartbeat. No schema migrations or production dependency versions changed; Testcontainers is test-only.
+
+**T-221 integration contract:** Poller tasks register a bounded name, interval, and per-shard callback with `ShardedPoller`; the callback runs in a cell transaction after an owner/generation check and holds a row lock through commit. Poller tasks should use the shared group size of eight and default jitter up to 200 ms. Fair shares use the configured cell shard range and live watcher count, with a two-lease surplus. `READ_ONLY` cells are not leased; `DRAINING` cells remain active until their shard range moves. T-222 through T-226 build on this support.
 
 **T-104 verification:** Docker `make bg BG_NAME=kairos-gradle-t104 ARGS="spotlessApply build check"` passed with strict dependency verification: 2,136 tests, no failures/errors/skips; domain line coverage 99.55%. New tests cover bounded DAG plans, cycles, ancestor references, injection rejection, typed JSON insertion, sensitivity and output limits, plus 300 generated valid-DAG and 100 back-edge trials. No dependency, migration or service wiring changes.
 
@@ -51,14 +55,13 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 
 **T-203b verification:** Docker `make bg BG_NAME=kairos-gradle-t203b ARGS="spotlessApply build check"` passed: 2,067 tests, zero failures/skips, API line coverage 93.78%. An isolated Compose stack on port 18080 became healthy and passed signup/login/team/refresh/key create/authenticate/list/revoke, then was removed. All three management endpoints require a user token. Usage tracking is a feature-local interceptor plus bounded Caffeine coalescing and a SQL one-minute guard; the existing authentication cache enforces the 60s revocation bound. Creation/revocation audit entries commit with the mutation; T-203d now routes these through the shared writer. Pagination uses the existing `(team_id, created_at, key_id)` index and team/list-bound HMAC cursors. No dependency versions or lockfiles changed; Gradle generated missing Bouncy Castle 1.84 and JUnit 5.13.1 BOM `.module` checksums. Unrelated local configuration changes and the lesson PDF are excluded from the task commits.
 
-**Done, merged to `develop` (21 tasks + 5 follow-ups):**
-- API: T-201 foundation (#18), T-202 accounts APIs 1–7 (#19), T-203a teams/members APIs 8–12 (#20), T-203b API keys APIs 13–15 (#23), T-203d signing/audit APIs 23–24 (#24), T-203c secrets/CA bundles APIs 16–22 (#25).
+**Done, merged to `develop` (22 tasks + 5 follow-ups):**
+- API: T-201 foundation (#18), T-202 accounts APIs 1–7 (#19), T-203a teams/members APIs 8–12 (#20), T-203b API keys APIs 13–15 (#23), T-203d signing/audit APIs 23–24 (#24), T-203c secrets/CA bundles APIs 16–22 (#25), T-104 workflow DAG validation/templates (#26).
 - Tooling: T-001 skeleton, T-002 quality gates (PR #2), T-003 test support (#1), T-112 observability (#6).
 - Libraries: T-101 ids/shards (#4), T-102 schedules (#21), T-103 retry/outcomes/run state machine (#8), T-105 proto contracts (#3), T-106 migrations (#5), T-107 persistence + cell routing (#7), T-108 messaging (#15), T-109 security (#10), T-110 outbound HTTP client + target policy (#12), T-111 Redis run lock + sent markers (#11), T-113 run creation + outbox writer (#9).
 - Follow-ups: dead-letter `fence` column + LLD/checklist fixes (#13); engine Spring configuration `OutboxConfiguration`/`RunCreationConfiguration` (#14); trace/key docs (#16); migrations create the JWT signing keyset after migrating (#17, closes old open item 1).
 
-**Not yet merged (30 tasks; T-104 awaits PR review):**
-- Libraries: T-104 workflow DAG validation and templates (review).
+**Not yet merged (29 tasks; T-221 awaits PR review):**
 - `kairos-api`: T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
 - `kairos-watcher`: T-221 shard leases, T-222 fire poller, T-223 delayed poller, T-224 outbox relay, T-225 recovery sweepers, T-226 singleton tasks.
 - `kairos-executor`: T-241 dispatch consumers, T-242 execution gates, T-243 render/call/classify/publish, T-244 cancel + drain.
@@ -67,17 +70,14 @@ Gradle runs through `./gradlew` inside the pinned `eclipse-temurin` JDK 25 image
 - Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Ready after the user selects the next task:** T-207, T-221, T-241, T-261, T-281, T-282, T-301, T-402, T-403. T-204 can use the merged metadata lookup ports; its endpoint-test operation still needs the T-243 executor interface. T-221 shard leases and T-241 dispatch consumers are independent entry points into the next runtime services. Wait for user go-ahead before another task.
+**Ready after the user selects the next task:** T-207, T-222, T-223, T-224, T-225, T-226, T-241, T-261, T-281, T-282, T-301, T-402, T-403. T-204 can use the merged metadata lookup ports; its endpoint-test operation still needs the T-243 executor interface. T-241 remains an independent entry point into executor services. Wait for user go-ahead before another task.
 
 **Open items:**
-1. Done (#17): migrations bootstrap the JWT keyset.
-2. T-243 must wire T-104's JSON adapter/output extraction, sensitive-output sealing and already-encoded HTTP components (see integration contract above).
-3. T-111 metric names `kairos_run_lock_acquire_total` and `kairos_redis_script_duration_seconds` are not yet in the T-112 metric table; the Redis readiness health indicator is left to a service task.
-4. `kairos.engine.runs.dispatch-horizon` (default 5s) must equal the fire poller look-ahead (T-222 should read the same property). The engine's `OutboxConfiguration` owns the single `KairosIdFactory` bean; services inject it and never define their own.
-5. Implemented in T-203d: signing-key pruning uses the persisted `previousKeyValidUntil`.
-6. Implemented in T-203d: account/team/API-key audit adapters delegate to the shared AuditWriter, preserving existing typed feature ports and transaction boundaries.
-8. T-201 session-cache fix is merged (#22): a refreshed token whose team differs from the cached state re-reads once. Still open from T-203a: `addedAt` = `users.created_at` until a `users.team_joined_at` migration.
-7. T-202's `LoginTimingIntegrationTest` compares wall-clock medians (unknown vs known email within 20%) and may be flaky on a loaded CI runner (watch in T-403).
+1. T-243 must wire T-104's JSON adapter/output extraction, sensitive-output sealing and already-encoded HTTP components (see integration contract above).
+2. T-111 metric names `kairos_run_lock_acquire_total` and `kairos_redis_script_duration_seconds` are not yet in the T-112 metric table; the Redis readiness health indicator is left to a service task.
+3. `kairos.engine.runs.dispatch-horizon` (default 5s) must equal the fire poller look-ahead (T-222 should read the same property). The engine's `OutboxConfiguration` owns the single `KairosIdFactory` bean; services inject it and never define their own.
+4. From T-203a: `addedAt` = `users.created_at` until a `users.team_joined_at` migration.
+5. T-202's `LoginTimingIntegrationTest` compares wall-clock medians (unknown vs known email within 20%) and may be flaky on a loaded CI runner (watch in T-403).
 
 **T-202 choices (accepted by user, 2026-10-21):** login lockout from 5 consecutive failures, 1m doubling to 1h (`kairos.api.accounts.lockout.*`); API keys on `/v1/me` and `/v1/me/password` get 401 `unauthenticated` (LLD rows), not 403; missing `refreshToken` is 400 `validation`, a bad one 401 `invalid-refresh-token`; bulk revocations (password change, refresh reuse) audited as `SESSIONS_REVOKED`, lockout as `LOGIN_LOCKED`; test fixtures also apply the day-partitions migration so `audit_log` has partitions.
 

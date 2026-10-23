@@ -37,3 +37,27 @@ logging:
   structured:
     format:
       console: ecs
+
+kairos:
+  watcher:
+    enabled: true
+    heartbeat-interval: 5s
+    heartbeat-stale-after: 15s
+    lease-ttl: 15s
+    stop-before-lease-expiry: 3s
+    retained-surplus-leases: 2
+    shard-group-size: 8
+    poll-jitter: 200ms
+    version: ${KAIROS_VERSION:dev}
+  datasource:
+    control:
+      url: ${KAIROS_CONTROL_DB_URL}
+      username: ${KAIROS_DB_USERNAME}
+      password: ${KAIROS_DB_PASSWORD}
+    cells:
+      - url: ${KAIROS_CELL_0_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
+      - url: ${KAIROS_CELL_1_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
