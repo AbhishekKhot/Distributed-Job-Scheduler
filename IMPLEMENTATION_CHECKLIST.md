@@ -282,8 +282,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | todo |
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
-| T-222 | Fire poller | kairos-watcher | review |
-| T-223 | Delayed poller | kairos-watcher | todo |
+| T-222 | Fire poller | kairos-watcher | done |
+| T-223 | Delayed poller | kairos-watcher | in progress (AbhishekKhot) |
 | T-224 | Outbox relay | kairos-watcher | todo |
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | todo |
 | T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | todo |
@@ -721,7 +721,7 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t221-final ARGS="spotlessApply build check"` passed: 2,144 tests, no failures/errors/skips; watcher line coverage 88.82%. PostgreSQL integration tests cover two-watcher sharing, release and takeover generation, stale-owner fencing, and poller work inside a lease-guarded transaction. No migrations or production dependency versions changed; Testcontainers is test-only.
 
 ### T-222 Fire poller
-**Status:** review · **Needs:** T-221, T-102, T-113 · **Owns:** `dev.kairos.watcher.fire`
+**Status:** done · **Needs:** T-221, T-102, T-113 · **Owns:** `dev.kairos.watcher.fire`
 
 - [x] Every 1s (±20%) per group of 8 owned shards, and on `NOTIFY`: select due schedules (`next_fire_at <= now + 5s look-ahead`, status active, ≤ 250 per shard) with `FOR UPDATE SKIP LOCKED`.
 - [x] For each schedule: compute occurrences with the misfire policy (60s threshold), create runs or workflow runs plus root tasks and outbox rows through T-113, and advance `next_fire_at` and `last_fired_local`. One-time schedules are deleted after firing. All of this happens in one cell transaction per batch.
@@ -734,7 +734,7 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t222-final2 ARGS="spotlessApply build check"` passed: 2,153 tests, no failures, errors or skips. Watcher PostgreSQL integration tests cover 10K cron schedules, one-time and workflow materialization, transactional rollback, held schedules, outbox back-pressure, concurrent claims, committed notifications and a forced lease handover that creates one occurrence. Both watchers and all other services became healthy in an isolated detached Compose stack.
 
 ### T-223 Delayed poller
-**Status:** todo · **Needs:** T-221, T-113 · **Owns:** `dev.kairos.watcher.delayed`
+**Status:** in progress (AbhishekKhot) · **Needs:** T-221, T-113 · **Owns:** `dev.kairos.watcher.delayed`
 
 - [ ] Every 1s per shard group: select `DELAYED` runs with `due_at <= now` (≤ 250 per shard), set them to `QUEUED`, increment the fence and write dispatch outbox rows, in one transaction.
 - [ ] Pacing: backfill at 100/s per job and 1K/s overall, redrive at 100/s, team `maxExecPerSec` deferrals; implemented through `due_at` spacing, so nothing is held in memory.
