@@ -16,6 +16,7 @@ import dev.kairos.security.token.TokenVerification;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,7 +30,9 @@ import org.slf4j.LoggerFactory;
  * <p>Access tokens: after the signature, algorithm, issuer, audience and expiry checks, the token's login session
  * ({@code sid}, the refresh-token family) must still be active, the user must be active, and the user's current team
  * must equal the token's team. The session state is cached for at most {@code sessionCacheTtl} (30s or less), so a
- * revoked session or a removed member stops working within that time without a database read per request.
+ * revoked session or a removed member stops working within that time without a database read per request. A token
+ * issued after its cached state was read (a refresh that picked up a new team) re-reads the state once on a team
+ * mismatch, so joining or creating a team takes effect at once; older tokens never trigger that re-read.
  *
  * <p>API keys: the key is parsed structurally, its stored row is cached for at most {@code apiKeyCacheTtl} (60s or
  * less), the secret is verified in constant time, and revoked or expired keys are refused. A key hashed under a
@@ -52,7 +55,7 @@ public final class BearerAuthenticator {
     private final SessionLookup sessions;
     private final ApiKeyLookup keys;
     private final Clock clock;
-    private final Cache<SessionKey, Optional<SessionLookup.SessionState>> sessionCache;
+    private final Cache<SessionKey, CachedSession> sessionCache;
     private final Cache<String, Optional<ApiKeyLookup.StoredApiKey>> apiKeyCache;
 
     /**
@@ -116,8 +119,14 @@ public final class BearerAuthenticator {
         }
         AccessTokenClaims claims = valid.claims();
         SessionKey key = new SessionKey(claims.user(), claims.sessionId());
-        Optional<SessionLookup.SessionState> state =
-                sessionCache.get(key, k -> sessions.find(k.user(), k.sessionId(), clock.instant()));
+        CachedSession cached = sessionCache.get(key, this::load);
+        if (cached.isStaleFor(claims)) {
+            // The token was issued after this state was read and names another team: the cached team predates the
+            // refresh that issued it. Read once more; the checks below then use the current state.
+            cached = load(key);
+            sessionCache.put(key, cached);
+        }
+        Optional<SessionLookup.SessionState> state = cached.state();
         if (state.isEmpty() || !state.get().sessionActive()) {
             return new Rejected(Reason.SESSION_REVOKED);
         }
@@ -128,6 +137,11 @@ public final class BearerAuthenticator {
             return new Rejected(Reason.TEAM_CHANGED);
         }
         return new Authenticated(new UserPrincipal(claims.user(), claims.team(), claims.sessionId()));
+    }
+
+    private CachedSession load(SessionKey key) {
+        Instant now = clock.instant();
+        return new CachedSession(sessions.find(key.user(), key.sessionId(), now), now);
     }
 
     private AuthenticationResult authenticateApiKey(String credential) {
@@ -204,4 +218,20 @@ public final class BearerAuthenticator {
     }
 
     private record SessionKey(UserId user, UUID sessionId) {}
+
+    /** A session state and when it was read. */
+    private record CachedSession(Optional<SessionLookup.SessionState> state, Instant loadedAt) {
+
+        /**
+         * Whether the state may predate the token: an active session whose team differs from the token's, read no
+         * later than the token was issued. {@code iat} has second precision, so the read time is compared to the
+         * second; an older token can re-read at most within that one second.
+         */
+        boolean isStaleFor(AccessTokenClaims claims) {
+            return state.isPresent()
+                    && state.get().sessionActive()
+                    && !Objects.equals(state.get().team(), claims.team())
+                    && !claims.issuedAt().isBefore(loadedAt.truncatedTo(ChronoUnit.SECONDS));
+        }
+    }
 }
