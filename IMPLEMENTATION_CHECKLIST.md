@@ -281,7 +281,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-205 | Job APIs (34–45) | kairos-api | todo |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | todo |
-| T-221 | Shard lease manager and node registry | kairos-watcher | in progress |
+| T-221 | Shard lease manager and node registry | kairos-watcher | review |
 | T-222 | Fire poller | kairos-watcher | todo |
 | T-223 | Delayed poller | kairos-watcher | todo |
 | T-224 | Outbox relay | kairos-watcher | todo |
@@ -527,6 +527,7 @@ Metric names the alerts and dashboards expect; the tasks that emit them use exac
 | `kairos_fires_total`, `kairos_misfires_total` | counter | `cell`; misfires add `policy` | T-222 |
 | `kairos_poll_duration_seconds`, `kairos_poll_batch_size` | timer, summary | `poller`, `cell` | T-222, T-223 |
 | `kairos_shard_leases_owned`, `kairos_shard_lease_changes_total` | gauge, counter | `outcome` on changes | T-221 |
+| `kairos_shard_poller_duration` | timer | `poller`, `cell` | T-221 |
 | `kairos_outbox_oldest_due_seconds`, `kairos_outbox_backlog_rows`, `kairos_outbox_published_total` | gauge, gauge, counter | `cell`; published adds `topic` | T-224 |
 | `kairos_executor_inflight`, `kairos_executor_capacity` | gauge | `priority` on in-flight | T-241 |
 | `kairos_executor_deferrals_total` | counter | `reason` | T-241 |
@@ -707,15 +708,17 @@ The single place where runs and their outbox rows are created, used by the API (
 All watcher components live in `services/kairos-watcher` under `dev.kairos.watcher.<feature>`. They build on the `ShardedPoller` template from T-221.
 
 ### T-221 Shard lease manager and node registry
-**Status:** in progress (abhishekkhot) · **Needs:** T-107, T-113 · **Owns:** `dev.kairos.watcher.lease`, `dev.kairos.watcher.node`, `dev.kairos.watcher.support.ShardedPoller`
+**Status:** review · **Needs:** T-107, T-113 · **Owns:** `dev.kairos.watcher.lease`, `dev.kairos.watcher.node`, `dev.kairos.watcher.config`, `dev.kairos.watcher.support.ShardedPoller`, watcher build/runtime configuration and tests
 
-- [ ] Node registry: insert or update `scheduler_nodes` every 5s; node id `{service}-{pod}-{startMillis}`; clean up stale rows.
-- [ ] Lease manager every 5s per cell: renew owned leases (TTL 15s) with `generation` checks; acquire free or expired leases up to the fair share `ceil(256 / live watchers)`; release the surplus above fair share + 2, oldest first.
-- [ ] `OwnedShards` view exposed to pollers. Losing a lease stops work on that shard before the lease expires (a local deadline at TTL − 3s).
-- [ ] `ShardedPoller` base: runs a callback per owned shard group on a schedule with jitter, measures duration, stops cleanly on shutdown, and checks lease validity before committing.
-- [ ] On shutdown: release leases so another watcher takes over immediately.
+- [x] Node registry: insert or update `scheduler_nodes` every 5s; node id `{service}-{pod}-{startMillis}`; clean up stale rows.
+- [x] Lease manager every 5s per cell: renew owned leases (TTL 15s) with `generation` checks; acquire free or expired leases up to the fair share `ceil(cell shard count / live watchers)`; release the surplus above fair share + 2, oldest first.
+- [x] `OwnedShards` view exposed to pollers. Losing a lease stops work on that shard before the lease expires (a local deadline at TTL − 3s).
+- [x] `ShardedPoller` base: runs a callback per owned shard group on a schedule with jitter, measures duration, stops cleanly on shutdown, and checks lease validity before committing.
+- [x] On shutdown: release leases so another watcher takes over immediately.
 
 **Acceptance:** with 2 watchers, shards split about 128/128 within 30s; killing one moves all its shards within 20s; the generation check prevents a paused watcher from renewing a lease it lost.
+
+**Verification:** Docker `make bg BG_NAME=kairos-gradle-t221-final ARGS="spotlessApply build check"` passed: 2,144 tests, no failures/errors/skips; watcher line coverage 88.82%. PostgreSQL integration tests cover two-watcher sharing, release and takeover generation, stale-owner fencing, and poller work inside a lease-guarded transaction. No migrations or production dependency versions changed; Testcontainers is test-only.
 
 ### T-222 Fire poller
 **Status:** todo · **Needs:** T-221, T-102, T-113 · **Owns:** `dev.kairos.watcher.fire`

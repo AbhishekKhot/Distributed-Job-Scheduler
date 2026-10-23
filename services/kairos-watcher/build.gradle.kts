@@ -6,5 +6,13 @@ description = "Kairos watcher: shard leases, fire and delayed pollers, outbox re
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation(project(":libs:kairos-persistence"))
     implementation(project(":libs:kairos-engine"))
+
+    testImplementation(project(":libs:kairos-test-support"))
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
