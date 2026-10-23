@@ -261,7 +261,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-101 | Identifiers, shards and domain types | kairos-domain | done |
 | T-102 | Schedules: cron, interval, time zones, misfire | kairos-domain | review |
 | T-103 | Retry policy, outcomes and run state machine | kairos-domain | done |
-| T-104 | Workflow DAG validation and templates | kairos-domain | todo |
+| T-104 | Workflow DAG validation and templates | kairos-domain | done |
 | T-105 | Protobuf message contracts | kairos-proto | done |
 | T-106 | Database migrations | kairos-migrations | done |
 | T-107 | Persistence foundation and cell routing | kairos-persistence | done |
@@ -274,14 +274,14 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-201 | API foundation | kairos-api | done |
 | T-202 | Accounts APIs (1–7) | kairos-api | done |
 | T-203a | Team and members APIs (8–12) | kairos-api | review |
-| T-203b | API key APIs (13–15) | kairos-api | todo |
-| T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | todo |
-| T-203d | Signing key and audit log APIs (23–24) | kairos-api | todo |
+| T-203b | API key APIs (13–15) | kairos-api | done |
+| T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | done |
+| T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
 | T-204 | Endpoint APIs (25–33) | kairos-api | todo |
 | T-205 | Job APIs (34–45) | kairos-api | todo |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | todo |
-| T-221 | Shard lease manager and node registry | kairos-watcher | todo |
+| T-221 | Shard lease manager and node registry | kairos-watcher | in progress |
 | T-222 | Fire poller | kairos-watcher | todo |
 | T-223 | Delayed poller | kairos-watcher | todo |
 | T-224 | Outbox relay | kairos-watcher | todo |
@@ -707,7 +707,7 @@ The single place where runs and their outbox rows are created, used by the API (
 All watcher components live in `services/kairos-watcher` under `dev.kairos.watcher.<feature>`. They build on the `ShardedPoller` template from T-221.
 
 ### T-221 Shard lease manager and node registry
-**Status:** todo · **Needs:** T-107, T-113 · **Owns:** `dev.kairos.watcher.lease`, `dev.kairos.watcher.node`, `dev.kairos.watcher.support.ShardedPoller`
+**Status:** in progress (abhishekkhot) · **Needs:** T-107, T-113 · **Owns:** `dev.kairos.watcher.lease`, `dev.kairos.watcher.node`, `dev.kairos.watcher.support.ShardedPoller`
 
 - [ ] Node registry: insert or update `scheduler_nodes` every 5s; node id `{service}-{pod}-{startMillis}`; clean up stale rows.
 - [ ] Lease manager every 5s per cell: renew owned leases (TTL 15s) with `generation` checks; acquire free or expired leases up to the fair share `ceil(256 / live watchers)`; release the surplus above fair share + 2, oldest first.
