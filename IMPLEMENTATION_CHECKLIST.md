@@ -286,7 +286,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-223 | Delayed poller | kairos-watcher | done |
 | T-224 | Outbox relay | kairos-watcher | done |
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | done |
-| T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | in progress (AbhishekKhot) |
+| T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | review |
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | todo |
 | T-242 | Execution gates | kairos-executor | todo |
 | T-243 | Render, call, classify and publish result | kairos-executor | todo |
@@ -768,14 +768,16 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=t225-final2 ARGS='spotlessApply build check'` passed: 2,181 tests, no failures, errors or skips. PostgreSQL/Redis integration tests cover absent and present markers, `REVIEW` and default retry policy, maximum-age expiry, three-infrastructure-attempt exhaustion, a held lock, quarantine, a stuck queued redispatch, and atomic rollback. A simulated primary replication-id change writes the 310-second flag. Both watcher replicas and the full isolated detached Compose stack became healthy; watcher logs had no errors, and the stack and volumes were removed.
 
 ### T-226 Singleton tasks: auto-suspend, review timeout, purger
-**Status:** in progress (AbhishekKhot) · **Needs:** T-221, T-103 · **Owns:** `dev.kairos.watcher.singleton`
+**Status:** review · **Needs:** T-221, T-103 · **Owns:** `dev.kairos.watcher.singleton`
 
-- [ ] Single-instance execution through a Postgres advisory lock on the control database (`pg_try_advisory_lock`), held on a dedicated connection and released on shutdown.
-- [ ] Auto-suspend evaluator every 15s: applies the T-103 rule over `endpoint_health_minute`; suspends through the same path as API 31; writes an audit entry (`system:auto-suspend`); respects the opt-out and the cool-down.
-- [ ] Review-timeout sweeper every 60s: `BLOCKED` workflow runs past `blocked_until` (24h) fail their dependents as `UPSTREAM_FAILED`.
-- [ ] Purger every hour: resolved DLQ entries and `DELETED` definitions older than 7 days, idempotency records older than 24h, expired sessions. Deletes in batches of ≤ 2K with a pause between batches.
+- [x] Single-instance execution through a Postgres advisory lock on the control database (`pg_try_advisory_lock`), held on a dedicated connection and released on shutdown.
+- [x] Auto-suspend evaluator every 15s: applies the T-103 rule over `endpoint_health_minute`; suspends through the same path as API 31; writes an audit entry (`system:auto-suspend`); respects the opt-out and the cool-down.
+- [x] Review-timeout sweeper every 60s: `BLOCKED` workflow runs past `blocked_until` (24h) fail their dependents as `UPSTREAM_FAILED`.
+- [x] Purger every hour: resolved DLQ entries and `DELETED` definitions older than 7 days, idempotency records older than 24h, expired sessions. Deletes in batches of ≤ 2K with a pause between batches.
 
 **Acceptance:** two watchers never run the same singleton at the same time (test with forced contention); an endpoint over the threshold is suspended once and its schedules are held.
+
+**Verification:** Docker `make bg BG_NAME=t226-final2 ARGS='spotlessApply build check'` passed: 2,185 tests, no failures, errors or skips. PostgreSQL integration tests cover advisory-lock contention and release, threshold suspension with audit and schedule hold, opt-out, cool-down, five-minute window boundary, dependent-task timeout propagation, and retention cleanup across a 2,000-row batch boundary. Both watcher replicas and all Compose services became healthy; watcher logs had no errors, and the isolated stack, volumes, and generated credentials were removed.
 
 ### 8.3 kairos-executor
 
