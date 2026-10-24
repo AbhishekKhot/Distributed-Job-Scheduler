@@ -31,6 +31,7 @@ public final class DispatchConsumerManager implements SmartLifecycle {
                     tier,
                     new DispatchConsumerRunner(
                             tier,
+                            "kairos-executor",
                             factory,
                             processor,
                             admission,
