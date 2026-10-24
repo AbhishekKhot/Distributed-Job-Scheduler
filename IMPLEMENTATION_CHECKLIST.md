@@ -277,10 +277,10 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-203b | API key APIs (13–15) | kairos-api | done |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | done |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
-| T-204 | Endpoint APIs (25–33) | kairos-api | todo |
+| T-204 | Endpoint APIs (25–33) | kairos-api | in progress |
 | T-205 | Job APIs (34–45) | kairos-api | todo |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
-| T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | review |
+| T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | done |
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
 | T-222 | Fire poller | kairos-watcher | done |
 | T-223 | Delayed poller | kairos-watcher | done |
@@ -654,7 +654,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-23):** Docker `spotlessApply build check` passed: 2,088 tests, no failures/skips, API line coverage 94.24%. Tests cover signature verification, concurrent rotation, expiry after configuration changes, stale cleanup, audit rollback, team isolation, cursor/filter binding, time bounds and secret redaction. A fresh isolated Compose stack applied the migration, became healthy, and passed onboarding, API-key authentication, two signing rotations, API-key refusal on rotation, and audit filtering/pagination. Test containers and volumes were removed. No dependency changes.
 
 ### T-204 Endpoint APIs (LLD APIs 25–33)
-**Status:** todo · **Needs:** T-201, T-110, T-203c (secret lookup) · **Owns:** `dev.kairos.api.endpoints`
+**Status:** in progress (Abhishek Khot) · **Needs:** T-201, T-110, T-203c (secret lookup) · **Owns:** `dev.kairos.api.endpoints`
 
 - [ ] `EndpointSpec` record and validation (LLD section 3.5): method, `urlTemplate` passing `TargetPolicy` at registration, `{param}` only in the path, default headers (no hop-by-hop or auth headers), auth with a `secretRef` that must exist, CA bundle reference, timeout range, success statuses, status overrides, retry policy, limits, outputs, `unknownOutcomePolicy`, suspend policy. Size ≤ 64 KB.
 - [ ] 25 create (version 1 written to `api_endpoint_versions`), 26 list (status filter, cursor), 27 get, 28 update (`If-Match`; new immutable version; running runs keep their pinned version), 29 delete (`409 endpoint-in-use` while jobs reference it).
@@ -695,7 +695,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** tests for every LLD row; a cyclic workflow returns the LLD error with the cycle path; run now on a diamond workflow creates only the root task runs.
 
 ### T-207 Run, DLQ and stats APIs (LLD APIs 59–68)
-**Status:** review (Abhishek Khot) · **Needs:** T-201, T-113 · **Owns:** `dev.kairos.api.runs`, `dev.kairos.api.dlq`, `dev.kairos.api.stats`
+**Status:** done · **Needs:** T-201, T-113 · **Owns:** `dev.kairos.api.runs`, `dev.kairos.api.dlq`, `dev.kairos.api.stats`
 
 - [x] 59 list runs (filters, fan-out across cells, cursor), 60 get a run (current state plus attempts from `run_history`), 61 cancel a run (waiting, queued and delayed runs are deleted with their unpublished outbox row; a running run is flagged and gets a cancel message).
 - [x] 62 list DLQ entries, 63 get, 64 acknowledge (assignee, notes), and 66 discard.
@@ -705,7 +705,7 @@ The single place where runs and their outbox rows are created, used by the API (
 
 **Acceptance:** tests for every LLD row; redriving one entry twice starts one new attempt series and the second call returns `409 dlq-resolved`; bulk redrive respects pacing.
 
-**Verification:** PR #38 is open against `develop`. Docker `make bg BG_NAME=kairos-gradle-t207-repo-final ARGS='spotlessApply build check'` passed on 2026-10-24. The API check reports 341 tests with no failures, errors or skips and 92.2% line coverage. The run list test fans out across two cells; API acceptance covers DLQ redrive idempotence, bulk dry-run replay, stats percentiles and the OpenAPI inventory. Existing T-223 Redis integration tests verify the delayed poller's 100/s redrive pacing cap.
+**Verification:** PR #38 is merged into `develop`. Docker `make bg BG_NAME=kairos-gradle-t207-repo-final ARGS='spotlessApply build check'` passed on 2026-10-24. The API check reports 341 tests with no failures, errors or skips and 92.2% line coverage. The run list test fans out across two cells; API acceptance covers DLQ redrive idempotence, bulk dry-run replay, stats percentiles and the OpenAPI inventory. Existing T-223 Redis integration tests verify the delayed poller's 100/s redrive pacing cap.
 
 ### 8.2 kairos-watcher
 
