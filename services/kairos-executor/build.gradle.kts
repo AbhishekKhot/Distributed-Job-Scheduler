@@ -12,4 +12,7 @@ dependencies {
     implementation(project(":libs:kairos-http"))
     implementation(project(":libs:kairos-security"))
     implementation("org.apache.kafka:kafka-clients")
+
+    testImplementation(project(":libs:kairos-test-support"))
+    testImplementation("org.testcontainers:testcontainers-kafka")
 }

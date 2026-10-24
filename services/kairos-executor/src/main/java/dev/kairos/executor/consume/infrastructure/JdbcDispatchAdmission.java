@@ -7,6 +7,7 @@ import dev.kairos.executor.consume.application.LocalDispatchLimiter;
 import dev.kairos.persistence.cell.CellRouter;
 import dev.kairos.proto.v1.Dispatch;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -101,7 +102,7 @@ public final class JdbcDispatchAdmission implements DispatchAdmission {
                           AND target_id = :targetId AND fence = :fence AND state = 2 AND NOT cancel_requested
                           AND endpoint_id = :endpointId AND endpoint_version = :endpointVersion
                         """)
-                        .param("dueAt", dueAt)
+                        .param("dueAt", Timestamp.from(dueAt))
                         .param("shard", dispatch.getShard())
                         .param("runId", runId)
                         .param("teamId", teamId)
