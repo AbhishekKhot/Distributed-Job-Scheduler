@@ -54,7 +54,9 @@ public final class DispatchConsumerManager implements SmartLifecycle {
                             new dev.kairos.messaging.client.PartitionFlowControl(
                                     properties.highWater(), properties.lowWater()),
                             properties,
-                            metrics));
+                            metrics,
+                            inFlight,
+                            requeuer));
         }
     }
 
@@ -82,18 +84,6 @@ public final class DispatchConsumerManager implements SmartLifecycle {
                 Thread.currentThread().interrupt();
             }
         });
-        try {
-            int requeued = inFlight.requeueUnsent(requeuer);
-            if (requeued > 0) {
-                System.getLogger(DispatchConsumerManager.class.getName())
-                        .log(System.Logger.Level.INFO, "Requeued " + requeued + " unsent runs during executor drain");
-            }
-        } catch (RuntimeException failure) {
-            System.getLogger(DispatchConsumerManager.class.getName())
-                    .log(
-                            System.Logger.Level.ERROR,
-                            "Could not requeue every unsent run during drain; lease recovery will retry them");
-        }
         inFlight.abortSentAfterDrain();
     }
 

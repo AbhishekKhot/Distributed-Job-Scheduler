@@ -7,6 +7,7 @@ import dev.kairos.http.client.CallCancellation;
 import dev.kairos.proto.v1.Dispatch;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -44,23 +45,27 @@ public final class InFlightCalls {
         calls.computeIfPresent(runId.value(), (_, active) -> active.cancellation() == cancellation ? null : active);
     }
 
-    /** Cancels and requeues every active call that has not crossed the send cut-off. */
-    public int requeueUnsent(DrainRequeuer requeuer) {
+    /** Cancels and requeues the selected active calls that have not crossed the send cut-off. */
+    public Set<UUID> requeueUnsent(Set<UUID> runIds, DrainRequeuer requeuer) {
         List<ActiveCall> snapshot = new ArrayList<>(calls.values());
-        int requeued = 0;
+        Set<UUID> requeued = ConcurrentHashMap.newKeySet();
         for (ActiveCall active : snapshot) {
+            UUID runId = dev.kairos.executor.consume.application.DispatchIds.uuid(
+                    active.dispatch().getRunId());
+            if (!runIds.contains(runId)) continue;
             if (active.beginDrain()) {
                 try {
                     if (requeuer.requeue(active.dispatch(), active.fence(), active.ownerNode(), active.lock())) {
-                        requeued++;
+                        requeued.add(runId);
                     }
                 } catch (RuntimeException failure) {
                     active.allowRecovery();
-                    throw failure;
+                    System.getLogger(InFlightCalls.class.getName())
+                            .log(System.Logger.Level.ERROR, "Unsent run requeue failed; lease recovery will retry it");
                 }
             }
         }
-        return requeued;
+        return Set.copyOf(requeued);
     }
 
     /** Stops sent exchanges that remained active at the end of the drain; their results remain unknown outcomes. */

@@ -8,6 +8,7 @@ import dev.kairos.engine.lock.RunLock;
 import dev.kairos.proto.ProtoIds;
 import dev.kairos.proto.v1.Dispatch;
 import dev.kairos.testsupport.TestIds;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class InFlightCallsTest {
@@ -42,7 +43,7 @@ class InFlightCallsTest {
         var lock = new RunLock(runId, new LockToken(new Fence(12), "test-node", "0123456789abcdef0123456789abcdef"));
         var cancellation = calls.register(dispatch, new Fence(12), "test-node", lock);
 
-        int count = calls.requeueUnsent((queued, fence, node, activeLock) -> {
+        Set<java.util.UUID> requeued = calls.requeueUnsent(Set.of(runId.value()), (queued, fence, node, activeLock) -> {
             assertThat(queued).isEqualTo(dispatch);
             assertThat(fence).isEqualTo(12);
             assertThat(node).isEqualTo("test-node");
@@ -50,7 +51,7 @@ class InFlightCallsTest {
             return true;
         });
 
-        assertThat(count).isEqualTo(1);
+        assertThat(requeued).containsExactly(runId.value());
         assertThat(cancellation.isCancelled()).isTrue();
         assertThat(calls.markSent(runId, cancellation)).isFalse();
     }
