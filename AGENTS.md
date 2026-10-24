@@ -107,7 +107,7 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 - Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Current task:** T-207 runs, DLQ and stats APIs (LLD APIs 59–68) is implemented and acceptance-checked on `t-207-runs-dlq-stats`, and is in review. After it merges, ready tasks include T-261, T-281, T-282, T-301, T-402 and T-403. T-204 has all declared checklist dependencies merged and can use the metadata lookup ports and T-243 internal endpoint-test interface. Work one task at a time and wait for the user's go-ahead before starting another.
+**Current task:** T-207 runs, DLQ and stats APIs (LLD APIs 59–68) is implemented and acceptance-checked on `t-207-runs-dlq-stats`; PR #38 is open against `develop`. After it merges, ready tasks include T-261, T-281, T-282, T-301, T-402 and T-403. T-204 has all declared checklist dependencies merged and can use the metadata lookup ports and T-243 internal endpoint-test interface. Work one task at a time and wait for the user's go-ahead before starting another.
 
 **Open items:**
 

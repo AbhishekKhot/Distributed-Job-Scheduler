@@ -705,7 +705,7 @@ The single place where runs and their outbox rows are created, used by the API (
 
 **Acceptance:** tests for every LLD row; redriving one entry twice starts one new attempt series and the second call returns `409 dlq-resolved`; bulk redrive respects pacing.
 
-**Verification:** Docker `make bg BG_NAME=kairos-gradle-t207-repo-final ARGS='spotlessApply build check'` passed on 2026-10-24. The API check reports 341 tests with no failures, errors or skips and 92.2% line coverage. The run list test fans out across two cells; API acceptance covers DLQ redrive idempotence, bulk dry-run replay, stats percentiles and the OpenAPI inventory. Existing T-223 Redis integration tests verify the delayed poller's 100/s redrive pacing cap.
+**Verification:** PR #38 is open against `develop`. Docker `make bg BG_NAME=kairos-gradle-t207-repo-final ARGS='spotlessApply build check'` passed on 2026-10-24. The API check reports 341 tests with no failures, errors or skips and 92.2% line coverage. The run list test fans out across two cells; API acceptance covers DLQ redrive idempotence, bulk dry-run replay, stats percentiles and the OpenAPI inventory. Existing T-223 Redis integration tests verify the delayed poller's 100/s redrive pacing cap.
 
 ### 8.2 kairos-watcher
 
