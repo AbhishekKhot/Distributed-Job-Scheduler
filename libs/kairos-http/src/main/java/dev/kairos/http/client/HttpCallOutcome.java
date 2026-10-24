@@ -198,4 +198,24 @@ public sealed interface HttpCallOutcome {
             return Optional.empty();
         }
     }
+
+    /**
+     * The call was explicitly cancelled by the scheduler.
+     *
+     * @param requestSent whether the request may have reached the target
+     * @param startedAt when the exchange started
+     * @param finishedAt when cancellation ended the exchange
+     */
+    record Cancelled(boolean requestSent, Instant startedAt, Instant finishedAt) implements HttpCallOutcome {
+        /** Validates the timestamps. */
+        public Cancelled {
+            Objects.requireNonNull(startedAt, "startedAt");
+            Objects.requireNonNull(finishedAt, "finishedAt");
+        }
+
+        @Override
+        public Optional<CallResult> callResult() {
+            return Optional.empty();
+        }
+    }
 }

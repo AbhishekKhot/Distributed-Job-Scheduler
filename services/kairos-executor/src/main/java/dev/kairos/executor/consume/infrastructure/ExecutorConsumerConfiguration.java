@@ -1,9 +1,13 @@
 package dev.kairos.executor.consume.infrastructure;
 
+import dev.kairos.engine.outbox.OutboxConfiguration;
+import dev.kairos.executor.cancel.infrastructure.CancelConsumer;
+import dev.kairos.executor.cancel.infrastructure.InFlightCalls;
 import dev.kairos.executor.consume.application.DispatchAdmission;
 import dev.kairos.executor.consume.application.DispatchProcessor;
 import dev.kairos.executor.consume.application.LocalDispatchLimiter;
 import dev.kairos.executor.gate.application.ExecutionAction;
+import dev.kairos.executor.lifecycle.infrastructure.JdbcDrainRequeuer;
 import dev.kairos.messaging.client.KafkaClientFactory;
 import dev.kairos.messaging.client.PoisonMessages;
 import dev.kairos.messaging.config.MessagingConfiguration;
@@ -23,7 +27,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 /** Explicit persistence and Kafka wiring for executor dispatch consumption. */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ExecutorConsumerProperties.class)
-@Import({PersistenceConfiguration.class, MessagingConfiguration.class})
+@Import({PersistenceConfiguration.class, MessagingConfiguration.class, OutboxConfiguration.class})
 public class ExecutorConsumerConfiguration {
 
     /** Shared UTC clock for dispatch deferral timestamps. */
@@ -50,6 +54,20 @@ public class ExecutorConsumerConfiguration {
         return new LocalDispatchLimiter();
     }
 
+    /** Registry of calls that can be aborted by the pod's broadcast cancel consumer. */
+    @Bean
+    public InFlightCalls inFlightCalls() {
+        return new InFlightCalls();
+    }
+
+    /** Starts a distinct cancel consumer group for this executor pod. */
+    @Bean
+    @ConditionalOnProperty(name = "kairos.executor.consumer.enabled", havingValue = "true", matchIfMissing = true)
+    public CancelConsumer cancelConsumer(KafkaClientFactory factory, InFlightCalls calls) {
+        String podId = System.getenv().getOrDefault("HOSTNAME", "executor-" + java.util.UUID.randomUUID());
+        return new CancelConsumer(factory, calls, podId);
+    }
+
     /** Control and cell database adapter for concurrency limits and durable deferral. */
     @Bean
     public DispatchAdmission dispatchAdmission(
@@ -73,8 +91,20 @@ public class ExecutorConsumerConfiguration {
             PoisonMessages poisonMessages,
             DispatchCapacity capacity,
             ExecutorConsumerProperties properties,
-            ExecutorConsumerMetrics metrics) {
+            ExecutorConsumerMetrics metrics,
+            org.springframework.context.ApplicationEventPublisher events,
+            InFlightCalls inFlight,
+            JdbcDrainRequeuer requeuer) {
         return new DispatchConsumerManager(
-                factory, processor, admission, poisonMessages, capacity, properties, metrics);
+                factory,
+                processor,
+                admission,
+                poisonMessages,
+                capacity,
+                properties,
+                metrics,
+                events,
+                inFlight,
+                requeuer);
     }
 }

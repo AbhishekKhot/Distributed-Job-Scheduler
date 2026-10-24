@@ -6,12 +6,14 @@ import dev.kairos.engine.lock.ReleaseResult;
 import dev.kairos.engine.lock.RunLock;
 import dev.kairos.engine.lock.RunLockPort;
 import dev.kairos.engine.lock.SentMarker;
+import dev.kairos.executor.cancel.infrastructure.InFlightCalls;
 import dev.kairos.executor.consume.application.DispatchIds;
 import dev.kairos.executor.consume.application.DispatchProcessor;
 import dev.kairos.executor.gate.application.ExecutionAction;
 import dev.kairos.executor.gate.application.ExecutionContext;
 import dev.kairos.executor.gate.application.ExecutionGateChain;
 import dev.kairos.executor.gate.application.RunClaimPort;
+import dev.kairos.http.client.CallCancellation;
 import dev.kairos.http.client.SendObserver;
 import dev.kairos.proto.v1.Dispatch;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -34,6 +36,7 @@ public final class DispatchExecutionProcessor implements DispatchProcessor {
     private final Clock clock;
     private final MeterRegistry meters;
     private final ScheduledExecutorService scheduler;
+    private final InFlightCalls inFlight;
 
     /** Creates the dispatch execution pipeline. */
     public DispatchExecutionProcessor(
@@ -43,7 +46,8 @@ public final class DispatchExecutionProcessor implements DispatchProcessor {
             ExecutionAction action,
             Clock clock,
             MeterRegistry meters,
-            ScheduledExecutorService scheduler) {
+            ScheduledExecutorService scheduler,
+            InFlightCalls inFlight) {
         this.gates = Objects.requireNonNull(gates, "gates");
         this.locks = Objects.requireNonNull(locks, "locks");
         this.claims = Objects.requireNonNull(claims, "claims");
@@ -51,6 +55,7 @@ public final class DispatchExecutionProcessor implements DispatchProcessor {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.meters = Objects.requireNonNull(meters, "meters");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+        this.inFlight = Objects.requireNonNull(inFlight, "inFlight");
     }
 
     @Override
@@ -83,11 +88,23 @@ public final class DispatchExecutionProcessor implements DispatchProcessor {
                 return;
             }
             LeaseRenewer renewer = new LeaseRenewer(context, locks, claims, clock, meters, scheduler);
+            CallCancellation cancellation = inFlight.register(
+                    dispatch,
+                    context.claimedFence().orElseThrow(),
+                    context.lock().orElseThrow().token().nodeId(),
+                    context.lock().orElseThrow());
             try {
-                SendObserver sendObserver = gates.sendObserver(context);
-                action.execute(context, sendObserver);
+                SendObserver gatesObserver = gates.sendObserver(context);
+                SendObserver sendObserver = sendContext -> {
+                    gatesObserver.beforeSend(sendContext);
+                    if (!inFlight.markSent(context.runId(), cancellation)) {
+                        throw new dev.kairos.http.client.SendVetoedException("The executor is draining");
+                    }
+                };
+                action.execute(context, sendObserver, cancellation);
             } finally {
                 renewer.close();
+                inFlight.remove(context.runId(), cancellation);
             }
             durableOutcome = true;
         } finally {

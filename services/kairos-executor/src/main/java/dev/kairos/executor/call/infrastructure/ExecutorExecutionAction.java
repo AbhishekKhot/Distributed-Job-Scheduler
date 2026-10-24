@@ -23,6 +23,7 @@ import dev.kairos.executor.gate.application.ExecutionAction;
 import dev.kairos.executor.gate.application.ExecutionContext;
 import dev.kairos.http.auth.AuthFailedException;
 import dev.kairos.http.auth.Authenticator;
+import dev.kairos.http.client.CallCancellation;
 import dev.kairos.http.client.HttpCallOutcome;
 import dev.kairos.http.client.SendObserver;
 import dev.kairos.http.redact.Redactor;
@@ -89,6 +90,12 @@ public final class ExecutorExecutionAction implements ExecutionAction {
 
     @Override
     public void execute(ExecutionContext context, SendObserver sendObserver) throws Exception {
+        execute(context, sendObserver, new CallCancellation());
+    }
+
+    @Override
+    public void execute(ExecutionContext context, SendObserver sendObserver, CallCancellation cancellation)
+            throws Exception {
         Dispatch dispatch = context.dispatch();
         Instant processingStarted = clock.instant();
         TeamId team = new TeamId(ProtoIds.toUuid(dispatch.getTeamId()));
@@ -154,15 +161,37 @@ public final class ExecutorExecutionAction implements ExecutionAction {
             return;
         }
 
+        if (cancellation.isCancelled()) {
+            protections.abandon(admission);
+            Result cancelled = base(context, processingStarted, clock.instant())
+                    .setOutcome(CallOutcome.CALL_OUTCOME_CANCELLED)
+                    .setSentMarker(false)
+                    .build();
+            publish(cancelled, targetId, dispatch.getTraceParent());
+            record(cancelled, dispatch, processingStarted);
+            return;
+        }
+
         HttpCallOutcome observed;
         try {
-            observed = rendered.client().execute(rendered.request(), sendObserver);
+            observed = rendered.client().execute(rendered.request(), sendObserver, cancellation);
         } catch (AuthFailedException authFailure) {
             observed = new HttpCallOutcome.Failed(
                     authFailure.callResult(), authFailure.getMessage(), clock.instant(), clock.instant());
         }
         if (observed instanceof HttpCallOutcome.Received received && received.status() == 401) {
             authenticator.onUnauthorized(rendered.auth());
+        }
+
+        if (cancellation.isCancelled() || observed instanceof HttpCallOutcome.Cancelled) {
+            protections.abandon(admission);
+            Result cancelled = base(context, observed.startedAt(), observed.finishedAt())
+                    .setOutcome(CallOutcome.CALL_OUTCOME_CANCELLED)
+                    .setSentMarker(observed.requestSent())
+                    .build();
+            publish(cancelled, targetId, dispatch.getTraceParent());
+            record(cancelled, dispatch, processingStarted);
+            return;
         }
 
         CallResult callResult = observed.callResult().orElse(null);
