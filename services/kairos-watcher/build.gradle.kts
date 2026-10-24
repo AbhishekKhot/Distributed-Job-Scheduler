@@ -9,9 +9,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation(project(":libs:kairos-persistence"))
     implementation(project(":libs:kairos-engine"))
+    implementation("io.lettuce:lettuce-core")
     implementation("org.postgresql:postgresql")
 
     testImplementation(project(":libs:kairos-test-support"))
+    testImplementation("org.testcontainers:testcontainers-postgresql")
 }
 
 tasks.withType<Test>().configureEach {
