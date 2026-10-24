@@ -1,6 +1,7 @@
 package dev.kairos.api.config;
 
 import dev.kairos.api.endpoints.EndpointsConfiguration;
+import dev.kairos.api.jobs.JobsConfiguration;
 import dev.kairos.api.security.ApiKeyLookup;
 import dev.kairos.api.security.BearerAuthenticator;
 import dev.kairos.api.security.SessionLookup;
@@ -56,7 +57,8 @@ import tools.jackson.databind.json.JsonMapper;
     TokenConfiguration.class,
     ApiKeyConfiguration.class,
     HttpConfiguration.class,
-    EndpointsConfiguration.class
+    EndpointsConfiguration.class,
+    JobsConfiguration.class
 })
 public class ApiConfiguration {
 
