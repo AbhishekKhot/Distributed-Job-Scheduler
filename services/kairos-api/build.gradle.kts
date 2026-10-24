@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":libs:kairos-security"))
     // The process's single id factory (OutboxConfiguration) and the Redis connection settings (kairos.redis.*).
     implementation(project(":libs:kairos-engine"))
+    implementation(project(":libs:kairos-http"))
 
     // Rate limits: Bucket4j token buckets in Redis through Lettuce (kairos:rl:*).
     implementation(libs.bucket4j.lettuce)

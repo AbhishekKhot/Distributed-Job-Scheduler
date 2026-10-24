@@ -32,11 +32,11 @@ import tools.jackson.databind.json.JsonMapper;
 class OpenApiDocumentTest extends ApiApplicationTest {
 
     /**
-     * LLD operation numbers whose feature tasks are not implemented yet. T-207 implements 59–64 and 66; redrive,
-     * bulk redrive and stats remain pending.
+     * LLD operation numbers whose feature tasks are not implemented yet. Endpoint APIs 25–33 are implemented by T-204;
+     * jobs and workflows through 58 and maintenance APIs remain pending.
      */
     static final Set<Integer> NOT_YET_IMPLEMENTED =
-            Set.copyOf(IntStream.rangeClosed(25, 58).boxed().toList());
+            Set.copyOf(IntStream.rangeClosed(34, 58).boxed().toList());
 
     private static final Pattern OPERATION = Pattern.compile(
             "^<summary><b>(\\d{1,2})\\. [^<]{1,80}</b> &nbsp; <code>(GET|POST|PUT|PATCH|DELETE) (/[^<\\s]{1,120})</code></summary>$");
