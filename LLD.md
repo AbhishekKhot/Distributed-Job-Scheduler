@@ -2214,6 +2214,8 @@ The API aggregates durable counters from `endpoint_health_minute` and calculates
 
 Job body rules: `name` is 1–128 characters matching `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`; `schedule.type` is `IMMEDIATE`, `ONE_TIME` (with `at`), `CRON` (with `expression` and `timezone`) or `INTERVAL` (with `everySec`); `priority` 1–10 (8–10 high, 5–7 medium, 1–4 low tier); `misfirePolicy` is `RUN_LATEST` (default), `RUN_ALL` or `SKIP`; `retryPolicy` overrides the endpoint's as a whole, with the same ranges; `autoPauseAfter` is 0–100, and 0 disables auto-pause.
 
+Path parameter values and query names and values are percent-encoded as URI components when a call is rendered. Job request headers cannot override managed transport or authentication headers.
+
 <details>
 <summary><b>34. Create a job</b> &nbsp; <code>POST /v1/jobs</code></summary>
 
