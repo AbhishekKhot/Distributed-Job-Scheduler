@@ -277,8 +277,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-203b | API key APIs (13–15) | kairos-api | done |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | done |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
-| T-204 | Endpoint APIs (25–33) | kairos-api | review |
-| T-205 | Job APIs (34–45) | kairos-api | todo |
+| T-204 | Endpoint APIs (25–33) | kairos-api | done |
+| T-205 | Job APIs (34–45) | kairos-api | in progress |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | done |
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
@@ -654,7 +654,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-23):** Docker `spotlessApply build check` passed: 2,088 tests, no failures/skips, API line coverage 94.24%. Tests cover signature verification, concurrent rotation, expiry after configuration changes, stale cleanup, audit rollback, team isolation, cursor/filter binding, time bounds and secret redaction. A fresh isolated Compose stack applied the migration, became healthy, and passed onboarding, API-key authentication, two signing rotations, API-key refusal on rotation, and audit filtering/pagination. Test containers and volumes were removed. No dependency changes.
 
 ### T-204 Endpoint APIs (LLD APIs 25–33)
-**Status:** review (Abhishek Khot) · **Needs:** T-201, T-110, T-203c (secret lookup) · **Owns:** `dev.kairos.api.endpoints`
+**Status:** done (Abhishek Khot) · **Needs:** T-201, T-110, T-203c (secret lookup) · **Owns:** `dev.kairos.api.endpoints`
 
 - [x] `EndpointSpec` record and validation (LLD section 3.5): method, safe `urlTemplate` with path-only parameters, managed-header refusal, typed secret and CA references, timeout, status rules, retry policy, limits, output selectors, unknown-outcome and suspend policies. Serialized spec size is capped at 64 KB.
 - [x] APIs 25–29: create writes immutable version 1, list uses status-bound signed cursors, get is team-scoped, update requires `If-Match` and appends a version, and delete checks job references in every cell.
@@ -666,10 +666,10 @@ The single place where runs and their outbox rows are created, used by the API (
 
 **Acceptance:** Docker integration tests cover CRUD and immutable versions, If-Match, team isolation, safe-target/reference refusal, endpoint-test relay and rate limit, use conflicts, health windows, and cross-cell suspend/resume. Resume releases held schedules so the state processor can apply the saved job misfire policy.
 
-**Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-gradle-t204-final ARGS='spotlessApply build check'` passed. The API suite reports 354 tests and the watcher suite 119 tests, with no failures, errors or skips. `git diff --check` is clean. The API now explicitly depends on `kairos-http`; its dependency lock was refreshed. T-204 is implemented on `t-204-endpoint-apis` and awaiting PR review/merge.
+**Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-gradle-t204-final ARGS='spotlessApply build check'` passed. The API suite reports 354 tests and the watcher suite 119 tests, with no failures, errors or skips. `git diff --check` is clean. The API now explicitly depends on `kairos-http`; its dependency lock was refreshed. T-204 was merged to `develop` through PR #39 on 2026-10-24.
 
 ### T-205 Job APIs (LLD APIs 34–45)
-**Status:** todo · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`
+**Status:** in progress (Abhishek Khot) · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`
 
 - [ ] `JobSpec` record and validation (LLD section 3.6): schedule (`IMMEDIATE`, `ONE_TIME`, `CRON`, `INTERVAL`), request values for the endpoint's parameters, priority, misfire policy, retry override, `autoPauseAfter`, `maxLatenessMs`. Size ≤ 128 KB.
 - [ ] 34 create (`Idempotency-Key`): the shard is computed from team and name; writes `jobs`, `job_versions` and `schedules` (or, for `IMMEDIATE`, a run and its outbox row through T-113) in one cell transaction; enforces the team's `maxJobs` quota; returns `nextFireAt`.
@@ -829,7 +829,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t243-final-check ARGS='check'` passed. The executor suite reports 98 tests with no failures, errors or skips; executor line coverage is 70.65%. T-243 tests cover rendered URL encoding and signatures, success/output extraction and sealing, HTTP 500 and 409 classification, sent timeout uncertainty, send-veto deferral, retry-until-ack publication, breaker/rate-limit behavior, internal token validation, endpoint-test rate limiting and sensitive-output redaction.
 
 ### T-244 Cancel listener and graceful drain
-**Status:** review · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`, executor dispatch/call lifecycle integration seams, cancellable-call API in `libs/kairos-http`
+**Status:** done · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`, executor dispatch/call lifecycle integration seams, cancellable-call API in `libs/kairos-http`
 
 - [x] Cancel listener on `kairos.run.cancel` with a unique consumer group per pod (every executor sees every cancel). It aborts the matching in-flight call and publishes a `CANCELLED` result.
 - [x] Graceful drain on SIGTERM: stop polling, let in-flight calls finish for up to 60s, re-queue unsent runs (release the lock, return them to `QUEUED` with a new fence and an outbox row), then commit offsets and exit. Readiness turns down at the start of the drain.
