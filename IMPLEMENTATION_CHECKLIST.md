@@ -286,8 +286,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-223 | Delayed poller | kairos-watcher | done |
 | T-224 | Outbox relay | kairos-watcher | done |
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | done |
-| T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | review |
-| T-241 | Dispatch consumers and back-pressure | kairos-executor | todo |
+| T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | done |
+| T-241 | Dispatch consumers and back-pressure | kairos-executor | in progress (AbhishekKhot) |
 | T-242 | Execution gates | kairos-executor | todo |
 | T-243 | Render, call, classify and publish result | kairos-executor | todo |
 | T-244 | Cancel listener and graceful drain | kairos-executor | todo |
@@ -768,7 +768,7 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=t225-final2 ARGS='spotlessApply build check'` passed: 2,181 tests, no failures, errors or skips. PostgreSQL/Redis integration tests cover absent and present markers, `REVIEW` and default retry policy, maximum-age expiry, three-infrastructure-attempt exhaustion, a held lock, quarantine, a stuck queued redispatch, and atomic rollback. A simulated primary replication-id change writes the 310-second flag. Both watcher replicas and the full isolated detached Compose stack became healthy; watcher logs had no errors, and the stack and volumes were removed.
 
 ### T-226 Singleton tasks: auto-suspend, review timeout, purger
-**Status:** review · **Needs:** T-221, T-103 · **Owns:** `dev.kairos.watcher.singleton`
+**Status:** done · **Needs:** T-221, T-103 · **Owns:** `dev.kairos.watcher.singleton`
 
 - [x] Single-instance execution through a Postgres advisory lock on the control database (`pg_try_advisory_lock`), held on a dedicated connection and released on shutdown.
 - [x] Auto-suspend evaluator every 15s: applies the T-103 rule over `endpoint_health_minute`; suspends through the same path as API 31; writes an audit entry (`system:auto-suspend`); respects the opt-out and the cool-down.
@@ -782,7 +782,7 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 ### 8.3 kairos-executor
 
 ### T-241 Dispatch consumers and back-pressure
-**Status:** todo · **Needs:** T-108, T-113 · **Owns:** `dev.kairos.executor.consume`
+**Status:** in progress (AbhishekKhot) · **Needs:** T-108, T-113 · **Owns:** `dev.kairos.executor.consume`
 
 - [ ] Three consumers (`kairos.run.high`, `.medium`, `.low`) with poll sizes 250, 150 and 100, giving the high tier a larger share.
 - [ ] Each record is handed to a virtual thread. In-flight runs are tracked per pod; consumption pauses at 4K in flight and resumes at 3K (LLD section 4.1).
