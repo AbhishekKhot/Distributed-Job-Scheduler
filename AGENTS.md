@@ -48,7 +48,7 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 ## Progress and next steps (update at the end of every session)
 
-**Verified repository state (2026-10-24):** `origin/develop` points to `223c13b`, which merges T-242 execution gates through PR #35, after T-241 dispatch consumers (#34), T-226 singleton tasks (#33), and T-225 recovery sweepers (#32). The consolidated repository guidance merged through PR #29, T-222 fire poller through PR #28, T-223 delayed poller through PR #30, and T-221 shard leases/node registry through PR #27. On `t-243-render-call-publish`, there are **51 checklist tasks: 31 done, 0 in progress, and 20 todo**.
+**Verified repository state (2026-10-24):** `origin/develop` points to `89b7f44`, which merges T-243 render/call/classify/publish through PR #36, after T-242 execution gates (#35), T-241 dispatch consumers (#34), T-226 singleton tasks (#33), and T-225 recovery sweepers (#32). The consolidated repository guidance merged through PR #29, T-222 fire poller through PR #28, T-223 delayed poller through PR #30, and T-221 shard leases/node registry through PR #27. On `t-244-cancel-drain`, there are **51 checklist tasks: 31 done, 1 in progress, and 19 todo**.
 
 **Implementation boundary:** repository/build tooling and all Phase 1 library tasks are merged, with one unchecked T-109 configuration-example follow-up recorded below. The API implements foundation and APIs 1–24; APIs 25–68 remain pending. The watcher has lease/node support, fire and delayed pollers, the T-224 outbox relay, and merged T-225/T-226 maintenance work. T-241 dispatch consumers, T-242 execution gates and T-243 render/call/classify/publish are implemented; the executor now supplies its durable execution action. Cancellation, state, maintenance, mock target and benchmark CLI remain pending. The end-to-end scheduler, resilience guarantees under load, and 20K / 50K capacity have not yet been demonstrated.
 
@@ -92,19 +92,19 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 - Libraries: T-101 ids/shards (#4), T-102 schedules (#21), T-103 retry/outcomes/run state machine (#8), T-104 workflow DAG validation/templates (#26), T-105 proto contracts (#3), T-106 migrations (#5), T-107 persistence + cell routing (#7), T-108 messaging (#15), T-109 security (#10), T-110 outbound HTTP client + target policy (#12), T-111 Redis run lock + sent markers (#11), T-113 run creation + outbox writer (#9).
 - Follow-ups: dead-letter `fence` column + LLD/checklist fixes (#13); engine Spring configuration `OutboxConfiguration`/`RunCreationConfiguration` (#14); trace/key docs (#16); migrations create the JWT signing keyset after migrating (#17, closes old open item 1); API session/team refresh correction (#22).
 
-**Latest completed:** T-243 render/call/classify/publish on `t-243-render-call-publish`. T-242 execution gates (#35), T-241 dispatch consumers (#34), T-226 singleton tasks (#33), T-225 recovery sweepers (#32) and T-224 outbox relay (#31) are merged and marked `done` on this branch. No checklist task is currently in progress.
+**Latest completed:** T-243 render/call/classify/publish (#36) is merged to `develop` and marked `done`. T-242 execution gates (#35), T-241 dispatch consumers (#34), T-226 singleton tasks (#33), T-225 recovery sweepers (#32) and T-224 outbox relay (#31) are also merged and marked `done`.
 
-**Pending (20 tasks, all `todo`):**
+**Pending (19 tasks `todo`, plus T-244 in progress):**
 
 - `kairos-api`: T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
 - `kairos-watcher`: no remaining tasks after T-226 is completed.
-- `kairos-executor`: T-244 cancel + drain.
+- `kairos-executor`: T-244 cancel + drain (in progress).
 - `kairos-state`: T-261 result settler, T-262 workflow progression, T-263 stats aggregator.
 - `kairos-maintenance`: T-281 partition manager, T-282 operator commands.
 - Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Next after T-243 and when the user selects a task:** T-244 is the direct executor continuation; other ready tasks are T-207, T-261, T-281, T-282, T-301, T-402 and T-403. T-204 has all declared checklist dependencies merged and can use the metadata lookup ports and T-243 internal endpoint-test interface. Work one task at a time and wait for the user's go-ahead before starting another.
+**Current task:** T-244 cancel listener and graceful drain, on `t-244-cancel-drain`. Other ready tasks after T-244 are T-207, T-261, T-281, T-282, T-301, T-402 and T-403. T-204 has all declared checklist dependencies merged and can use the metadata lookup ports and T-243 internal endpoint-test interface. Work one task at a time and wait for the user's go-ahead before starting another.
 
 **Open items:**
 

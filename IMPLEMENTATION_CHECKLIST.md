@@ -290,7 +290,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | done |
 | T-242 | Execution gates | kairos-executor | done |
 | T-243 | Render, call, classify and publish result | kairos-executor | done |
-| T-244 | Cancel listener and graceful drain | kairos-executor | todo |
+| T-244 | Cancel listener and graceful drain | kairos-executor | in progress (AbhishekKhot) |
 | T-261 | Result settler | kairos-state | todo |
 | T-262 | Workflow progression | kairos-state | todo |
 | T-263 | Stats aggregator | kairos-state | todo |
@@ -823,7 +823,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t243-final-check ARGS='check'` passed. The executor suite reports 98 tests with no failures, errors or skips; executor line coverage is 70.65%. T-243 tests cover rendered URL encoding and signatures, success/output extraction and sealing, HTTP 500 and 409 classification, sent timeout uncertainty, send-veto deferral, retry-until-ack publication, breaker/rate-limit behavior, internal token validation, endpoint-test rate limiting and sensitive-output redaction.
 
 ### T-244 Cancel listener and graceful drain
-**Status:** todo · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`
+**Status:** in progress (AbhishekKhot) · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`
 
 - [ ] Cancel listener on `kairos.run.cancel` with a unique consumer group per pod (every executor sees every cancel). It aborts the matching in-flight call and publishes a `CANCELLED` result.
 - [ ] Graceful drain on SIGTERM: stop polling, let in-flight calls finish for up to 60s, re-queue unsent runs (release the lock, return them to `QUEUED` with a new fence and an outbox row), then commit offsets and exit. Readiness turns down at the start of the drain.
