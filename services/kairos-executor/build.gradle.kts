@@ -12,6 +12,10 @@ dependencies {
     implementation(project(":libs:kairos-http"))
     implementation(project(":libs:kairos-security"))
     implementation("org.apache.kafka:kafka-clients")
+    implementation(platform(libs.resilience4j.bom))
+    implementation(libs.resilience4j.circuitbreaker)
+    implementation(libs.resilience4j.ratelimiter)
+    implementation(libs.caffeine)
 
     testImplementation(project(":libs:kairos-test-support"))
     testImplementation("io.lettuce:lettuce-core")
