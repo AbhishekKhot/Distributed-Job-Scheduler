@@ -65,3 +65,23 @@ kairos:
     port: ${KAIROS_REDIS_PORT:6379}
     username: ${KAIROS_REDIS_USERNAME}
     password: ${KAIROS_REDIS_PASSWORD}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+kairos:
+  security:
+    kek:
+      local-key: ${KAIROS_LOCAL_KEK}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "!local"
+kairos:
+  security:
+    kek:
+      uri: ${KAIROS_KEK_URI}

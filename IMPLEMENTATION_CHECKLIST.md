@@ -288,8 +288,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | done |
 | T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | done |
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | done |
-| T-242 | Execution gates | kairos-executor | in progress (AbhishekKhot) |
-| T-243 | Render, call, classify and publish result | kairos-executor | todo |
+| T-242 | Execution gates | kairos-executor | done |
+| T-243 | Render, call, classify and publish result | kairos-executor | done |
 | T-244 | Cancel listener and graceful drain | kairos-executor | todo |
 | T-261 | Result settler | kairos-state | todo |
 | T-262 | Workflow progression | kairos-state | todo |
@@ -532,7 +532,7 @@ Metric names the alerts and dashboards expect; the tasks that emit them use exac
 | `kairos_executor_inflight`, `kairos_executor_capacity` | gauge | `priority` on in-flight | T-241 |
 | `kairos_executor_deferrals_total` | counter | `reason` | T-241 |
 | `kairos_execution_gate_total` | counter | `gate`, `outcome` | T-242 |
-| `kairos_executor_calls_total`, `kairos_executor_call_duration_seconds` | counter, timer | `outcome`, `error_class`, `priority` | T-243 |
+| `kairos_executor_calls_total`, `kairos_executor_call_duration_seconds` | counter, timer | `outcome`, `error_class`, `priority` / `tier` | T-243 |
 | `kairos_settle_batch_size`, `kairos_settle_duration_seconds` | summary, timer | none | T-261 |
 | `kairos_retries_scheduled_total`, `kairos_dlq_entries_created_total`, `kairos_dlq_open_entries` | counter, counter, gauge | `error_class`; DLQ adds `cell` | T-261 |
 | `kairos_workflow_tasks_queued_total` | counter | none | T-262 |
@@ -793,7 +793,7 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Acceptance:** under a flood larger than capacity, in-flight never exceeds 4K and memory stays flat; a restart re-delivers only unfinished records.
 
 ### T-242 Execution gates
-**Status:** review · **Needs:** T-241, T-111, T-107, T-110 (`SendObserver`) · **Owns:** `dev.kairos.executor.gate`
+**Status:** done · **Needs:** T-241, T-111, T-107, T-110 (`SendObserver`) · **Owns:** `dev.kairos.executor.gate`
 
 This task implements the guarantee that no run executes twice. Review it with extra care.
 
@@ -808,17 +808,19 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Acceptance:** a test that delivers the same dispatch message to two executors concurrently 1K times records exactly one call per run on the mock target; a paused executor (simulated GC pause past the TTL) does not send; a cancelled run is never sent.
 
 ### T-243 Render, call, classify and publish result
-**Status:** todo · **Needs:** T-242, T-110, T-109, T-103, T-104 · **Owns:** `dev.kairos.executor.call`
+**Status:** done · **Needs:** T-242, T-110, T-109, T-103, T-104 · **Owns:** `dev.kairos.executor.call`
 
-- [ ] Load the pinned endpoint version (Caffeine cache keyed by id and version; versions are immutable, so the cache never goes stale).
-- [ ] Render the request from the dispatch snapshot: path parameters, query, headers, body; upstream outputs for workflow tasks (sensitive outputs decrypted only in memory); `Idempotency-Key: <runId>`; `traceparent`; `X-Kairos-Run-Id`; `X-Kairos-Attempt`; `X-Kairos-Signature` and timestamp.
-- [ ] Apply auth (secret decrypted in memory for the call only, then cleared) and the team CA bundle.
-- [ ] Circuit breaker per endpoint (Resilience4j, 50% failure rate over 100 calls, open 30s). An open breaker defers the run without counting an attempt. A per-endpoint `ratePerSec` limiter likewise defers.
-- [ ] Call, then classify with T-103, extract outputs with T-104 (sensitive ones sealed with the team's `OUTPUTS` keyset), redact the error and snippet, and publish a `result` message to `kairos.run.result` (key = the dispatch's target id, since the `Result` message carries no target id) with `acks=all`. On publish failure, retry; the run stays `RUNNING` with its lease, so recovery handles a crash.
-- [ ] Internal endpoint test API for LLD API 30: `POST /internal/v1/endpoint-tests` on the executor, reachable only from `kairos-api` (NetworkPolicy in Helm, the backend network locally) and authenticated with a short-lived service token signed by the platform keyset. It runs one call through the same render and call path, without the run gates, and returns the redacted result.
-- [ ] Metrics: calls by outcome and error class, latency histogram per tier, breaker state changes.
+- [x] Load the pinned endpoint version (Caffeine cache keyed by team, id and version; versions are immutable, so the cache never goes stale).
+- [x] Render the request from the dispatch snapshot: path parameters, query, headers, body; upstream outputs for workflow tasks (sensitive outputs decrypted only in memory); `Idempotency-Key: <runId>`; `traceparent`; `X-Kairos-Run-Id`; `X-Kairos-Attempt`; `X-Kairos-Signature` and timestamp.
+- [x] Apply auth (secret resolved and decrypted for the call) and the team CA bundle.
+- [x] Circuit breaker per endpoint (Resilience4j, 50% failure rate over 100 calls, open 30s). An open breaker defers the run without counting an attempt. A per-endpoint `ratePerSec` limiter likewise defers.
+- [x] Call, then classify with T-103, extract outputs with T-104 (sensitive ones sealed with the team's `OUTPUTS` keyset), redact the error and snippet, and publish a `result` message to `kairos.run.result` (key = the dispatch's target id, since the `Result` message carries no target id) with `acks=all`. On publish failure, retry; the run stays `RUNNING` with its lease, so recovery handles a crash.
+- [x] Internal endpoint test API for LLD API 30: `POST /internal/v1/endpoint-tests` on the executor, authenticated with a short-lived service token signed by the platform keyset. It runs one call through the same render and call path, without run gates, and returns the redacted result. Local Compose keeps the executor on the internal backend network with no published port. T-204 applies the public shared team limit; T-401 adds the Helm NetworkPolicy.
+- [x] Metrics: calls by outcome and error class, latency histogram per tier, breaker state changes.
 
 **Acceptance:** against the mock target: 2xx succeeds with outputs extracted; 500 is retryable; 409 with an override counts as success; a timeout after send is an unknown outcome; an open breaker defers; the result payload never contains secrets or sensitive outputs in clear text.
+
+**Verification:** Docker `make bg BG_NAME=kairos-gradle-t243-final-check ARGS='check'` passed. The executor suite reports 98 tests with no failures, errors or skips; executor line coverage is 70.65%. T-243 tests cover rendered URL encoding and signatures, success/output extraction and sealing, HTTP 500 and 409 classification, sent timeout uncertainty, send-veto deferral, retry-until-ack publication, breaker/rate-limit behavior, internal token validation, endpoint-test rate limiting and sensitive-output redaction.
 
 ### T-244 Cancel listener and graceful drain
 **Status:** todo · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`
