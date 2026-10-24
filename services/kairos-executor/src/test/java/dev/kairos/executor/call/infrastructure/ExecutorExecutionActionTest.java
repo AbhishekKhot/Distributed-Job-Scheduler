@@ -95,6 +95,15 @@ class ExecutorExecutionActionTest {
     }
 
     @Test
+    void explicitCancellationPublishesCancelledResultWithTheSentMarker() throws Exception {
+        Result result = runWithRules(
+                StatusRules.DEFAULT, new HttpCallOutcome.Cancelled(true, NOW, NOW.plusMillis(50)), false, true);
+
+        assertThat(result.getOutcome()).isEqualTo(CallOutcome.CALL_OUTCOME_CANCELLED);
+        assertThat(result.getSentMarker()).isTrue();
+    }
+
+    @Test
     void sendVetoDefersWithoutMarkingTheRequestSent() throws Exception {
         Result result = run(new HttpCallOutcome.NotSent("lease is too short", NOW, NOW.plusMillis(1)));
 
@@ -134,6 +143,11 @@ class ExecutorExecutionActionTest {
     }
 
     private Result runWithRules(StatusRules rules, HttpCallOutcome outcome, boolean renderFailure) throws Exception {
+        return runWithRules(rules, outcome, renderFailure, false);
+    }
+
+    private Result runWithRules(StatusRules rules, HttpCallOutcome outcome, boolean renderFailure, boolean cancelSignal)
+            throws Exception {
         RunId runId = TestIds.runId(0);
         dev.kairos.domain.id.WorkflowRunId targetId = TestIds.workflowRunId(0);
         dev.kairos.domain.id.TeamId teamId = TestIds.teamId();
@@ -186,7 +200,16 @@ class ExecutorExecutionActionTest {
         } else {
             when(renderer.render(dispatch, endpoint)).thenReturn(rendered);
         }
-        when(client.execute(any(), any(SendObserver.class))).thenReturn(outcome);
+        if (cancelSignal) {
+            when(client.execute(any(), any(SendObserver.class), any(dev.kairos.http.client.CallCancellation.class)))
+                    .thenAnswer(invocation -> {
+                        ((dev.kairos.http.client.CallCancellation) invocation.getArgument(2)).cancel();
+                        return outcome;
+                    });
+        } else {
+            when(client.execute(any(), any(SendObserver.class), any(dev.kairos.http.client.CallCancellation.class)))
+                    .thenReturn(outcome);
+        }
         JdbcExecutionSecrets secrets = mock(JdbcExecutionSecrets.class);
         when(secrets.sealOutputs(any(), any(), anyMap())).thenReturn(new byte[] {1, 2, 3, 4});
         List<Result> published = new java.util.ArrayList<>();

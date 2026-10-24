@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.protobuf.ByteString;
+import dev.kairos.domain.id.KairosIdFactory;
 import dev.kairos.domain.id.RunId;
 import dev.kairos.domain.run.Fence;
 import dev.kairos.engine.lock.AcquireResult;
@@ -14,9 +15,12 @@ import dev.kairos.engine.lock.RunLock;
 import dev.kairos.engine.lock.RunLockPort;
 import dev.kairos.engine.lock.SentMarker;
 import dev.kairos.engine.lock.SentMarkerPort;
+import dev.kairos.engine.outbox.CellTransactionGuard;
+import dev.kairos.engine.outbox.OutboxWriter;
 import dev.kairos.executor.gate.application.ExecutionContext;
 import dev.kairos.executor.gate.application.ExecutionGateChain;
 import dev.kairos.executor.gate.application.RunClaimPort;
+import dev.kairos.executor.lifecycle.infrastructure.JdbcDrainRequeuer;
 import dev.kairos.http.client.SendContext;
 import dev.kairos.http.client.SendVetoedException;
 import dev.kairos.http.request.HttpMethod;
@@ -34,6 +38,7 @@ import dev.kairos.testsupport.KairosRedis;
 import dev.kairos.testsupport.TestIds;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.nio.ByteBuffer;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -87,6 +92,12 @@ class ExecutionGatesIntegrationTest {
         jdbc.sql(
                         "ALTER TABLE scheduler.run_inflight ADD COLUMN IF NOT EXISTS infra_attempt smallint NOT NULL DEFAULT 0")
                 .update();
+        jdbc.sql("""
+                CREATE TABLE IF NOT EXISTS scheduler.outbox (
+                  shard_id smallint NOT NULL, outbox_id uuid PRIMARY KEY, topic smallint NOT NULL,
+                  msg_key bytea NOT NULL, payload bytea NOT NULL, trace_parent text, run_id uuid,
+                  available_at timestamptz NOT NULL, created_at timestamptz NOT NULL)
+                """).update();
         CellRange range = new CellRange(0, 0, 255, "cell-0", CellStatus.ACTIVE);
         cells = new CellRouter(() -> List.of(range), Map.of("cell-0", cellDatabase), Duration.ofMinutes(5), CLOCK);
     }
@@ -174,6 +185,37 @@ class ExecutionGatesIntegrationTest {
     }
 
     @Test
+    void drainRequeueAdvancesTheFenceAndWritesDispatchOutboxAtomically() {
+        Dispatch dispatch = dispatch();
+        seed(dispatch, 4, false);
+        jdbc.sql(
+                        "UPDATE scheduler.run_inflight SET state = 3, fence = 5, owner_node = 'executor-a' WHERE run_id = :run")
+                .param("run", uuid(dispatch.getRunId()))
+                .update();
+        OutboxWriter writer = new OutboxWriter(
+                new CellTransactionGuard(cells), new KairosIdFactory(CLOCK, new SecureRandom()), CLOCK);
+        RunId runId = new RunId(uuid(dispatch.getRunId()));
+        RunLock lock = ((AcquireResult.Acquired) locks.acquire(runId, new Fence(5), Duration.ofSeconds(30))).lock();
+        JdbcDrainRequeuer requeuer = new JdbcDrainRequeuer(cells, writer, locks, CLOCK);
+
+        assertThat(requeuer.requeue(dispatch, 5, "executor-a", lock)).isTrue();
+        assertThat(readState(dispatch)).isEqualTo(2);
+        assertThat(readFence(dispatch)).isEqualTo(6);
+        assertThat(jdbc.sql("SELECT payload FROM scheduler.outbox WHERE run_id = :run")
+                        .param("run", uuid(dispatch.getRunId()))
+                        .query(byte[].class)
+                        .single())
+                .containsExactly(dispatch.toBuilder().setFence(6).build().toByteArray());
+        assertThat(requeuer.requeue(dispatch, 5, "executor-a", lock)).isFalse();
+        assertThat(locks.remaining(lock)).isInstanceOf(RemainingResult.NotOwned.class);
+        assertThat(jdbc.sql("SELECT count(*) FROM scheduler.outbox WHERE run_id = :run")
+                        .param("run", uuid(dispatch.getRunId()))
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(1L);
+    }
+
+    @Test
     void anExecutorPausedPastTheRedisTtlIsVetoedBeforeTheSentMarker() throws Exception {
         Dispatch dispatch = dispatch();
         RunId runId = new RunId(uuid(dispatch.getRunId()));
@@ -240,7 +282,15 @@ class ExecutionGatesIntegrationTest {
             RunLockPort lockPort,
             RunClaimPort claimPort,
             dev.kairos.executor.gate.application.ExecutionAction action) {
-        return new DispatchExecutionProcessor(gates, lockPort, claimPort, action, CLOCK, METERS, scheduler);
+        return new DispatchExecutionProcessor(
+                gates,
+                lockPort,
+                claimPort,
+                action,
+                CLOCK,
+                METERS,
+                scheduler,
+                new dev.kairos.executor.cancel.infrastructure.InFlightCalls());
     }
 
     private Dispatch dispatch() {

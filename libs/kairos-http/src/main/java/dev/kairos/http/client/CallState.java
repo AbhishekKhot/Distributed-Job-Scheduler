@@ -27,6 +27,7 @@ final class CallState {
     private final Duration deadline;
     private final ScheduledExecutorService scheduler;
     private final Runnable abort;
+    private final CallCancellation cancellation;
 
     // Written by the calling thread; the deadline flag by the scheduler thread.
     private volatile boolean sent;
@@ -41,12 +42,15 @@ final class CallState {
             SendContext sendContext,
             Duration deadline,
             ScheduledExecutorService scheduler,
-            Runnable abort) {
+            Runnable abort,
+            CallCancellation cancellation) {
         this.observer = observer;
         this.sendContext = sendContext;
         this.deadline = deadline;
         this.scheduler = scheduler;
         this.abort = abort;
+        this.cancellation = cancellation;
+        cancellation.attach(abort);
     }
 
     /**
@@ -55,6 +59,11 @@ final class CallState {
      * @throws VetoedSend if the observer refused, or if this call already sent once
      */
     void beforeSend() throws VetoedSend {
+        if (cancellation.isCancelled()) {
+            vetoed = true;
+            vetoReason = "the call was cancelled";
+            throw new VetoedSend(null);
+        }
         if (sent || vetoed) {
             // At most one send per call: redirects and retries are off, so a second send is a bug; refuse it.
             vetoed = true;
@@ -80,6 +89,7 @@ final class CallState {
         if (task != null) {
             task.cancel(false);
         }
+        cancellation.detach();
     }
 
     boolean sent() {
@@ -92,6 +102,14 @@ final class CallState {
 
     boolean deadlineExceeded() {
         return deadlineExceeded;
+    }
+
+    boolean cancelled() {
+        return cancellation.isCancelled();
+    }
+
+    boolean drainAborted() {
+        return cancellation.isDrainAbort();
     }
 
     String vetoReason() {
