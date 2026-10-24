@@ -246,6 +246,38 @@ public final class RedisConnector implements AutoCloseable {
         }
     }
 
+    /**
+     * Reserves a shared one-second delayed-dispatch slot, failing closed when Redis is unavailable.
+     *
+     * @param key the shared key for this one-second window
+     * @param teamId the run's team
+     * @param definitionId the pinned job or workflow definition
+     * @param trigger the run trigger
+     * @param teamLimit the team's maximum delayed dispatches per second
+     * @return true when all applicable counters were reserved atomically
+     * @throws RedisUnavailableException if Redis cannot make the reservation
+     */
+    public boolean reserveDelayedPace(
+            String key,
+            java.util.UUID teamId,
+            java.util.UUID definitionId,
+            dev.kairos.domain.model.Trigger trigger,
+            int teamLimit) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(teamId, "teamId");
+        Objects.requireNonNull(definitionId, "definitionId");
+        Objects.requireNonNull(trigger, "trigger");
+        if (teamLimit < 1) throw new IllegalArgumentException("teamLimit must be positive");
+        return evalInteger(
+                        LuaScript.DELAYED_PACE,
+                        key,
+                        "team:" + teamId,
+                        Integer.toString(teamLimit),
+                        trigger.name(),
+                        definitionId.toString())
+                == 1;
+    }
+
     private long evalInteger(RedisCommands<String, String> commands, LuaScript script, String key, String[] args) {
         String[] keys = {key};
         String sha = shas.get(script);
