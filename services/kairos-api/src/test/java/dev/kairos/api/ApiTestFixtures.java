@@ -59,6 +59,7 @@ public final class ApiTestFixtures {
             MIGRATIONS + "control/V2026_10_23_1530__signing_key_overlap.sql");
     private static final List<String> CELL_SCRIPTS = List.of(
             MIGRATIONS + "cell/V2026_10_20_0910__create_cell_schema.sql",
+            MIGRATIONS + "cell/V2026_10_21_0900__add_dead_letter_fence.sql",
             MIGRATIONS + "cell/V2026_10_20_0915__partition_cell_tables.sql");
     private static final String APP_ROLE_PLACEHOLDER = "${appRole}";
     private static final String SEED_CELL = """
