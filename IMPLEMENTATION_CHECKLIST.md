@@ -287,8 +287,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-224 | Outbox relay | kairos-watcher | done |
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | done |
 | T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | done |
-| T-241 | Dispatch consumers and back-pressure | kairos-executor | in progress (AbhishekKhot) |
-| T-242 | Execution gates | kairos-executor | todo |
+| T-241 | Dispatch consumers and back-pressure | kairos-executor | done |
+| T-242 | Execution gates | kairos-executor | in progress (AbhishekKhot) |
 | T-243 | Render, call, classify and publish result | kairos-executor | todo |
 | T-244 | Cancel listener and graceful drain | kairos-executor | todo |
 | T-261 | Result settler | kairos-state | todo |
@@ -782,28 +782,28 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 ### 8.3 kairos-executor
 
 ### T-241 Dispatch consumers and back-pressure
-**Status:** in progress (AbhishekKhot) · **Needs:** T-108, T-113 · **Owns:** `dev.kairos.executor.consume`
+**Status:** done · **Needs:** T-108, T-113 · **Owns:** `dev.kairos.executor.consume`
 
-- [ ] Three consumers (`kairos.run.high`, `.medium`, `.low`) with poll sizes 250, 150 and 100, giving the high tier a larger share.
-- [ ] Each record is handed to a virtual thread. In-flight runs are tracked per pod; consumption pauses at 4K in flight and resumes at 3K (LLD section 4.1).
-- [ ] Offsets are committed only for records whose processing finished (claim rejected, result published, or deferred). A per-partition tracker commits the highest contiguous finished offset.
-- [ ] Per-team in-flight quota (`maxInflight`) and per-endpoint `maxConcurrency`. Over-limit records are deferred back through the database (state `DELAYED` with a short `due_at`), never dropped and never spun on.
-- [ ] Metrics: in-flight per tier, consume lag, records per poll, deferrals.
+- [x] Three consumers (`kairos.run.high`, `.medium`, `.low`) with poll sizes 250, 150 and 100, giving the high tier a larger share.
+- [x] Each record is handed to a virtual thread. In-flight runs are tracked per pod; consumption pauses at 4K in flight and resumes at 3K (LLD section 4.1).
+- [x] Offsets are committed only for records whose processing finished (claim rejected, result published, or deferred). A per-partition tracker commits the highest contiguous finished offset.
+- [x] Per-team in-flight quota (`maxInflight`) and per-endpoint `maxConcurrency`. Over-limit records are deferred back through the database (state `DELAYED` with a short `due_at`), never dropped and never spun on.
+- [x] Metrics: in-flight per tier, consume lag, records per poll, deferrals.
 
 **Acceptance:** under a flood larger than capacity, in-flight never exceeds 4K and memory stays flat; a restart re-delivers only unfinished records.
 
 ### T-242 Execution gates
-**Status:** todo · **Needs:** T-241, T-111, T-107, T-110 (`SendObserver`) · **Owns:** `dev.kairos.executor.gate`
+**Status:** review · **Needs:** T-241, T-111, T-107, T-110 (`SendObserver`) · **Owns:** `dev.kairos.executor.gate`
 
 This task implements the guarantee that no run executes twice. Review it with extra care.
 
-- [ ] Gate 1, Redis run lock: acquire `kairos:lock:run:{runId}` with TTL = endpoint timeout + 10s. If not acquired, drop the message (another executor owns the run). If Redis is unavailable, stop consuming (fail closed) and resume when Redis is back.
-- [ ] Gate 2, fenced claim: `UPDATE run_inflight SET state = RUNNING, fence = fence + 1, owner_node, lease_until WHERE run_id = ? AND fence = ? AND state = QUEUED AND NOT cancel_requested RETURNING ...`. Zero rows means stale, duplicate or cancelled: release the lock and drop the message.
-- [ ] Gate 3, send-time guard: immediately before the request is written (through `SendObserver`), check `remaining(lock) >= timeout + 2s`. Otherwise abort before sending and re-queue (not counted as an attempt).
-- [ ] Gate 4, sent marker: write `kairos:sent:{runId}:{attempt}:{infraAttempt}` (48h) immediately before the bytes leave. If the marker cannot be written, do not send.
-- [ ] Lease renewal for long calls (extend the lock and `lease_until` together at half the TTL).
-- [ ] Gates are ordered `ExecutionGate` steps (chain of responsibility) with one metric per gate outcome.
-- [ ] Release the lock after the result is published (not before).
+- [x] Gate 1, Redis run lock: acquire `kairos:lock:run:{runId}` with TTL = endpoint timeout + 10s. If not acquired, drop the message (another executor owns the run). If Redis is unavailable, stop consuming (fail closed) and resume when Redis is back.
+- [x] Gate 2, fenced claim: `UPDATE run_inflight SET state = RUNNING, fence = fence + 1, owner_node, lease_until WHERE run_id = ? AND fence = ? AND state = QUEUED AND NOT cancel_requested RETURNING ...`. Zero rows means stale, duplicate or cancelled: release the lock and drop the message.
+- [x] Gate 3, send-time guard: immediately before the request is written (through `SendObserver`), check `remaining(lock) >= timeout + 2s`. Otherwise abort before sending and re-queue (not counted as an attempt).
+- [x] Gate 4, sent marker: write `kairos:sent:{runId}:{attempt}:{infraAttempt}` (48h) immediately before the bytes leave. If the marker cannot be written, do not send.
+- [x] Lease renewal for long calls (extend the lock and `lease_until` together at half the TTL).
+- [x] Gates are ordered `ExecutionGate` steps (chain of responsibility) with one metric per gate outcome.
+- [x] Release the lock after the result is published (not before).
 
 **Acceptance:** a test that delivers the same dispatch message to two executors concurrently 1K times records exactly one call per run on the mock target; a paused executor (simulated GC pause past the TTL) does not send; a cancelled run is never sent.
 
