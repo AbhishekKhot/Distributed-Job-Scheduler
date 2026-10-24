@@ -1,9 +1,12 @@
 package dev.kairos.api.jobs.application;
 
+import dev.kairos.api.jobs.application.JobStore.BatchError;
+import dev.kairos.api.jobs.application.JobStore.BatchResult;
 import dev.kairos.api.jobs.application.JobStore.Filter;
 import dev.kairos.api.jobs.application.JobStore.Job;
 import dev.kairos.api.jobs.application.JobStore.JobRun;
 import dev.kairos.api.jobs.application.JobStore.Key;
+import dev.kairos.api.jobs.application.JobStore.NewJob;
 import dev.kairos.api.jobs.application.JobStore.RunFilter;
 import dev.kairos.api.jobs.application.JobStore.RunKey;
 import dev.kairos.api.jobs.application.JobStore.Transition;
@@ -44,6 +47,7 @@ public final class JobsUseCase {
     private static final long RUN_HISTORY = 7L;
 
     private final JobStore store;
+    private final JobCreationGuard creationGuard;
     private final JobEndpointCatalog endpoints;
     private final TeamStore teams;
     private final TeamUsageReader usage;
@@ -54,6 +58,7 @@ public final class JobsUseCase {
 
     public JobsUseCase(
             JobStore store,
+            JobCreationGuard creationGuard,
             JobEndpointCatalog endpoints,
             TeamStore teams,
             TeamUsageReader usage,
@@ -62,6 +67,7 @@ public final class JobsUseCase {
             Clock clock,
             JsonMapper json) {
         this.store = Objects.requireNonNull(store, "store");
+        this.creationGuard = Objects.requireNonNull(creationGuard, "creationGuard");
         this.endpoints = Objects.requireNonNull(endpoints, "endpoints");
         this.teams = Objects.requireNonNull(teams, "teams");
         this.usage = Objects.requireNonNull(usage, "usage");
@@ -72,34 +78,42 @@ public final class JobsUseCase {
     }
 
     public Job create(TeamId team, String actor, JsonNode body) {
-        return create(team, actor, body, true);
+        JobStore.NewJob job = prepare(team, actor, body, 0);
+        return creationGuard.execute(team, () -> {
+            ensureJobQuota(team, 1);
+            return store.create(
+                    team, job.id(), actor, job.spec(), job.endpoint(), job.schedule(), job.now(), job.immediateCall());
+        });
     }
 
-    private Job create(TeamId team, String actor, JsonNode body, boolean checkQuota) {
+    private NewJob prepare(TeamId team, String actor, JsonNode body, int index) {
         Instant now = now();
         JobSpec spec = JobSpec.parse(body, now, json);
         JobEndpointCatalog.Endpoint endpoint = endpoint(team, spec.endpoint());
         validateEndpoint(spec, endpoint);
-        if (checkQuota) ensureJobQuota(team, 1);
         var id = ids.newJobId(dev.kairos.domain.shard.ShardKey.of(team.value(), spec.name()));
         JobSchedule schedule = JobSchedule.from(spec, now);
         if (spec.schedule() instanceof ScheduleSpec.Immediate) requireEndpointActive(endpoint);
         dev.kairos.engine.run.CallSpec immediateCall = spec.schedule() instanceof ScheduleSpec.Immediate
                 ? JobCallBuilder.build(endpoint.spec(), spec.request(), json)
                 : null;
-        return store.create(team, id.value(), actor, spec, endpoint, schedule, now, immediateCall);
+        return new NewJob(index, id.value(), actor, spec, endpoint, schedule, now, immediateCall);
     }
 
     public List<BatchResult> createBatch(TeamId team, String actor, JsonNode body) {
+        return creationGuard.execute(team, () -> createBatchGuarded(team, actor, body));
+    }
+
+    private List<BatchResult> createBatchGuarded(TeamId team, String actor, JsonNode body) {
         JsonNode jobs = body.path("jobs");
         if (!jobs.isArray() || jobs.isEmpty()) throw ValidationFailedException.of("jobs", FieldError.REQUIRED);
         if (jobs.size() > MAX_BATCH_SIZE) throw ValidationFailedException.of("jobs", "too-many");
         ensureJobQuota(team, jobs.size());
         List<BatchResult> results = new ArrayList<>(jobs.size());
+        List<NewJob> prepared = new ArrayList<>(jobs.size());
         for (int index = 0; index < jobs.size(); index++) {
             try {
-                Job created = create(team, actor, jobs.get(index), false);
-                results.add(new BatchResult(index, 201, created.id(), null));
+                prepared.add(prepare(team, actor, jobs.get(index), index));
             } catch (KairosException error) {
                 results.add(new BatchResult(
                         index,
@@ -108,6 +122,8 @@ public final class JobsUseCase {
                         new BatchError("/errors/" + error.errorCode().slug(), error.detail())));
             }
         }
+        results.addAll(store.createBatch(team, prepared));
+        results.sort(java.util.Comparator.comparingInt(BatchResult::index));
         return List.copyOf(results);
     }
 
@@ -203,7 +219,7 @@ public final class JobsUseCase {
             throw new ConflictException(ErrorCode.NOT_RECURRING, "Backfill applies only to CRON and INTERVAL jobs.");
         }
         ScheduleCalculator calculator = ScheduleCalculator.of(spec.schedule(), DstPolicy.DEFAULT, job.createdAt());
-        Instant lowerBound = from.isBefore(job.createdAt()) ? job.createdAt().minusNanos(1) : from.minusNanos(1);
+        Instant lowerBound = from.minusNanos(1);
         List<Instant> occurrences = new ArrayList<>();
         Optional<Fire> next = calculator.nextFire(lowerBound, null);
         while (next.isPresent() && !next.get().at().isAfter(to)) {
@@ -372,12 +388,4 @@ public final class JobsUseCase {
             @Nullable Instant firstAt,
             @Nullable Instant lastAt,
             boolean dryRun) {}
-
-    public record BatchError(String type, String detail) {}
-
-    public record BatchResult(
-            int index,
-            int status,
-            @Nullable UUID id,
-            @Nullable BatchError error) {}
 }

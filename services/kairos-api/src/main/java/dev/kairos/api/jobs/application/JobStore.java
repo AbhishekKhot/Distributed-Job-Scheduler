@@ -26,6 +26,26 @@ public interface JobStore {
             Instant now,
             @Nullable CallSpec immediateCall);
 
+    List<BatchResult> createBatch(TeamId team, List<NewJob> jobs);
+
+    record NewJob(
+            int index,
+            UUID id,
+            String actor,
+            JobSpec spec,
+            Endpoint endpoint,
+            JobSchedule schedule,
+            Instant now,
+            @Nullable CallSpec immediateCall) {}
+
+    record BatchError(String type, String detail) {}
+
+    record BatchResult(
+            int index,
+            int status,
+            @Nullable UUID id,
+            @Nullable BatchError error) {}
+
     Job update(
             TeamId team,
             UUID id,

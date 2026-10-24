@@ -278,7 +278,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | done |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
 | T-204 | Endpoint APIs (25–33) | kairos-api | done |
-| T-205 | Job APIs (34–45) | kairos-api | in progress |
+| T-205 | Job APIs (34–45) | kairos-api | review |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | done |
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
@@ -669,22 +669,24 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-gradle-t204-final ARGS='spotlessApply build check'` passed. The API suite reports 354 tests and the watcher suite 119 tests, with no failures, errors or skips. `git diff --check` is clean. The API now explicitly depends on `kairos-http`; its dependency lock was refreshed. T-204 was merged to `develop` through PR #39 on 2026-10-24.
 
 ### T-205 Job APIs (LLD APIs 34–45)
-**Status:** in progress (Abhishek Khot) · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`
+**Status:** review (Abhishek Khot; acceptance follow-up) · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`
 
-**Progress (2026-10-24):** The controller, application services, JDBC adapters and transactional run creation are implemented. Docker detached `spotlessApply :services:kairos-api:compileJava` passed. Acceptance checks and integration coverage remain pending.
+**Merge and acceptance state (2026-10-24):** The initial implementation merged through PR #40 at `0cb5af6`. Acceptance follow-up `t-205-acceptance` fixes double URL encoding, per-cell batch transactions/savepoints, concurrent job-quota admission, resume misfire cursors, pre-creation cron backfill, final-attempt deduplication, and cancellation races. The follow-up awaits merge.
 
-- [ ] `JobSpec` record and validation (LLD section 3.6): schedule (`IMMEDIATE`, `ONE_TIME`, `CRON`, `INTERVAL`), request values for the endpoint's parameters, priority, misfire policy, retry override, `autoPauseAfter`, `maxLatenessMs`. Size ≤ 128 KB.
-- [ ] 34 create (`Idempotency-Key`): the shard is computed from team and name; writes `jobs`, `job_versions` and `schedules` (or, for `IMMEDIATE`, a run and its outbox row through T-113) in one cell transaction; enforces the team's `maxJobs` quota; returns `nextFireAt`.
-- [ ] 35 batch create (at most 1K jobs per request; `429 quota-exceeded` when the batch would pass the team's job limit): grouped by cell and committed per cell, so one item's failure does not roll back the others; per-item results as the LLD shows.
-- [ ] 36 list (status, endpoint, name prefix, cursor; fan-out across cells), 37 get.
-- [ ] 38 update (`If-Match`; new version; the schedule is recomputed; queued runs keep their pinned version).
-- [ ] 39 delete: in one transaction, the schedule is removed, waiting, queued and delayed runs are cancelled, running runs get a cancel outbox row, and the status becomes `DELETED`; the name becomes reusable.
-- [ ] 40 pause (only `ACTIVE`; runs already queued still execute) and 41 resume (only `PAUSED` or `AUTO_PAUSED`; the next fire time is computed and fires missed while paused follow the misfire policy).
-- [ ] 42 cancel: same as delete, but the job stays visible with status `CANCELLED` (`409 invalid-state` if already cancelled).
-- [ ] 43 run now (manual trigger; `Idempotency-Key`), 44 backfill (CRON and INTERVAL jobs only, `409 not-recurring` otherwise; at most 10K occurrences, `400 range-too-large`; occurrences that already ran are skipped; inserted as `DELAYED` runs released at 100/s per job).
-- [ ] 45 list a job's runs (state filter, time range within 7 days, combining `run_inflight` and `run_history`).
+- [x] `JobSpec` record and validation (LLD section 3.6): schedule (`IMMEDIATE`, `ONE_TIME`, `CRON`, `INTERVAL`), request values for the endpoint's parameters, priority, misfire policy, retry override, `autoPauseAfter`, `maxLatenessSec` (converted to stored `maxLatenessMs`). Size ≤ 128 KB.
+- [x] 34 create (`Idempotency-Key`): the shard is computed from team and name; writes `jobs`, `job_versions` and `schedules` (or, for `IMMEDIATE`, a run and its outbox row through T-113) in one cell transaction; enforces the team's `maxJobs` quota; returns `nextFireAt`.
+- [x] 35 batch create (at most 1K jobs per request; `429 quota-exceeded` when the batch would pass the team's job limit): grouped by cell and committed per cell, so one item's failure does not roll back the others; per-item results as the LLD shows.
+- [x] 36 list (status, endpoint, name prefix, cursor; fan-out across cells), 37 get.
+- [x] 38 update (`If-Match`; new version; the schedule is recomputed; queued runs keep their pinned version).
+- [x] 39 delete: in one transaction, the schedule is removed, waiting, queued and delayed runs are cancelled, running runs get a cancel outbox row, and the status becomes `DELETED`; the name becomes reusable.
+- [x] 40 pause (only `ACTIVE`; runs already queued still execute) and 41 resume (only `PAUSED` or `AUTO_PAUSED`; the next fire time is computed and fires missed while paused follow the misfire policy).
+- [x] 42 cancel: same as delete, but the job stays visible with status `CANCELLED` (`409 invalid-state` if already cancelled).
+- [x] 43 run now (manual trigger; `Idempotency-Key`), 44 backfill (CRON and INTERVAL jobs only, `409 not-recurring` otherwise; at most 10K occurrences, `400 range-too-large`; occurrences that already ran are skipped; inserted as `DELAYED` runs released at 100/s per job).
+- [x] 45 list a job's runs (state filter, time range within 7 days, combining `run_inflight` and `run_history`).
 
 **Acceptance:** tests for every LLD row; creating the same job concurrently with one `Idempotency-Key` creates one job; deleting a job with a running run produces exactly one cancel message; the quota returns 429 `quota-exceeded`.
+
+**Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-t205-acceptance-final ARGS='spotlessApply build check'` passed all repository checks: 2,302 tests, zero failures/errors/skips. API: 412 tests, 91.62% line coverage; executor: 103 tests, 72.87%. Added 36 definition-validation cases and 22 HTTP/PostgreSQL integration tests covering APIs 34–45, eight concurrent same-key creates, concurrent distinct-name quota admission, concurrent delete with exactly one fenced cancel outbox row, rollback of job/version/run/outbox, both cells, immutable dispatch versions, run overrides, history/redrive deduplication, and 1,501 paced backfill occurrences. Existing watcher checks cover misfire and delayed-release policies. `git diff --check` is clean.
 
 ### T-206 Workflow and workflow-run APIs (LLD APIs 46–58)
 **Status:** todo · **Needs:** T-201, T-104, T-113, T-204 · **Owns:** `dev.kairos.api.workflows`, `dev.kairos.api.workflowruns`

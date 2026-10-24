@@ -8,6 +8,7 @@ import dev.kairos.api.jobs.application.JobSpec;
 import dev.kairos.api.jobs.application.JobStore;
 import dev.kairos.domain.error.ConflictException;
 import dev.kairos.domain.error.ErrorCode;
+import dev.kairos.domain.error.KairosException;
 import dev.kairos.domain.error.NotFoundException;
 import dev.kairos.domain.error.PreconditionFailedException;
 import dev.kairos.domain.id.EndpointId;
@@ -74,6 +75,10 @@ public final class JdbcJobStore implements JobStore {
                               h.scheduled_at, h.finished_at
                          FROM scheduler.run_history h
                         WHERE h.team_id=j.team_id AND h.target_id=j.job_id AND h.final
+                          AND NOT EXISTS (SELECT 1 FROM scheduler.run_inflight live WHERE live.run_id=h.run_id)
+                          AND NOT EXISTS (SELECT 1 FROM scheduler.run_history newer
+                               WHERE newer.run_id=h.run_id AND newer.final
+                                 AND (newer.attempt,newer.infra_attempt)>(h.attempt,h.infra_attempt))
                      ) r
                     ORDER BY r.scheduled_at DESC, r.run_id DESC LIMIT 1
               ) last_run ON true
@@ -238,6 +243,46 @@ public final class JdbcJobStore implements JobStore {
     }
 
     @Override
+    public List<BatchResult> createBatch(TeamId team, List<NewJob> jobs) {
+        java.util.Map<Cell, List<NewJob>> grouped = new java.util.LinkedHashMap<>();
+        for (NewJob job : jobs)
+            grouped.computeIfAbsent(cells.forId(job.id()), ignored -> new ArrayList<>())
+                    .add(job);
+        List<BatchResult> results = new ArrayList<>(jobs.size());
+        for (var group : grouped.entrySet()) {
+            group.getKey().transactions().execute(jdbc -> {
+                for (NewJob job : group.getValue()) {
+                    jdbc.sql("SAVEPOINT job_item").update();
+                    try {
+                        create(
+                                team,
+                                job.id(),
+                                job.actor(),
+                                job.spec(),
+                                job.endpoint(),
+                                job.schedule(),
+                                job.now(),
+                                job.immediateCall());
+                        results.add(new BatchResult(job.index(), 201, job.id(), null));
+                    } catch (KairosException error) {
+                        // A duplicate name aborts PostgreSQL's transaction until its savepoint is restored.
+                        jdbc.sql("ROLLBACK TO SAVEPOINT job_item").update();
+                        results.add(new BatchResult(
+                                job.index(),
+                                error.errorCode().status(),
+                                null,
+                                new BatchError("/errors/" + error.errorCode().slug(), error.detail())));
+                    } finally {
+                        jdbc.sql("RELEASE SAVEPOINT job_item").update();
+                    }
+                }
+                return null;
+            });
+        }
+        return List.copyOf(results);
+    }
+
+    @Override
     public Job update(
             TeamId team,
             UUID id,
@@ -327,15 +372,22 @@ public final class JdbcJobStore implements JobStore {
                     if (schedule.kind() != null) {
                         String scheduleStatus =
                                 endpoint != null && !"ACTIVE".equals(endpoint.status()) ? "HELD" : "ACTIVE";
-                        saveSchedule(
-                                jdbc,
-                                id,
-                                team,
-                                Objects.requireNonNull(endpoint, "endpoint"),
-                                schedule,
-                                current.version(),
-                                priority(current.spec()),
-                                scheduleStatus);
+                        // Retain the paused cursor and interval phase. The fire poller applies the
+                        // misfire policy to occurrences missed while paused, including DST overlap state.
+                        int existing = jdbc.sql("UPDATE scheduler.schedules SET status=:status WHERE schedule_id=:id")
+                                .param("status", "HELD".equals(scheduleStatus) ? 3 : 1)
+                                .param("id", id)
+                                .update();
+                        if (existing == 0)
+                            saveSchedule(
+                                    jdbc,
+                                    id,
+                                    team,
+                                    Objects.requireNonNull(endpoint, "endpoint"),
+                                    schedule,
+                                    current.version(),
+                                    priority(current.spec()),
+                                    scheduleStatus);
                     }
                 }
                 case CANCEL -> {
@@ -363,7 +415,8 @@ public final class JdbcJobStore implements JobStore {
     public void delete(TeamId team, UUID id, Instant now) {
         Cell cell = cells.forId(id);
         cell.transactions().execute(jdbc -> {
-            lock(jdbc, team, id);
+            LockedJob current = lock(jdbc, team, id);
+            if ("DELETED".equals(current.status())) throw notFound();
             cancelRuns(jdbc, team, id, now);
             jdbc.sql("DELETE FROM scheduler.schedules WHERE schedule_id=:id")
                     .param("id", id)
@@ -417,6 +470,10 @@ public final class JdbcJobStore implements JobStore {
         Cell cell = cells.forId(id);
         return cell.transactions().execute(jdbc -> {
             LockedJob current = lock(jdbc, team, id);
+            if ("DELETED".equals(current.status())) throw notFound();
+            if ("CANCELLED".equals(current.status())) {
+                throw new ConflictException(ErrorCode.INVALID_STATE, "A cancelled job cannot be backfilled.");
+            }
             if (current.version() != expectedVersion) throw PreconditionFailedException.versionMismatch();
             RunTarget target = target(team, id, current.version(), endpoint, spec, call);
             Instant first = occurrences.getFirst();
@@ -473,6 +530,10 @@ public final class JdbcJobStore implements JobStore {
                                 WHEN 4 THEN 'CANCELLED' WHEN 5 THEN 'SKIPPED' WHEN 6 THEN 'UPSTREAM_FAILED' END,
                            h.attempt,h.scheduled_at,h.finished_at,h.http_status,h.latency_ms
                       FROM scheduler.run_history h WHERE h.team_id=:team AND h.target_id=:job AND h.final
+                        AND NOT EXISTS (SELECT 1 FROM scheduler.run_inflight live WHERE live.run_id=h.run_id)
+                        AND NOT EXISTS (SELECT 1 FROM scheduler.run_history newer
+                             WHERE newer.run_id=h.run_id AND newer.final
+                               AND (newer.attempt,newer.infra_attempt)>(h.attempt,h.infra_attempt))
                 ) SELECT run_id,job_id,status,attempt,scheduled_at,finished_at,http_status,latency_ms FROM records WHERE true
                 """);
         if (filter.status() != null) sql.append(" AND status=:status");

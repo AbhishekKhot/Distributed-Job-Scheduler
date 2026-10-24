@@ -2216,6 +2216,10 @@ Job body rules: `name` is 1–128 characters matching `^[A-Za-z0-9][A-Za-z0-9._-
 
 Path parameter values and query names and values are percent-encoded as URI components when a call is rendered. Job request headers cannot override managed transport or authentication headers.
 
+Job quota admission is serialized per team across API instances, covering the `maxJobs` check through creation. The API holds a control-database session advisory lock in autocommit mode; each cell still commits in its own transaction. Contenders return their pooled connection between lock attempts; admission waits at most five seconds, then returns `503 unavailable` with `Retry-After: 1`. Batch items are grouped by cell and use per-item savepoints so a duplicate does not roll back successful siblings.
+
+Scheduled jobs referencing a suspended endpoint have held schedules. Immediate creation, manual execution and non-dry-run backfill require an active endpoint (`409 invalid-state`). Job run lists return one current row per run: an inflight row takes precedence over retained final attempts; otherwise the latest final attempt is returned.
+
 <details>
 <summary><b>34. Create a job</b> &nbsp; <code>POST /v1/jobs</code></summary>
 
@@ -2867,7 +2871,7 @@ Content-Type: application/problem+json
 {"type": "/errors/invalid-state", "title": "Invalid state", "status": 409, "detail": "Only a PAUSED or AUTO_PAUSED job can be resumed."}
 ```
 
-**Background effect:** The next fire time is computed; fires missed while paused follow the job's misfire policy.
+**Background effect:** Resume retains an existing schedule's `next_fire_at` and `last_fired_local`, preserving the interval phase and DST cursor. The fire poller computes the next position and applies the job's misfire policy to occurrences missed while paused. A missing schedule is recomputed from the current definition.
 
 </details>
 
@@ -3055,7 +3059,7 @@ Content-Type: application/problem+json
 {"type": "/errors/not-recurring", "title": "Not a recurring job", "status": 409, "detail": "Backfill applies only to CRON and INTERVAL jobs."}
 ```
 
-**Background effect:** Occurrences are inserted as `DELAYED` runs and released by the delayed poller at 100/s per job. Occurrences that already ran are skipped.
+**Background effect:** Occurrences are inserted as `DELAYED` runs and released by the delayed poller at 100/s per job (or the lower team backfill quota). Occurrences already present in inflight or retained history are skipped. Cron backfill may include occurrences before job creation; interval backfill retains its creation-time anchor. Cancellation and deletion are rechecked under the job row lock before inserting runs.
 
 </details>
 
