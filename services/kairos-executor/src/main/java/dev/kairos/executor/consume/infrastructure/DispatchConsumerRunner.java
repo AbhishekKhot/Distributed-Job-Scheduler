@@ -1,8 +1,10 @@
 package dev.kairos.executor.consume.infrastructure;
 
+import dev.kairos.executor.cancel.infrastructure.InFlightCalls;
 import dev.kairos.executor.consume.application.DispatchAdmission;
 import dev.kairos.executor.consume.application.DispatchIds;
 import dev.kairos.executor.consume.application.DispatchProcessor;
+import dev.kairos.executor.lifecycle.infrastructure.JdbcDrainRequeuer;
 import dev.kairos.messaging.client.KafkaClientFactory;
 import dev.kairos.messaging.client.KairosConsumer;
 import dev.kairos.messaging.client.PartitionFlowControl;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +36,7 @@ public final class DispatchConsumerRunner implements Runnable {
 
     private static final System.Logger LOG = System.getLogger(DispatchConsumerRunner.class.getName());
     private static final long MAX_RETRY_DELAY_MILLIS = Duration.ofSeconds(30).toMillis();
+    private static final Duration DRAIN_TIMEOUT = Duration.ofSeconds(60);
 
     private final DispatchTier tier;
     private final String groupIdPrefix;
@@ -44,7 +48,10 @@ public final class DispatchConsumerRunner implements Runnable {
     private final PartitionFlowControl flow;
     private final ExecutorConsumerProperties properties;
     private final ExecutorConsumerMetrics metrics;
+    private final InFlightCalls inFlight;
+    private final JdbcDrainRequeuer requeuer;
     private final AtomicBoolean running = new AtomicBoolean();
+    private final AtomicBoolean draining = new AtomicBoolean();
     private final AtomicReference<Consumer<byte[], Decoded<Dispatch>>> current = new AtomicReference<>();
     private final ConcurrentLinkedQueue<Completion> completed = new ConcurrentLinkedQueue<>();
     private final Map<Long, Slot> slots = new ConcurrentHashMap<>();
@@ -65,6 +72,35 @@ public final class DispatchConsumerRunner implements Runnable {
             PartitionFlowControl flow,
             ExecutorConsumerProperties properties,
             ExecutorConsumerMetrics metrics) {
+        this(
+                tier,
+                groupIdPrefix,
+                factory,
+                processor,
+                admission,
+                poisonMessages,
+                capacity,
+                flow,
+                properties,
+                metrics,
+                null,
+                null);
+    }
+
+    /** Creates a tier runner that atomically requeues unsent calls during a graceful drain. */
+    public DispatchConsumerRunner(
+            DispatchTier tier,
+            String groupIdPrefix,
+            KafkaClientFactory factory,
+            DispatchProcessor processor,
+            DispatchAdmission admission,
+            PoisonMessages poisonMessages,
+            DispatchCapacity capacity,
+            PartitionFlowControl flow,
+            ExecutorConsumerProperties properties,
+            ExecutorConsumerMetrics metrics,
+            InFlightCalls inFlight,
+            JdbcDrainRequeuer requeuer) {
         this.tier = Objects.requireNonNull(tier, "tier");
         this.groupIdPrefix = Objects.requireNonNull(groupIdPrefix, "groupIdPrefix");
         this.factory = Objects.requireNonNull(factory, "factory");
@@ -75,6 +111,8 @@ public final class DispatchConsumerRunner implements Runnable {
         this.flow = Objects.requireNonNull(flow, "flow");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.inFlight = inFlight;
+        this.requeuer = requeuer;
         metrics.bind(tier, flow);
     }
 
@@ -87,15 +125,22 @@ public final class DispatchConsumerRunner implements Runnable {
 
     /** Stops polling and wakes Kafka's blocking poll. */
     public void stop() {
+        stop(false);
+    }
+
+    /** Stops polling and waits for active workers up to the task's drain deadline. */
+    public void stopGracefully() {
+        draining.set(true);
+        stop(true);
+    }
+
+    private void stop(boolean graceful) {
         if (running.compareAndSet(true, false)) {
             Consumer<byte[], Decoded<Dispatch>> consumer = current.get();
             if (consumer != null) {
                 consumer.wakeup();
             }
-            Thread pollThread = thread;
-            if (pollThread != null) {
-                pollThread.interrupt();
-            }
+            if (!graceful) workers.shutdownNow();
         }
     }
 
@@ -142,10 +187,15 @@ public final class DispatchConsumerRunner implements Runnable {
                 }
             }
         } finally {
-            workers.shutdownNow();
+            if (draining.get()) workers.shutdown();
+            else workers.shutdownNow();
             try {
-                workers.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS);
+                if (!workers.awaitTermination(DRAIN_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    workers.shutdownNow();
+                    workers.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+                }
             } catch (InterruptedException interrupted) {
+                workers.shutdownNow();
                 Thread.currentThread().interrupt();
             } finally {
                 slots.values().forEach(Slot::release);
@@ -216,7 +266,7 @@ public final class DispatchConsumerRunner implements Runnable {
                 for (ConsumerRecord<byte[], Decoded<Dispatch>> record : records) {
                     TopicPartition partition = new TopicPartition(record.topic(), record.partition());
                     long token = offsets.register(partition, record.offset());
-                    Slot slot = new Slot(token);
+                    Slot slot = new Slot(token, partition, record.offset());
                     slots.put(token, slot);
                     flow.started(1);
                     var message = poisonMessages.message(record);
@@ -240,6 +290,7 @@ public final class DispatchConsumerRunner implements Runnable {
                 drainCompletions(offsets, consumer);
             }
         } finally {
+            if (draining.get()) awaitDrain(offsets, consumer);
             synchronized (completionLock) {
                 try {
                     drainCompletionsLocked(offsets, consumer);
@@ -247,6 +298,42 @@ public final class DispatchConsumerRunner implements Runnable {
                     activeOffsets.compareAndSet(offsets, null);
                     offsets.discardAll().forEach(ref -> releaseSlot(ref.token()));
                 }
+            }
+        }
+    }
+
+    private void awaitDrain(DispatchOffsetTracker offsets, Consumer<byte[], Decoded<Dispatch>> consumer) {
+        long deadline = System.nanoTime() + DRAIN_TIMEOUT.toNanos();
+        while (!slots.isEmpty() && System.nanoTime() < deadline) {
+            drainCompletions(offsets, consumer);
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        drainCompletions(offsets, consumer);
+        if (inFlight != null && requeuer != null) {
+            Set<UUID> activeRuns = slots.values().stream()
+                    .map(Slot::dispatch)
+                    .filter(Objects::nonNull)
+                    .map(dispatch -> DispatchIds.uuid(dispatch.getRunId()))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            Set<UUID> requeued = inFlight.requeueUnsent(activeRuns, requeuer);
+            if (!requeued.isEmpty()) {
+                for (Slot slot : slots.values()) {
+                    Dispatch dispatch = slot.dispatch();
+                    if (dispatch != null
+                            && requeued.contains(DispatchIds.uuid(dispatch.getRunId()))
+                            && slot.markCompleting()) {
+                        offsets.complete(slot.partition(), slot.offset(), slot.token());
+                    }
+                }
+                LOG.log(
+                        System.Logger.Level.INFO,
+                        "Requeued " + requeued.size() + " unsent runs and completed their Kafka offsets");
+                drainCompletions(offsets, consumer);
             }
         }
     }
@@ -259,6 +346,7 @@ public final class DispatchConsumerRunner implements Runnable {
             DispatchOffsetTracker offsets,
             Slot slot) {
         try {
+            slot.dispatch(dispatch);
             workers.execute(() -> process(dispatch, record, partition, token, offsets, slot));
         } catch (RuntimeException rejected) {
             slot.release();
@@ -349,6 +437,7 @@ public final class DispatchConsumerRunner implements Runnable {
 
     private void queueCompletion(DispatchOffsetTracker offsets, Completion completion, Slot slot) {
         synchronized (completionLock) {
+            if (!slot.markCompleting()) return;
             if (activeOffsets.get() == offsets) {
                 completed.add(completion);
             } else {
@@ -391,10 +480,40 @@ public final class DispatchConsumerRunner implements Runnable {
 
     private final class Slot {
         private final long token;
+        private final TopicPartition partition;
+        private final long offset;
         private final AtomicBoolean released = new AtomicBoolean();
+        private final AtomicBoolean completing = new AtomicBoolean();
+        private volatile Dispatch dispatch;
 
-        private Slot(long token) {
+        private Slot(long token, TopicPartition partition, long offset) {
             this.token = token;
+            this.partition = partition;
+            this.offset = offset;
+        }
+
+        private Dispatch dispatch() {
+            return dispatch;
+        }
+
+        private void dispatch(Dispatch message) {
+            dispatch = message;
+        }
+
+        private TopicPartition partition() {
+            return partition;
+        }
+
+        private long token() {
+            return token;
+        }
+
+        private long offset() {
+            return offset;
+        }
+
+        private boolean markCompleting() {
+            return completing.compareAndSet(false, true);
         }
 
         private void release() {
