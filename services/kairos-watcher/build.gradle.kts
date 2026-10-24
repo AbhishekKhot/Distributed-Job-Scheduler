@@ -9,6 +9,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation(project(":libs:kairos-persistence"))
     implementation(project(":libs:kairos-engine"))
+    implementation(project(":libs:kairos-messaging"))
+    implementation("org.apache.kafka:kafka-clients")
     implementation("io.lettuce:lettuce-core")
     implementation("org.postgresql:postgresql")
 

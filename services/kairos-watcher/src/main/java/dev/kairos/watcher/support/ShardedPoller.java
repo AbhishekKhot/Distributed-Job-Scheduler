@@ -100,8 +100,7 @@ public final class ShardedPoller implements AutoCloseable {
                 || interval.isZero()
                 || interval.isNegative()
                 || groupSize < 1
-                || groupSize > 64
-                || jitter.compareTo(interval) >= 0) {
+                || groupSize > 64) {
             throw new IllegalArgumentException("Invalid sharded poller registration");
         }
         Registration registration = new Registration(name, interval, groupSize, callback);
@@ -152,7 +151,7 @@ public final class ShardedPoller implements AutoCloseable {
         }
         AtomicInteger completed = new AtomicInteger();
         for (Group group : groups) {
-            long delay = randomJitterMillis();
+            long delay = randomJitterMillis(registration.interval);
             executor.schedule(
                     () -> {
                         try {
@@ -207,12 +206,17 @@ public final class ShardedPoller implements AutoCloseable {
 
     private long nextDelay(Duration interval) {
         long nominal = interval.toMillis();
-        long spread = Math.min(jitter.toMillis(), Math.max(0, nominal - 1));
+        long spread = jitterMillis(interval);
         return nominal - spread + randomInclusive(spread * 2);
     }
 
-    private long randomJitterMillis() {
-        return randomInclusive(jitter.toMillis());
+    private long randomJitterMillis(Duration interval) {
+        return randomInclusive(jitterMillis(interval));
+    }
+
+    private long jitterMillis(Duration interval) {
+        long nominal = interval.toMillis();
+        return Math.min(jitter.toMillis(), Math.min(nominal / 5, Math.max(0, nominal - 1)));
     }
 
     private static long randomInclusive(long max) {
