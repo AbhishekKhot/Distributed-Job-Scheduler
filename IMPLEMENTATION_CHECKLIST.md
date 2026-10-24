@@ -280,7 +280,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-204 | Endpoint APIs (25–33) | kairos-api | todo |
 | T-205 | Job APIs (34–45) | kairos-api | todo |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
-| T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | todo |
+| T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | review |
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
 | T-222 | Fire poller | kairos-watcher | done |
 | T-223 | Delayed poller | kairos-watcher | done |
@@ -290,7 +290,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | done |
 | T-242 | Execution gates | kairos-executor | done |
 | T-243 | Render, call, classify and publish result | kairos-executor | done |
-| T-244 | Cancel listener and graceful drain | kairos-executor | review |
+| T-244 | Cancel listener and graceful drain | kairos-executor | done |
 | T-261 | Result settler | kairos-state | todo |
 | T-262 | Workflow progression | kairos-state | todo |
 | T-263 | Stats aggregator | kairos-state | todo |
@@ -695,13 +695,17 @@ The single place where runs and their outbox rows are created, used by the API (
 **Acceptance:** tests for every LLD row; a cyclic workflow returns the LLD error with the cycle path; run now on a diamond workflow creates only the root task runs.
 
 ### T-207 Run, DLQ and stats APIs (LLD APIs 59–68)
-**Status:** todo · **Needs:** T-201, T-113 · **Owns:** `dev.kairos.api.runs`, `dev.kairos.api.dlq`, `dev.kairos.api.stats`
+**Status:** review (Abhishek Khot) · **Needs:** T-201, T-113 · **Owns:** `dev.kairos.api.runs`, `dev.kairos.api.dlq`, `dev.kairos.api.stats`
 
-- [ ] 59 list runs (filters, fan-out across cells, cursor), 60 get a run (current state plus attempts from `run_history`), 61 cancel a run (waiting, queued and delayed runs are deleted with their unpublished outbox row; a running run is flagged and gets a cancel message).
-- [ ] 62 list DLQ entries, 63 get, 64 acknowledge (assignee, notes), 65 redrive (`ORIGINAL` or `CURRENT` configuration; the run starts a new attempt series under the same run id, so the target sees the same `Idempotency-Key`, and is re-created through `RunFactory.redrive` from the entry's stored `fence`; a blocked workflow run resumes; `409 dlq-resolved`, `409 endpoint-suspended`), 66 discard, 67 bulk redrive (at least one filter required; `dryRun` returns only the count; `409 endpoint-suspended` until the endpoint is resumed; matching entries become `DELAYED` runs released at 100/s).
-- [ ] 68 team stats from `team_stats_minute` and the current DLQ count.
+- [x] 59 list runs (filters, fan-out across cells, cursor), 60 get a run (current state plus attempts from `run_history`), 61 cancel a run (waiting, queued and delayed runs are deleted with their unpublished outbox row; a running run is flagged and gets a cancel message).
+- [x] 62 list DLQ entries, 63 get, 64 acknowledge (assignee, notes), and 66 discard.
+- [x] 65 redrive (`ORIGINAL` or `CURRENT` configuration; the run starts a new attempt series under the same run id, so the target sees the same `Idempotency-Key`, and is re-created through `RunFactory.redrive` from the entry's stored `fence`; a blocked workflow run resumes; `409 dlq-resolved`, `409 endpoint-suspended`).
+- [x] 67 bulk redrive (at least one filter required; `dryRun` returns only the count; `409 endpoint-suspended` until the endpoint is resumed; matching entries become `DELAYED` runs released at 100/s).
+- [x] 68 team stats from `team_stats_minute` and the current DLQ count.
 
 **Acceptance:** tests for every LLD row; redriving one entry twice starts one new attempt series and the second call returns `409 dlq-resolved`; bulk redrive respects pacing.
+
+**Verification:** PR #38 is open against `develop`. Docker `make bg BG_NAME=kairos-gradle-t207-repo-final ARGS='spotlessApply build check'` passed on 2026-10-24. The API check reports 341 tests with no failures, errors or skips and 92.2% line coverage. The run list test fans out across two cells; API acceptance covers DLQ redrive idempotence, bulk dry-run replay, stats percentiles and the OpenAPI inventory. Existing T-223 Redis integration tests verify the delayed poller's 100/s redrive pacing cap.
 
 ### 8.2 kairos-watcher
 
