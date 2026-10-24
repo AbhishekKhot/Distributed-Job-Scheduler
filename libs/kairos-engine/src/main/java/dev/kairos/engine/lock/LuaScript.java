@@ -36,6 +36,31 @@ enum LuaScript {
               return redis.call('PEXPIRE', KEYS[1], ARGV[2])
             end
             return 0
+            """),
+
+    /** Atomically reserves a one-second delayed-dispatch slot across all watcher instances. */
+    DELAYED_PACE("delayed-pace", """
+            local fields = {ARGV[1]}
+            local limits = {tonumber(ARGV[2])}
+            if ARGV[3] == 'BACKFILL' then
+              fields[#fields + 1] = 'backfill:all'
+              limits[#limits + 1] = 1000
+              fields[#fields + 1] = 'backfill:job:' .. ARGV[4]
+              limits[#limits + 1] = 100
+            elseif ARGV[3] == 'REDRIVE' then
+              fields[#fields + 1] = 'redrive:all'
+              limits[#limits + 1] = 100
+            end
+            for i = 1, #fields do
+              if tonumber(redis.call('HGET', KEYS[1], fields[i]) or '0') >= limits[i] then
+                return 0
+              end
+            end
+            for i = 1, #fields do
+              redis.call('HINCRBY', KEYS[1], fields[i], 1)
+            end
+            redis.call('PEXPIRE', KEYS[1], 10000)
+            return 1
             """);
 
     private final String label;
