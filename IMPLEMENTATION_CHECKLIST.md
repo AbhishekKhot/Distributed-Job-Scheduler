@@ -277,7 +277,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-203b | API key APIs (13–15) | kairos-api | done |
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | done |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
-| T-204 | Endpoint APIs (25–33) | kairos-api | in progress |
+| T-204 | Endpoint APIs (25–33) | kairos-api | review |
 | T-205 | Job APIs (34–45) | kairos-api | todo |
 | T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | done |
@@ -654,17 +654,19 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-23):** Docker `spotlessApply build check` passed: 2,088 tests, no failures/skips, API line coverage 94.24%. Tests cover signature verification, concurrent rotation, expiry after configuration changes, stale cleanup, audit rollback, team isolation, cursor/filter binding, time bounds and secret redaction. A fresh isolated Compose stack applied the migration, became healthy, and passed onboarding, API-key authentication, two signing rotations, API-key refusal on rotation, and audit filtering/pagination. Test containers and volumes were removed. No dependency changes.
 
 ### T-204 Endpoint APIs (LLD APIs 25–33)
-**Status:** in progress (Abhishek Khot) · **Needs:** T-201, T-110, T-203c (secret lookup) · **Owns:** `dev.kairos.api.endpoints`
+**Status:** review (Abhishek Khot) · **Needs:** T-201, T-110, T-203c (secret lookup) · **Owns:** `dev.kairos.api.endpoints`
 
-- [ ] `EndpointSpec` record and validation (LLD section 3.5): method, `urlTemplate` passing `TargetPolicy` at registration, `{param}` only in the path, default headers (no hop-by-hop or auth headers), auth with a `secretRef` that must exist, CA bundle reference, timeout range, success statuses, status overrides, retry policy, limits, outputs, `unknownOutcomePolicy`, suspend policy. Size ≤ 64 KB.
-- [ ] 25 create (version 1 written to `api_endpoint_versions`), 26 list (status filter, cursor), 27 get, 28 update (`If-Match`; new immutable version; running runs keep their pinned version), 29 delete (`409 endpoint-in-use` while jobs reference it).
-- [ ] 30 `POST /v1/endpoints/{id}:test`: one synchronous call made by an executor (the API never calls team targets itself), through the internal test endpoint from T-243; sample parameters; `400 render-failed` for missing parameters; sensitive outputs redacted; nothing stored; limited to 10 per minute.
-- [ ] 31 suspend and 32 resume (`409 invalid-state` when already in that state): update the endpoint status in the control database, then set or clear `schedules.status = 3` for that endpoint's schedules in every cell (cross-database: control first, then cells, idempotently; a sweeper reconciles). Retries of its runs are deferred by the state processor while it is suspended. On resume, fires missed while suspended follow each job's misfire policy.
-- [ ] 33 health: aggregates `endpoint_health_minute` over the window (5m–24h).
-- [ ] Audit entries for create, update, delete, suspend and resume.
-- [ ] Secret and CA bundle reference validation uses the T-203c metadata lookup ports inside the endpoint mutation's control transaction, after locking the team row `FOR UPDATE`; this serializes reference changes with credential deletion.
+- [x] `EndpointSpec` record and validation (LLD section 3.5): method, safe `urlTemplate` with path-only parameters, managed-header refusal, typed secret and CA references, timeout, status rules, retry policy, limits, output selectors, unknown-outcome and suspend policies. Serialized spec size is capped at 64 KB.
+- [x] APIs 25–29: create writes immutable version 1, list uses status-bound signed cursors, get is team-scoped, update requires `If-Match` and appends a version, and delete checks job references in every cell.
+- [x] API 30 calls only the T-243 internal executor endpoint; the API signs a team-claim token for `kairos-executor-internal` with a 30-second lifetime, checks missing path parameters, applies the shared 10/minute team quota, relays redacted output, and stores no test result.
+- [x] APIs 31–32 commit endpoint status and audit in control first, then reconcile schedules in every cell. The watcher reconciles held schedules for both suspended and resumed endpoints, including after a partial cell failure; state processing applies each job's misfire policy.
+- [x] API 33 aggregates `endpoint_health_minute` over 5m–24h and calculates p95 from cell run history. The breaker field is `UNKNOWN` because executor breaker state is process-local.
+- [x] Audit entries cover create, update, delete, suspend and resume.
+- [x] Secret and CA reference validation uses T-203c metadata lookups in the mutation transaction after locking the team row `FOR UPDATE`.
 
-**Acceptance:** tests for every LLD row; registering `https://169.254.169.254/` or `http://...` fails with the LLD error; resume after suspend fires held schedules again.
+**Acceptance:** Docker integration tests cover CRUD and immutable versions, If-Match, team isolation, safe-target/reference refusal, endpoint-test relay and rate limit, use conflicts, health windows, and cross-cell suspend/resume. Resume releases held schedules so the state processor can apply the saved job misfire policy.
+
+**Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-gradle-t204-final ARGS='spotlessApply build check'` passed. The API suite reports 354 tests and the watcher suite 119 tests, with no failures, errors or skips. `git diff --check` is clean. The API now explicitly depends on `kairos-http`; its dependency lock was refreshed. T-204 is implemented on `t-204-endpoint-apis` and awaiting PR review/merge.
 
 ### T-205 Job APIs (LLD APIs 34–45)
 **Status:** todo · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`

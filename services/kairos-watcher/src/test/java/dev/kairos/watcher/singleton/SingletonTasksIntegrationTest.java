@@ -175,6 +175,30 @@ class SingletonTasksIntegrationTest {
     }
 
     @Test
+    void reconciliationReleasesHeldSchedulesForResumedEndpoints() {
+        UUID team = UUID.randomUUID();
+        UUID endpoint = endpoint(team, "{}", NOW.minusSeconds(1_200));
+        schedule(endpoint);
+        cellDatabase
+                .jdbc()
+                .sql("UPDATE scheduler.schedules SET status = 3 WHERE endpoint_id = :endpoint")
+                .param("endpoint", endpoint)
+                .update();
+
+        new EndpointAutoSuspendEvaluator(
+                        router,
+                        controlDatabase.jdbc(),
+                        new ControlTransactions(controlDatabase),
+                        ids,
+                        MutableClock.at(NOW),
+                        meters)
+                .poll();
+
+        assertThat(endpointStatus(endpoint)).isEqualTo("ACTIVE/null");
+        assertThat(scheduleStatus(endpoint)).isEqualTo(1);
+    }
+
+    @Test
     void reviewTimeoutFailsOnlyDescendantsOfOpenDeadLetter() {
         UUID workflow = UUID.randomUUID();
         UUID workflowRun = UUID.randomUUID();

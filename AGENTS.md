@@ -48,9 +48,9 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 ## Progress and next steps (update at the end of every session)
 
-**Verified repository state (2026-10-24):** `origin/develop` points to `6a9f06e`, which merges T-207 runs, DLQ and stats APIs through PR #38, after T-244 cancel and drain (#37), T-243 render/call/classify/publish (#36), T-242 execution gates (#35), T-241 dispatch consumers (#34), T-226 singleton tasks (#33), and T-225 recovery sweepers (#32). The consolidated repository guidance merged through PR #29, T-222 fire poller through PR #28, T-223 delayed poller through PR #30, and T-221 shard leases/node registry through PR #27. On `t-204-endpoint-apis`, there are **51 checklist tasks: 33 done, 1 in progress, and 17 todo**.
+**Verified repository state (2026-10-24):** `origin/develop` points to `6a9f06e`, which merges T-207 runs, DLQ and stats APIs through PR #38, after T-244 cancel and drain (#37), T-243 render/call/classify/publish (#36), T-242 execution gates (#35), T-241 dispatch consumers (#34), T-226 singleton tasks (#33), and T-225 recovery sweepers (#32). The consolidated repository guidance merged through PR #29, T-222 fire poller through PR #28, T-223 delayed poller through PR #30, and T-221 shard leases/node registry through PR #27. On `t-204-endpoint-apis`, there are **51 checklist tasks: 33 done, 1 in review, and 17 todo**.
 
-**Implementation boundary:** repository/build tooling and all Phase 1 library tasks are merged, with one unchecked T-109 configuration-example follow-up recorded below. The API implements foundation and APIs 1–24 and merged T-207 APIs 59–68; T-204 is implementing endpoint APIs 25–33, while APIs 34–58 remain pending. The watcher has lease/node support, fire and delayed pollers, the T-224 outbox relay, and merged T-225/T-226 maintenance work. T-241 dispatch consumers, T-242 execution gates, T-243 render/call/classify/publish, and T-244 cancellation and graceful drain are merged. State, maintenance, mock target and benchmark CLI remain pending. The end-to-end scheduler, resilience guarantees under load, and 20K / 50K capacity have not yet been demonstrated.
+**Implementation boundary:** repository/build tooling and all Phase 1 library tasks are merged, with one unchecked T-109 configuration-example follow-up recorded below. The API implements foundation and APIs 1–24, T-204 endpoint APIs 25–33 (awaiting review/merge), and merged T-207 APIs 59–68; APIs 34–58 remain pending. The watcher has lease/node support, fire and delayed pollers, the T-224 outbox relay, and merged T-225/T-226 maintenance work; T-204 adds resume-schedule reconciliation to the watcher. T-241 dispatch consumers, T-242 execution gates, T-243 render/call/classify/publish, and T-244 cancellation and graceful drain are merged. State, maintenance, mock target and benchmark CLI remain pending. The end-to-end scheduler, resilience guarantees under load, and 20K / 50K capacity have not yet been demonstrated.
 
 **Verification provenance:** T-241 Docker `spotlessApply` and the full `:services:kairos-executor:test` task passed before PR #34 merged: all 78 executor tests passed, including a 5K Kafka flood against the 4K capacity ceiling, contiguous offset tracking and restart replay, PostgreSQL quota deferral and the application context test. T-226 Docker `make bg BG_NAME=t226-final2 ARGS='spotlessApply build check'` passed on 2026-10-24: 2,185 tests, no failures, errors or skips. T-225 merged through PR #32 after its 2,181-test full build. Earlier task results below are recorded from their implementation sessions.
 
@@ -98,16 +98,16 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 **Latest completed:** T-207 runs, DLQ and stats APIs (#38) is merged to `develop` and marked `done`. T-244 cancel and drain (#37), T-243 render/call/classify/publish (#36), T-242 execution gates (#35), T-241 dispatch consumers (#34), T-226 singleton tasks (#33), T-225 recovery sweepers (#32) and T-224 outbox relay (#31) are also merged and marked `done`.
 
-**Pending (17 tasks `todo`; T-204 is `in progress`):**
+**Pending (17 tasks `todo`; T-204 is `review`):**
 
-- `kairos-api`: T-204 endpoints (in progress), T-205 jobs, T-206 workflows.
+- `kairos-api`: T-204 endpoints (review), T-205 jobs, T-206 workflows.
 - `kairos-watcher`: no remaining tasks after T-226 is completed.
 - `kairos-state`: T-261 result settler, T-262 workflow progression, T-263 stats aggregator.
 - `kairos-maintenance`: T-281 partition manager, T-282 operator commands.
 - Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Current task:** T-204 endpoint APIs (LLD APIs 25–33) is in progress on `t-204-endpoint-apis`. It has all declared checklist dependencies merged and can use the T-203c metadata lookup ports and T-243 internal endpoint-test interface. T-205 and T-206 depend on T-204; other ready tasks include T-261, T-281, T-282, T-301, T-402 and T-403. Work one task at a time and wait for the user's go-ahead before starting another.
+**Current task:** T-204 endpoint APIs (LLD APIs 25–33) is implemented and awaiting review/merge on `t-204-endpoint-apis`. It has all declared checklist dependencies merged and uses the T-203c metadata lookup ports and T-243 internal endpoint-test interface. Docker `spotlessApply build check` passed on 2026-10-24; see the T-204 verification note in `IMPLEMENTATION_CHECKLIST.md`. T-205 and T-206 depend on T-204; other ready tasks include T-261, T-281, T-282, T-301, T-402 and T-403. Work one task at a time and wait for the user's go-ahead before starting another.
 
 **Open items:**
 
