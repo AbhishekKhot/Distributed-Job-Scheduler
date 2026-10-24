@@ -37,3 +37,26 @@ logging:
   structured:
     format:
       console: ecs
+
+kairos:
+  executor:
+    consumer:
+      high-water: 4000
+      low-water: 3000
+      defer-delay: 1s
+      poll-timeout: 100ms
+  datasource:
+    control:
+      url: ${KAIROS_CONTROL_DB_URL}
+      username: ${KAIROS_DB_USERNAME}
+      password: ${KAIROS_DB_PASSWORD}
+    cells:
+      - url: ${KAIROS_CELL_0_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
+      - url: ${KAIROS_CELL_1_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAIROS_KAFKA_BOOTSTRAP_SERVERS}
+    client-id-prefix: kairos-executor
