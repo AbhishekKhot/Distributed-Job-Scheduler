@@ -142,6 +142,9 @@ public final class OAuth2TokenProvider {
                 throw new AuthFailedException(unsent(failed.result()), "the token request failed: " + failed.detail());
             case HttpCallOutcome.NotSent notSent ->
                 throw new AuthFailedException(new CallResult.ConnectionFailed(false), "the token request was not sent");
+            case HttpCallOutcome.Cancelled _ ->
+                throw new AuthFailedException(
+                        new CallResult.ConnectionFailed(false), "the token request was cancelled");
         };
     }
 

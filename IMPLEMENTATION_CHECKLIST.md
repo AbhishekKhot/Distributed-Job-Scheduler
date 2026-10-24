@@ -290,7 +290,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | done |
 | T-242 | Execution gates | kairos-executor | done |
 | T-243 | Render, call, classify and publish result | kairos-executor | done |
-| T-244 | Cancel listener and graceful drain | kairos-executor | in progress (AbhishekKhot) |
+| T-244 | Cancel listener and graceful drain | kairos-executor | review |
 | T-261 | Result settler | kairos-state | todo |
 | T-262 | Workflow progression | kairos-state | todo |
 | T-263 | Stats aggregator | kairos-state | todo |
@@ -823,12 +823,14 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t243-final-check ARGS='check'` passed. The executor suite reports 98 tests with no failures, errors or skips; executor line coverage is 70.65%. T-243 tests cover rendered URL encoding and signatures, success/output extraction and sealing, HTTP 500 and 409 classification, sent timeout uncertainty, send-veto deferral, retry-until-ack publication, breaker/rate-limit behavior, internal token validation, endpoint-test rate limiting and sensitive-output redaction.
 
 ### T-244 Cancel listener and graceful drain
-**Status:** in progress (AbhishekKhot) · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`
+**Status:** review · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`, executor dispatch/call lifecycle integration seams, cancellable-call API in `libs/kairos-http`
 
-- [ ] Cancel listener on `kairos.run.cancel` with a unique consumer group per pod (every executor sees every cancel). It aborts the matching in-flight call and publishes a `CANCELLED` result.
-- [ ] Graceful drain on SIGTERM: stop polling, let in-flight calls finish for up to 60s, re-queue unsent runs (release the lock, return them to `QUEUED` with a new fence and an outbox row), then commit offsets and exit. Readiness turns down at the start of the drain.
+- [x] Cancel listener on `kairos.run.cancel` with a unique consumer group per pod (every executor sees every cancel). It aborts the matching in-flight call and publishes a `CANCELLED` result.
+- [x] Graceful drain on SIGTERM: stop polling, let in-flight calls finish for up to 60s, re-queue unsent runs (release the lock, return them to `QUEUED` with a new fence and an outbox row), then commit offsets and exit. Readiness turns down at the start of the drain.
 
 **Acceptance:** cancelling a run during a 10s mock call aborts it within 1s; a rolling restart under load loses no run and creates no duplicate call.
+
+**Verification:** Docker `make bg BG_NAME=kairos-gradle-t244-final ARGS='spotlessApply :services:kairos-executor:check :libs:kairos-http:check'` passed. Executor: 103 tests, no failures/errors/skips, 73.29% line coverage. HTTP: 181 tests, no failures/errors/skips, 94.75% line coverage. Kafka integration verifies two pod groups receive the same cancel; a TLS-backed slow call is aborted within 1s; PostgreSQL verifies the drain requeue increments the fence and writes one outbox dispatch atomically; existing Kafka restart replay checks verify the uncommitted record is replayed.
 
 ### 8.4 kairos-state
 

@@ -33,6 +33,7 @@ public final class DispatchConsumerRunner implements Runnable {
 
     private static final System.Logger LOG = System.getLogger(DispatchConsumerRunner.class.getName());
     private static final long MAX_RETRY_DELAY_MILLIS = Duration.ofSeconds(30).toMillis();
+    private static final Duration DRAIN_TIMEOUT = Duration.ofSeconds(60);
 
     private final DispatchTier tier;
     private final String groupIdPrefix;
@@ -45,6 +46,7 @@ public final class DispatchConsumerRunner implements Runnable {
     private final ExecutorConsumerProperties properties;
     private final ExecutorConsumerMetrics metrics;
     private final AtomicBoolean running = new AtomicBoolean();
+    private final AtomicBoolean draining = new AtomicBoolean();
     private final AtomicReference<Consumer<byte[], Decoded<Dispatch>>> current = new AtomicReference<>();
     private final ConcurrentLinkedQueue<Completion> completed = new ConcurrentLinkedQueue<>();
     private final Map<Long, Slot> slots = new ConcurrentHashMap<>();
@@ -87,15 +89,22 @@ public final class DispatchConsumerRunner implements Runnable {
 
     /** Stops polling and wakes Kafka's blocking poll. */
     public void stop() {
+        stop(false);
+    }
+
+    /** Stops polling and waits for active workers up to the task's drain deadline. */
+    public void stopGracefully() {
+        draining.set(true);
+        stop(true);
+    }
+
+    private void stop(boolean graceful) {
         if (running.compareAndSet(true, false)) {
             Consumer<byte[], Decoded<Dispatch>> consumer = current.get();
             if (consumer != null) {
                 consumer.wakeup();
             }
-            Thread pollThread = thread;
-            if (pollThread != null) {
-                pollThread.interrupt();
-            }
+            if (!graceful) workers.shutdownNow();
         }
     }
 
@@ -142,10 +151,15 @@ public final class DispatchConsumerRunner implements Runnable {
                 }
             }
         } finally {
-            workers.shutdownNow();
+            if (draining.get()) workers.shutdown();
+            else workers.shutdownNow();
             try {
-                workers.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS);
+                if (!workers.awaitTermination(DRAIN_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    workers.shutdownNow();
+                    workers.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+                }
             } catch (InterruptedException interrupted) {
+                workers.shutdownNow();
                 Thread.currentThread().interrupt();
             } finally {
                 slots.values().forEach(Slot::release);
@@ -240,6 +254,7 @@ public final class DispatchConsumerRunner implements Runnable {
                 drainCompletions(offsets, consumer);
             }
         } finally {
+            if (draining.get()) awaitDrain(offsets, consumer);
             synchronized (completionLock) {
                 try {
                     drainCompletionsLocked(offsets, consumer);
@@ -249,6 +264,20 @@ public final class DispatchConsumerRunner implements Runnable {
                 }
             }
         }
+    }
+
+    private void awaitDrain(DispatchOffsetTracker offsets, Consumer<byte[], Decoded<Dispatch>> consumer) {
+        long deadline = System.nanoTime() + DRAIN_TIMEOUT.toNanos();
+        while (!slots.isEmpty() && System.nanoTime() < deadline) {
+            drainCompletions(offsets, consumer);
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        drainCompletions(offsets, consumer);
     }
 
     private void submit(

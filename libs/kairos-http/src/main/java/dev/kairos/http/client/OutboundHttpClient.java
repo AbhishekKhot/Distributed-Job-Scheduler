@@ -88,8 +88,21 @@ public final class OutboundHttpClient {
      * @return the outcome
      */
     public HttpCallOutcome execute(OutboundRequest request, SendObserver observer) {
+        return execute(request, observer, new CallCancellation());
+    }
+
+    /**
+     * Sends a request that can be cancelled while it is in flight.
+     *
+     * @param request the request
+     * @param observer called immediately before request bytes are written
+     * @param cancellation the signal that can abort this exchange
+     * @return the observed outcome
+     */
+    public HttpCallOutcome execute(OutboundRequest request, SendObserver observer, CallCancellation cancellation) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(observer, "observer");
+        Objects.requireNonNull(cancellation, "cancellation");
         Instant startedAt = clock.instant();
         TargetDecision.Allowed allowed;
         switch (policy.checkUrl(request.url())) {
@@ -108,7 +121,8 @@ public final class OutboundHttpClient {
                 new SendContext(request.method(), allowed.host(), allowed.port()),
                 request.timeout(),
                 scheduler,
-                http::cancel);
+                http::cancel,
+                cancellation);
         HttpClientContext context = HttpClientContext.create();
         context.setAttribute(CallState.ATTRIBUTE, state);
         try {
@@ -188,6 +202,16 @@ public final class OutboundHttpClient {
 
     private HttpCallOutcome failure(Exception e, CallState state, Instant startedAt) {
         Instant finishedAt = clock.instant();
+        if (state.cancelled()) {
+            return new HttpCallOutcome.Cancelled(state.sent(), startedAt, finishedAt);
+        }
+        if (state.drainAborted()) {
+            return new HttpCallOutcome.Failed(
+                    new CallResult.TimedOut(state.sent()),
+                    "the call was interrupted by executor drain",
+                    startedAt,
+                    finishedAt);
+        }
         if (state.vetoed()) {
             return new HttpCallOutcome.NotSent(state.vetoReason(), startedAt, finishedAt);
         }

@@ -28,6 +28,7 @@ class OutboundHttpClientTlsTest {
 
     private static TlsTestEnvironment env;
     private static final CountDownLatch RELEASE_SLOW = new CountDownLatch(1);
+    private static final CountDownLatch RELEASE_CANCEL = new CountDownLatch(1);
 
     private final MutableClock clock = MutableClock.at(Instant.parse("2026-10-20T10:00:00Z"));
     private final List<SendContext> sends = new ArrayList<>();
@@ -73,6 +74,18 @@ class OutboundHttpClientTlsTest {
             }
             TestTlsServer.respond(exchange, 200, "text/plain", "late");
         });
+        env.server.handle("/cancel-slow", exchange -> {
+            try {
+                RELEASE_CANCEL.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            try {
+                TestTlsServer.respond(exchange, 200, "text/plain", "late");
+            } catch (IOException ignored) {
+                // The client has cancelled the exchange.
+            }
+        });
         env.server.handle("/trickle", exchange -> {
             exchange.getResponseHeaders().set("Content-Type", "text/plain");
             exchange.sendResponseHeaders(200, 0);
@@ -94,6 +107,7 @@ class OutboundHttpClientTlsTest {
     @AfterAll
     static void stopServer() {
         RELEASE_SLOW.countDown();
+        RELEASE_CANCEL.countDown();
         env.close();
     }
 
@@ -122,6 +136,18 @@ class OutboundHttpClientTlsTest {
         assertThat(received.callResult()).contains(new CallResult.Responded(200));
         assertThat(received.startedAt()).isEqualTo(clock.instant());
         assertThat(sends).containsExactly(new SendContext(HttpMethod.GET, "orders.test.internal", env.server.port()));
+    }
+
+    @Test
+    void cancellationAfterACompletedResponseDoesNotChangeItsOutcome() {
+        CallCancellation cancellation = new CallCancellation();
+
+        HttpCallOutcome outcome =
+                teamClient.execute(get(env.url("orders.test.internal", "/json")), recording, cancellation);
+        cancellation.cancel();
+
+        assertThat(outcome).isInstanceOf(HttpCallOutcome.Received.class);
+        assertThat(cancellation.isCancelled()).isFalse();
     }
 
     @Test
@@ -287,6 +313,28 @@ class OutboundHttpClientTlsTest {
         assertThat(outcome.callResult()).contains(new CallResult.TimedOut(true));
         assertThat(outcome.requestSent()).isTrue();
         assertThat(sends).hasSize(1);
+    }
+
+    @Test
+    void cancellationAbortsAnActiveExchangeWithinOneSecond() throws Exception {
+        CallCancellation cancellation = new CallCancellation();
+        CountDownLatch sent = new CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        long started = System.nanoTime();
+        try {
+            var future = executor.submit(() -> teamClient.execute(
+                    get(env.url("orders.test.internal", "/cancel-slow")), context -> sent.countDown(), cancellation));
+            assertThat(sent.await(2, TimeUnit.SECONDS)).isTrue();
+            cancellation.cancel();
+            HttpCallOutcome outcome = future.get(1, TimeUnit.SECONDS);
+            assertThat(outcome).isInstanceOf(HttpCallOutcome.Cancelled.class);
+            assertThat(outcome.requestSent()).isTrue();
+            assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))
+                    .isLessThan(1_000);
+        } finally {
+            RELEASE_CANCEL.countDown();
+            executor.close();
+        }
     }
 
     @Test
