@@ -48,9 +48,9 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 ## Progress and next steps (update at the end of every session)
 
-**Verified repository state (2026-10-24):** `origin/develop` points to `f7d1034`, which merges T-241 dispatch consumers through PR #34, after T-226 singleton tasks (#33) and T-225 recovery sweepers (#32). The consolidated repository guidance merged through PR #29, T-222 fire poller through PR #28, T-223 delayed poller through PR #30, and T-221 shard leases/node registry through PR #27. On `t-242-execution-gates`, there are **51 checklist tasks: 29 done, 1 in review (T-242), and 21 todo**.
+**Verified repository state (2026-10-24):** `origin/develop` points to `223c13b`, which merges T-242 execution gates through PR #35, after T-241 dispatch consumers (#34), T-226 singleton tasks (#33), and T-225 recovery sweepers (#32). The consolidated repository guidance merged through PR #29, T-222 fire poller through PR #28, T-223 delayed poller through PR #30, and T-221 shard leases/node registry through PR #27. On `t-243-render-call-publish`, there are **51 checklist tasks: 30 done, 1 in progress (T-243), and 20 todo**.
 
-**Implementation boundary:** repository/build tooling and all Phase 1 library tasks are merged, with one unchecked T-109 configuration-example follow-up recorded below. The API implements foundation and APIs 1–24; APIs 25–68 remain pending. The watcher has lease/node support, fire and delayed pollers, the T-224 outbox relay, and merged T-225/T-226 maintenance work. T-241 dispatch consumers, bounded poll admission, offset tracking, quota deferral and metrics are merged through PR #34; they activate when T-243 supplies the durable execution action. T-242 is in review on `t-242-execution-gates` and adds the executor lock, fenced-claim, send-time guard, sent marker and lease renewal. Execution calls/cancellation, state, maintenance, mock target and benchmark CLI remain pending. The end-to-end scheduler, resilience guarantees under load, and 20K / 50K capacity have not yet been demonstrated.
+**Implementation boundary:** repository/build tooling and all Phase 1 library tasks are merged, with one unchecked T-109 configuration-example follow-up recorded below. The API implements foundation and APIs 1–24; APIs 25–68 remain pending. The watcher has lease/node support, fire and delayed pollers, the T-224 outbox relay, and merged T-225/T-226 maintenance work. T-241 dispatch consumers and T-242 execution gates are merged; consumers activate when T-243 supplies the durable execution action. T-243 is in progress and owns endpoint loading, request rendering, authentication, call classification, durable result publishing, and the internal endpoint-test API. Cancellation, state, maintenance, mock target and benchmark CLI remain pending. The end-to-end scheduler, resilience guarantees under load, and 20K / 50K capacity have not yet been demonstrated.
 
 **Verification provenance:** T-241 Docker `spotlessApply` and the full `:services:kairos-executor:test` task passed before PR #34 merged: all 78 executor tests passed, including a 5K Kafka flood against the 4K capacity ceiling, contiguous offset tracking and restart replay, PostgreSQL quota deferral and the application context test. T-226 Docker `make bg BG_NAME=t226-final2 ARGS='spotlessApply build check'` passed on 2026-10-24: 2,185 tests, no failures, errors or skips. T-225 merged through PR #32 after its 2,181-test full build. Earlier task results below are recorded from their implementation sessions.
 
@@ -90,9 +90,9 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 - Libraries: T-101 ids/shards (#4), T-102 schedules (#21), T-103 retry/outcomes/run state machine (#8), T-104 workflow DAG validation/templates (#26), T-105 proto contracts (#3), T-106 migrations (#5), T-107 persistence + cell routing (#7), T-108 messaging (#15), T-109 security (#10), T-110 outbound HTTP client + target policy (#12), T-111 Redis run lock + sent markers (#11), T-113 run creation + outbox writer (#9).
 - Follow-ups: dead-letter `fence` column + LLD/checklist fixes (#13); engine Spring configuration `OutboxConfiguration`/`RunCreationConfiguration` (#14); trace/key docs (#16); migrations create the JWT signing keyset after migrating (#17, closes old open item 1); API session/team refresh correction (#22).
 
-**In review:** T-242 execution gates on `t-242-execution-gates`. T-241 dispatch consumers (#34), T-226 singleton tasks (#33), T-225 recovery sweepers (#32) and T-224 outbox relay (#31) are merged and marked `done` on this branch.
+**In progress:** T-243 render/call/classify/publish on `t-243-render-call-publish`. T-242 execution gates (#35), T-241 dispatch consumers (#34), T-226 singleton tasks (#33), T-225 recovery sweepers (#32) and T-224 outbox relay (#31) are merged and marked `done` on this branch.
 
-**Pending (21 tasks, all `todo`):**
+**Pending (20 tasks, all `todo`):**
 
 - `kairos-api`: T-204 endpoints, T-205 jobs, T-206 workflows, T-207 runs/DLQ/stats.
 - `kairos-watcher`: no remaining tasks after T-226 is completed.
@@ -102,7 +102,7 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 - Verification: T-301 mock target, T-302 bench CLI, T-303 cross-module suites, T-304 end-to-end, T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Next after T-242 is complete and the user selects a task:** T-243 is the direct executor continuation; other ready tasks are T-207, T-261, T-281, T-282, T-301, T-402 and T-403. T-204 has all declared checklist dependencies merged and can use the metadata lookup ports; completing its endpoint-test operation still needs the T-243 internal executor interface. Resolve that integration dependency explicitly when planning T-204. Work one task at a time and wait for the user's go-ahead before starting another.
+**Next after T-243 is complete and the user selects a task:** T-244 is the direct executor continuation; other ready tasks are T-207, T-261, T-281, T-282, T-301, T-402 and T-403. T-204 has all declared checklist dependencies merged and can use the metadata lookup ports; its endpoint-test operation depends on the T-243 internal executor interface. Work one task at a time and wait for the user's go-ahead before starting another.
 
 **Open items:**
 

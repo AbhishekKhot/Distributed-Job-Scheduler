@@ -288,8 +288,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | done |
 | T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | done |
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | done |
-| T-242 | Execution gates | kairos-executor | in progress (AbhishekKhot) |
-| T-243 | Render, call, classify and publish result | kairos-executor | todo |
+| T-242 | Execution gates | kairos-executor | done |
+| T-243 | Render, call, classify and publish result | kairos-executor | in progress (AbhishekKhot) |
 | T-244 | Cancel listener and graceful drain | kairos-executor | todo |
 | T-261 | Result settler | kairos-state | todo |
 | T-262 | Workflow progression | kairos-state | todo |
@@ -793,7 +793,7 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Acceptance:** under a flood larger than capacity, in-flight never exceeds 4K and memory stays flat; a restart re-delivers only unfinished records.
 
 ### T-242 Execution gates
-**Status:** review · **Needs:** T-241, T-111, T-107, T-110 (`SendObserver`) · **Owns:** `dev.kairos.executor.gate`
+**Status:** done · **Needs:** T-241, T-111, T-107, T-110 (`SendObserver`) · **Owns:** `dev.kairos.executor.gate`
 
 This task implements the guarantee that no run executes twice. Review it with extra care.
 
@@ -808,7 +808,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Acceptance:** a test that delivers the same dispatch message to two executors concurrently 1K times records exactly one call per run on the mock target; a paused executor (simulated GC pause past the TTL) does not send; a cancelled run is never sent.
 
 ### T-243 Render, call, classify and publish result
-**Status:** todo · **Needs:** T-242, T-110, T-109, T-103, T-104 · **Owns:** `dev.kairos.executor.call`
+**Status:** in progress (AbhishekKhot) · **Needs:** T-242, T-110, T-109, T-103, T-104 · **Owns:** `dev.kairos.executor.call`
 
 - [ ] Load the pinned endpoint version (Caffeine cache keyed by id and version; versions are immutable, so the cache never goes stale).
 - [ ] Render the request from the dispatch snapshot: path parameters, query, headers, body; upstream outputs for workflow tasks (sensitive outputs decrypted only in memory); `Idempotency-Key: <runId>`; `traceparent`; `X-Kairos-Run-Id`; `X-Kairos-Attempt`; `X-Kairos-Signature` and timestamp.
