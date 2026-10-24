@@ -284,8 +284,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
 | T-222 | Fire poller | kairos-watcher | done |
 | T-223 | Delayed poller | kairos-watcher | done |
-| T-224 | Outbox relay | kairos-watcher | review |
-| T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | todo |
+| T-224 | Outbox relay | kairos-watcher | done |
+| T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | review |
 | T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | todo |
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | todo |
 | T-242 | Execution gates | kairos-executor | todo |
@@ -745,7 +745,7 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t223-final ARGS='spotlessApply build check'` passed: 2,160 tests, no failures, errors or skips. PostgreSQL integration tests cover due retry fencing and outbox atomicity, suspension deferral, transaction rollback, pinned-version loading and 10K backfill at 100/s. Redis integration tests verify team, per-job backfill, global backfill and redrive caps shared across watcher connections. Both watcher replicas became healthy in an isolated detached Compose stack; the stack and volumes were removed.
 
 ### T-224 Outbox relay
-**Status:** review · **Needs:** T-221, T-108 · **Owns:** `dev.kairos.watcher.outbox`
+**Status:** done · **Needs:** T-221, T-108 · **Owns:** `dev.kairos.watcher.outbox`
 
 - [x] Every 100 ms per owned shard group: read up to 2K due rows (`available_at <= now`) in `outbox_id` order, publish them to their topics with keys, wait for all acknowledgements, then delete the acknowledged rows in batches of ≤ 2K. A crash before the delete republishes, which the execution gates make harmless.
 - [x] Rows that keep failing are retried with backoff. A row is never dropped, and its age feeds the back-pressure metric.
@@ -757,13 +757,15 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t224-final ARGS='spotlessApply build check'` passed: 2,171 tests, no failures, errors or skips. PostgreSQL fault tests prove rows remain until individual Kafka acknowledgements, failures are deferred while acknowledged rows delete, a rollback retains acknowledged rows for replay, and the optional cap leaves unsent rows due. Tests cover the 2K claim limit, due ordering, 30s maximum backoff, gauges and real Kafka delivery. In an isolated detached Compose stack, Kafka was paused for over 60s after 100 rows were inserted; all 100 remained during the pause, then the outbox drained after resume and Kafka showed 193 records, including expected at-least-once replays. Both watcher replicas returned healthy; the stack and volumes were removed.
 
 ### T-225 Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor
-**Status:** todo · **Needs:** T-221, T-111, T-113, T-103 · **Owns:** `dev.kairos.watcher.recovery`
+**Status:** review · **Needs:** T-221, T-111, T-113, T-103 · **Owns:** `dev.kairos.watcher.recovery`
 
-- [ ] Lease sweeper every 5s: `RUNNING` runs with `lease_until + 30s < now`. If the Redis lock is still held, skip. Otherwise check the sent marker: no marker means re-queue with `infra_attempt + 1` (max 3, then dead-letter as `EXECUTOR_LOST`). A marker (or the failover quarantine) means the unknown outcome is decided by `unknownOutcomePolicy`, recorded as such in history.
-- [ ] Stuck-queued sweeper every minute: `QUEUED` for more than 10 min gets a new fence and a re-dispatch outbox row, plus an alert metric.
-- [ ] Redis failover monitor every 2s: detects a change of master replication id. On change, set `scheduler_flags.redis_marker_quarantine_until = now + 310s`; while quarantined, a missing marker counts as an unknown outcome.
+- [x] Lease sweeper every 5s: `RUNNING` runs with `lease_until + 30s < now`. If the Redis lock is still held, skip. Otherwise check the sent marker: no marker means re-queue with `infra_attempt + 1` (max 3, then dead-letter as `EXECUTOR_LOST`). A marker (or the failover quarantine) means the unknown outcome is decided by `unknownOutcomePolicy`, recorded as such in history.
+- [x] Stuck-queued sweeper every minute: `QUEUED` for more than 10 min gets a new fence and a re-dispatch outbox row, plus an alert metric.
+- [x] Redis failover monitor every 2s: detects a change of master replication id. On change, set `scheduler_flags.redis_marker_quarantine_until = now + 310s`; while quarantined, a missing marker counts as an unknown outcome.
 
 **Acceptance:** killing an executor mid-call with no marker re-queues the run once; with a marker, a `REVIEW` endpoint dead-letters it and a default endpoint retries with the same idempotency key; a simulated Redis failover sets the quarantine flag.
+
+**Verification:** Docker `make bg BG_NAME=t225-final2 ARGS='spotlessApply build check'` passed: 2,181 tests, no failures, errors or skips. PostgreSQL/Redis integration tests cover absent and present markers, `REVIEW` and default retry policy, maximum-age expiry, three-infrastructure-attempt exhaustion, a held lock, quarantine, a stuck queued redispatch, and atomic rollback. A simulated primary replication-id change writes the 310-second flag. Both watcher replicas and the full isolated detached Compose stack became healthy; watcher logs had no errors, and the stack and volumes were removed.
 
 ### T-226 Singleton tasks: auto-suspend, review timeout, purger
 **Status:** todo · **Needs:** T-221, T-103 · **Owns:** `dev.kairos.watcher.singleton`
