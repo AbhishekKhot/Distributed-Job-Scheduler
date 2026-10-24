@@ -14,5 +14,6 @@ dependencies {
     implementation("org.apache.kafka:kafka-clients")
 
     testImplementation(project(":libs:kairos-test-support"))
+    testImplementation("io.lettuce:lettuce-core")
     testImplementation("org.testcontainers:testcontainers-kafka")
 }

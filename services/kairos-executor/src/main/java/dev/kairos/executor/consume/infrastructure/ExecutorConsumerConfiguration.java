@@ -3,6 +3,7 @@ package dev.kairos.executor.consume.infrastructure;
 import dev.kairos.executor.consume.application.DispatchAdmission;
 import dev.kairos.executor.consume.application.DispatchProcessor;
 import dev.kairos.executor.consume.application.LocalDispatchLimiter;
+import dev.kairos.executor.gate.application.ExecutionAction;
 import dev.kairos.messaging.client.KafkaClientFactory;
 import dev.kairos.messaging.client.PoisonMessages;
 import dev.kairos.messaging.config.MessagingConfiguration;
@@ -60,9 +61,9 @@ public class ExecutorConsumerConfiguration {
         return new JdbcDispatchAdmission(control, cells, limiter, properties, executorClock, meters);
     }
 
-    /** Starts consumers once T-242 supplies the fenced execution processor. */
+    /** Starts consumers once T-243 supplies the action that publishes durable execution outcomes. */
     @Bean
-    @ConditionalOnBean(DispatchProcessor.class)
+    @ConditionalOnBean(ExecutionAction.class)
     public DispatchConsumerManager dispatchConsumerManager(
             KafkaClientFactory factory,
             DispatchProcessor processor,
