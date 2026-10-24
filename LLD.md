@@ -2181,7 +2181,7 @@ Content-Type: application/json
   "failureRatio": 0.0025,
   "p95LatencyMs": 140,
   "deadLettered": 3,
-  "breaker": "CLOSED"
+  "breaker": "UNKNOWN"
 }
 ```
 
@@ -2205,6 +2205,8 @@ Content-Type: application/problem+json
 ```
 
 **Background effect:** None.
+
+The API aggregates durable counters from `endpoint_health_minute` and calculates p95 from cell run history. Circuit breakers are process-local in executors and are not available to this aggregate, so `breaker` is `UNKNOWN` until a future shared breaker-state contract exists.
 
 </details>
 

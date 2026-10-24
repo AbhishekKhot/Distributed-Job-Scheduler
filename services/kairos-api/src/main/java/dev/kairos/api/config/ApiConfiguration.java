@@ -1,5 +1,6 @@
 package dev.kairos.api.config;
 
+import dev.kairos.api.endpoints.EndpointsConfiguration;
 import dev.kairos.api.security.ApiKeyLookup;
 import dev.kairos.api.security.BearerAuthenticator;
 import dev.kairos.api.security.SessionLookup;
@@ -19,6 +20,7 @@ import dev.kairos.api.support.ratelimit.infrastructure.RateLimitRedisHealthIndic
 import dev.kairos.api.support.web.ClientAddresses;
 import dev.kairos.engine.lock.RedisProperties;
 import dev.kairos.engine.outbox.OutboxConfiguration;
+import dev.kairos.http.config.HttpConfiguration;
 import dev.kairos.persistence.cell.CellRouter;
 import dev.kairos.persistence.tx.ControlTransactions;
 import dev.kairos.security.apikey.ApiKeyService;
@@ -49,7 +51,13 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({ApiProperties.class, RedisProperties.class})
-@Import({OutboxConfiguration.class, TokenConfiguration.class, ApiKeyConfiguration.class})
+@Import({
+    OutboxConfiguration.class,
+    TokenConfiguration.class,
+    ApiKeyConfiguration.class,
+    HttpConfiguration.class,
+    EndpointsConfiguration.class
+})
 public class ApiConfiguration {
 
     /** Creates the configuration; Spring calls it. */
