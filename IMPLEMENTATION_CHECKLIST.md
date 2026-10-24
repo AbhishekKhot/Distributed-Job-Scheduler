@@ -671,6 +671,8 @@ The single place where runs and their outbox rows are created, used by the API (
 ### T-205 Job APIs (LLD APIs 34–45)
 **Status:** in progress (Abhishek Khot) · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`
 
+**Progress (2026-10-24):** The controller, application services, JDBC adapters and transactional run creation are implemented. Docker detached `spotlessApply :services:kairos-api:compileJava` passed. Acceptance checks and integration coverage remain pending.
+
 - [ ] `JobSpec` record and validation (LLD section 3.6): schedule (`IMMEDIATE`, `ONE_TIME`, `CRON`, `INTERVAL`), request values for the endpoint's parameters, priority, misfire policy, retry override, `autoPauseAfter`, `maxLatenessMs`. Size ≤ 128 KB.
 - [ ] 34 create (`Idempotency-Key`): the shard is computed from team and name; writes `jobs`, `job_versions` and `schedules` (or, for `IMMEDIATE`, a run and its outbox row through T-113) in one cell transaction; enforces the team's `maxJobs` quota; returns `nextFireAt`.
 - [ ] 35 batch create (at most 1K jobs per request; `429 quota-exceeded` when the batch would pass the team's job limit): grouped by cell and committed per cell, so one item's failure does not roll back the others; per-item results as the LLD shows.

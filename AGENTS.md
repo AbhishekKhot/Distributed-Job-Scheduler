@@ -109,6 +109,8 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 **Current task:** T-205 Job APIs (LLD APIs 34–45) is in progress on `t-205-job-apis`, based on `origin/develop` at `77eee77`. T-204 endpoint APIs were merged through PR #39 and all declared T-205 dependencies are done. T-206 and T-205 dependent workflow tasks remain pending; other ready tasks include T-261, T-281, T-282, T-301, T-402 and T-403. Work one task at a time and wait for the user's go-ahead before starting another.
 
+**T-205 progress (2026-10-24):** The job controller, validation/use-case layer, cell persistence adapter, endpoint catalog and run snapshot builder are implemented. API Java compilation passed in Docker detached mode with `make bg BG_NAME=kairos-gradle-t205-compile3 ARGS='spotlessApply :services:kairos-api:compileJava'`. Acceptance checks and integration coverage remain pending; T-205 stays in progress.
+
 **Open items:**
 
 1. T-262 must decode T-243's sealed output envelope into `task_outputs.sealed` using the team's `OUTPUTS` keyset and the recorded workflow-run/output AAD.

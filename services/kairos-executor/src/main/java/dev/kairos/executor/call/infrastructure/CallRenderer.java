@@ -137,7 +137,7 @@ public final class CallRenderer {
             }
             String value = path.get(matcher.group(1));
             if (value == null) throw new IllegalArgumentException("A required path parameter is missing");
-            rendered.append(urlTemplate, previous, matcher.start()).append(value);
+            rendered.append(urlTemplate, previous, matcher.start()).append(encode(value));
             previous = matcher.end();
         }
         rendered.append(urlTemplate, previous, urlTemplate.length());
@@ -146,7 +146,7 @@ public final class CallRenderer {
             complete.append(complete.indexOf("?") < 0 ? '?' : '&')
                     .append(encode(entry.getKey()))
                     .append('=')
-                    .append(entry.getValue());
+                    .append(encode(entry.getValue()));
         }
         return URI.create(complete.toString());
     }
