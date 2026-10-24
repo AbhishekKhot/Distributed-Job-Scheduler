@@ -50,9 +50,14 @@ public final class EndpointAutoSuspendEvaluator {
             """;
     private static final String SUSPENDED =
             "SELECT endpoint_id FROM scheduler.api_endpoints WHERE status = 'SUSPENDED'";
+    private static final String ACTIVE = "SELECT endpoint_id FROM scheduler.api_endpoints WHERE status = 'ACTIVE'";
     private static final String HOLD = """
             UPDATE scheduler.schedules SET status = 3
              WHERE endpoint_id IN (:endpoints) AND status = 1
+            """;
+    private static final String RELEASE = """
+            UPDATE scheduler.schedules SET status = 1
+             WHERE endpoint_id IN (:endpoints) AND status = 3
             """;
 
     private final CellRouter cells;
@@ -114,6 +119,7 @@ public final class EndpointAutoSuspendEvaluator {
             }
         }
         holdSuspendedSchedules();
+        releaseResumedSchedules();
     }
 
     private Map<UUID, Counts> collect(Instant from, Instant now) {
@@ -161,6 +167,17 @@ public final class EndpointAutoSuspendEvaluator {
         for (Cell cell : allCells) {
             cell.transactions().execute(jdbc -> {
                 cell.jdbc().sql(HOLD).param("endpoints", suspended).update();
+                return null;
+            });
+        }
+    }
+
+    private void releaseResumedSchedules() {
+        Set<UUID> active = new HashSet<>(control.sql(ACTIVE).query(UUID.class).list());
+        if (active.isEmpty()) return;
+        for (Cell cell : cells.allCells()) {
+            cell.transactions().execute(jdbc -> {
+                cell.jdbc().sql(RELEASE).param("endpoints", active).update();
                 return null;
             });
         }
