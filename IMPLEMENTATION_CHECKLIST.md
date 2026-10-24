@@ -284,7 +284,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
 | T-222 | Fire poller | kairos-watcher | done |
 | T-223 | Delayed poller | kairos-watcher | done |
-| T-224 | Outbox relay | kairos-watcher | in progress (AbhishekKhot) |
+| T-224 | Outbox relay | kairos-watcher | review |
 | T-225 | Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor | kairos-watcher | todo |
 | T-226 | Singleton tasks: auto-suspend, review timeout, purger | kairos-watcher | todo |
 | T-241 | Dispatch consumers and back-pressure | kairos-executor | todo |
@@ -745,14 +745,16 @@ All watcher components live in `services/kairos-watcher` under `dev.kairos.watch
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t223-final ARGS='spotlessApply build check'` passed: 2,160 tests, no failures, errors or skips. PostgreSQL integration tests cover due retry fencing and outbox atomicity, suspension deferral, transaction rollback, pinned-version loading and 10K backfill at 100/s. Redis integration tests verify team, per-job backfill, global backfill and redrive caps shared across watcher connections. Both watcher replicas became healthy in an isolated detached Compose stack; the stack and volumes were removed.
 
 ### T-224 Outbox relay
-**Status:** in progress (AbhishekKhot) · **Needs:** T-221, T-108 · **Owns:** `dev.kairos.watcher.outbox`
+**Status:** review · **Needs:** T-221, T-108 · **Owns:** `dev.kairos.watcher.outbox`
 
-- [ ] Every 100 ms per owned shard group: read up to 2K due rows (`available_at <= now`) in `outbox_id` order, publish them to their topics with keys, wait for all acknowledgements, then delete the acknowledged rows in batches of ≤ 2K. A crash before the delete republishes, which the execution gates make harmless.
-- [ ] Rows that keep failing are retried with backoff. A row is never dropped, and its age feeds the back-pressure metric.
-- [ ] Optional global dispatch cap per second (token bucket per watcher, configurable).
-- [ ] Metrics: published per topic, batch latency, oldest due row age per cell (`kairos_outbox_oldest_due_seconds`), backlog size.
+- [x] Every 100 ms per owned shard group: read up to 2K due rows (`available_at <= now`) in `outbox_id` order, publish them to their topics with keys, wait for all acknowledgements, then delete the acknowledged rows in batches of ≤ 2K. A crash before the delete republishes, which the execution gates make harmless.
+- [x] Rows that keep failing are retried with backoff. A row is never dropped, and its age feeds the back-pressure metric.
+- [x] Optional global dispatch cap per second (token bucket per watcher, configurable).
+- [x] Metrics: published per topic, batch latency, oldest due row age per cell (`kairos_outbox_oldest_due_seconds`), backlog size.
 
 **Acceptance:** with Kafka paused for 60s and then resumed, every row is published at least once and the outbox drains; no row is deleted before its acknowledgement (fault-injection test).
+
+**Verification:** Docker `make bg BG_NAME=kairos-gradle-t224-final ARGS='spotlessApply build check'` passed: 2,171 tests, no failures, errors or skips. PostgreSQL fault tests prove rows remain until individual Kafka acknowledgements, failures are deferred while acknowledged rows delete, a rollback retains acknowledged rows for replay, and the optional cap leaves unsent rows due. Tests cover the 2K claim limit, due ordering, 30s maximum backoff, gauges and real Kafka delivery. In an isolated detached Compose stack, Kafka was paused for over 60s after 100 rows were inserted; all 100 remained during the pause, then the outbox drained after resume and Kafka showed 193 records, including expected at-least-once replays. Both watcher replicas returned healthy; the stack and volumes were removed.
 
 ### T-225 Recovery: lease sweeper, stuck-queued sweeper, Redis failover monitor
 **Status:** todo · **Needs:** T-221, T-111, T-113, T-103 · **Owns:** `dev.kairos.watcher.recovery`
