@@ -61,4 +61,10 @@ tasks.named<JacocoReport>("testCodeCoverageReport") {
 
 tasks.named("check") {
     dependsOn(tasks.named("testCodeCoverageReport"))
+    dependsOn(
+        ":services:kairos-api:integrationTest",
+        ":services:kairos-watcher:integrationTest",
+        ":services:kairos-executor:integrationTest",
+        ":services:kairos-state:integrationTest",
+    )
 }

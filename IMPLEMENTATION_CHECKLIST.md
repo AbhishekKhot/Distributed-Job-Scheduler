@@ -934,10 +934,10 @@ This task implements the guarantee that no run executes twice. Review it with ex
 
 **Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t301-final2 ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips. Mock target: 114 tests / 95.70% line coverage; 45 new tests cover real TLS with a public CA and hostname checks, signed raw and form bodies, failure/profile/size bounds, management-only CA/stats, 10K concurrent duplicate receptions, capacity refusal without eviction, coherent periodic snapshots and write failures. Packaged isolated Compose acceptance started API, two watchers, two executors, state, Kafka, Redis, PostgreSQL and the mock target. A real immediate job reached `https://mock-target:8443` from an executor with the team CA and a configured Kairos signing key; one final successful history row settled in a cell. A client without the CA failed verification. Three additional signed/invalid requests produced exact duplicate/signature counters, snapshot key counts and a periodic file snapshot. Target logs contained no key, request id or payload. All acceptance containers, volumes, networks and generated credentials were removed. The target uses in-memory TLS material, bounded request bodies/key tracking, virtual threads and no access log. 50K capacity remains a T-306 benchmark target. Existing BOM-managed Bouncy Castle and Jackson versions were added to the mock module and locks regenerated; no version upgrades or SQL migrations.
 
-**Related integration follow-up:** PR #48 fixed the executor endpoint-test route to generate a Kairos UUIDv7 synthetic run id; its regression test validates both dispatch ids. The packaged T-301 acceptance preceded the fix and used a normal immediate job. A packaged public endpoint-test call remains for T-303/T-304 integration coverage. After rebasing onto PR #48, detached Docker `make bg BG_NAME=kairos-t301-pr48-check ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips; mock target 114 tests.
+**Related integration follow-up:** PR #48 fixed the executor endpoint-test route to generate a Kairos UUIDv7 synthetic run id; its regression test validates both dispatch ids. The packaged T-301 acceptance preceded the fix and used a normal immediate job. A packaged public endpoint-test call remains for T-304 end-to-end coverage. After rebasing onto PR #48, detached Docker `make bg BG_NAME=kairos-t301-pr48-check ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips; mock target 114 tests.
 
 ### T-302 Benchmark CLI
-**Status:** review (AbhishekKhot) · **Needs:** T-205, T-206, T-301 · **Owns:** `tools/bench-cli/**`
+**Status:** done (PR #50 merged) · **Needs:** T-205, T-206, T-301 · **Owns:** `tools/bench-cli/**`
 
 - [x] picocli commands: `seed` (signs up a user, creates a team, an API key, the CA bundle, endpoints pointing at the mock target, and N jobs with a chosen schedule mix through the batch API), `load` (drives a target executions-per-second profile using immediate jobs, run now and cron fan-out), `verify` (compares created occurrences with mock-target `/stats` and `run_history`) and `report`.
 - [x] Profiles: `steady-20k` (20K executions/s for 30 minutes), `ramp-50k` (ramp from 20K to 50K over 10 minutes, hold for 10), `burst` (top-of-minute spike of 50K cron fires) and `smoke` (500/s for 2 minutes for local runs).
@@ -952,12 +952,14 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification:** Detached Docker `make bg BG_NAME=kairos-t302-full-final ARGS='build check'` passed: 2,562 tests, zero failures/errors/skips. Bench CLI line coverage was 75.85%, above its 70% gate. Dependency locks and verification metadata were refreshed with `resolveAndLockAll build`; no dependency versions changed.
 
 ### T-303 Cross-module integration suites
-**Status:** todo · **Needs:** the services in phase 2 · **Owns:** `services/*/src/integrationTest/**` (a new source set added by this task in build-logic)
+**Status:** review (AbhishekKhot) · **Needs:** the services in phase 2 · **Owns:** `services/*/src/integrationTest/**` (a new source set added by this task in build-logic)
 
-- [ ] An `integrationTest` source set and Gradle task in the service conventions, run by `make test`.
-- [ ] Per service: Testcontainers with the real migrations applied, the service started with `@SpringBootTest`, and its flows exercised against real Postgres, Kafka and Redis (API: create a job and observe the outbox row; watcher: fire and publish; executor: consume and call the mock target; state: settle).
+- [x] An `integrationTest` source set and Gradle task in the service conventions, run by `make test`.
+- [x] Per service: Testcontainers with the real migrations applied, the service started with `@SpringBootTest`, and its flows exercised against real Postgres, Kafka and Redis (API: create a job and observe the outbox row; watcher: fire and publish; executor: consume and call the mock target; state: settle).
 
 **Acceptance:** suites run in under 10 minutes in a detached build (`make bg ARGS=integrationTest`).
+
+**Verification (2026-10-26):** Fresh detached Docker `make bg BG_NAME=kairos-t303-fresh-acceptance ARGS='integrationTest --rerun-tasks'` passed all four service suites in 1m 11s (47 executed tasks). `make bg BG_NAME=kairos-t303-full ARGS='spotlessCheck check'` passed in 3m 49s: 2,566 tests, zero failures/errors/skips. API uses real HTTP to create an immediate job and inspects the pinned dispatch outbox; watcher fires a schedule and observes Kafka; executor consumes Kafka, makes a fenced claim with PostgreSQL/Redis, and calls an in-process mock HTTP target through a test action; state consumes a Kafka result and settles history. The production executor HTTPS action and packaged whole-stack path are covered separately by T-243/T-301; T-304 owns the end-to-end scenarios. No dependencies or SQL migrations changed.
 
 ### T-304 End-to-end scenarios
 **Status:** todo · **Needs:** T-302 · **Owns:** `tools/bench-cli/src/main/java/dev/kairos/bench/scenario/**`
