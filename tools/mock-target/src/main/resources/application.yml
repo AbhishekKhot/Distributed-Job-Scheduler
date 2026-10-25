@@ -3,6 +3,10 @@
 spring:
   application:
     name: mock-target
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
   threads:
     virtual:
       enabled: true
@@ -10,8 +14,15 @@ spring:
     timeout-per-shutdown-phase: 30s
 
 server:
-  port: 8080
+  port: 8443
   shutdown: graceful
+  tomcat:
+    accesslog:
+      enabled: false
+    max-connections: 20000
+    accept-count: 2000
+    max-http-form-post-size: 0
+  max-http-request-header-size: 16KB
   error:
     include-stacktrace: never
     include-message: never
@@ -20,6 +31,8 @@ server:
 management:
   server:
     port: 8081
+    ssl:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -37,3 +50,11 @@ logging:
   structured:
     format:
       console: ecs
+
+kairos:
+  mock-target:
+    max-keys: 1000000
+    max-body-bytes: 1048576
+    snapshot-interval: 30s
+    snapshot-path: /tmp/kairos-mock-target/stats.json
+    verification-keys: ${KAIROS_MOCK_TARGET_VERIFICATION_KEYS:}
