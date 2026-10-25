@@ -866,7 +866,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t261-final1 ARGS='spotlessApply build check'` passed: 2,379 tests, zero failures/errors/skips. State: 126 tests, 95.28% line coverage. Real PostgreSQL/Kafka checks cover concurrent batch replay, stale fences/counters, retry exhaustion in 15–17 simulated minutes, retry precedence and pinned status overrides, unknown review, max age, deferral, cancellation, one-time finalization, durable auto-pause audit replay, workflow transaction rollback and partial-cell replay. A Kafka restart after the database commit replays the result without duplicate history. Resume of an AUTO_PAUSED job resets its consecutive-dead counter. T-262 supplies the transactional workflow callback; until then, final task results roll back and remain replayable. Completed events default off through `teams.completed_events_enabled`.
 
 ### T-262 Workflow progression
-**Status:** review · **Needs:** T-261 (interface), T-104, T-113, T-109 · **Owns:** `dev.kairos.state.workflow`
+**Status:** done · **Needs:** T-261 (interface), T-104, T-113, T-109 · **Owns:** `dev.kairos.state.workflow`
 
 - [x] On task success: store `task_outputs` (non-sensitive values as JSON, sensitive values sealed), decrement `remaining_deps` of downstream tasks, and for each downstream task reaching 0, set it `QUEUED` with the rendered snapshot and a dispatch outbox row.
 - [x] On task failure (final): mark descendants `UPSTREAM_FAILED` under `FAIL_FAST`, or set the workflow run `BLOCKED` with `blocked_until = now + 24h` under `BLOCK_FOR_REVIEW`.
@@ -878,7 +878,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t262-final1 ARGS='spotlessApply build check'` passed: 2,406 tests, zero failures/errors/skips. Compose configuration validation also passed; the state service receives the local profile and KEK. Temporary generated credentials were removed. State: 149 tests / 96.28% line coverage; engine: 122 / 91.31%; API: 428 / 92.49%; watcher: 120 / 90.93%. Twenty-three workflow acceptance cases cover the diamond/join, encrypted A-to-D header rendering, typed public outputs, concurrent results, default review and fail-fast, review expiry, retry re-entry with retained pins, cancellation/skipping, invalid output rollback and child-outbox failure rollback. Shared engine input tests and real API/watcher tests cover retry/DLQ/recovery envelopes and durable expiry reset. A new cell migration persists `workflow_runs.review_expired`; a bounded reconciliation pass handles watcher/operator changes without another Kafka result. Required integration changes are confined to input propagation, workflow lock ordering and review expiry; no production dependency versions changed.
 
 ### T-263 Stats aggregator
-**Status:** todo · **Needs:** T-261 · **Owns:** `dev.kairos.state.stats`
+**Status:** in progress (Abhishek Khot) · **Needs:** T-261 · **Owns:** `dev.kairos.state.stats`
 
 - [ ] In-memory counters per endpoint and team per minute from settled results, flushed every 10s with an upsert into `endpoint_health_minute` and `team_stats_minute` keyed by node id (no cross-node contention).
 - [ ] Flush on shutdown; bounded memory (evict minutes older than 2).
