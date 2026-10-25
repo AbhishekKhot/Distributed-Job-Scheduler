@@ -28,17 +28,18 @@ public final class ResultDecider {
 
     public Decision decide(InflightRun run, boolean cancelRequested, Result result, RunPolicy policy) {
         if (cancelRequested || result.getOutcome() == CallOutcome.CALL_OUTCOME_CANCELLED)
-            return new Decision(Outcome.CANCELLED, null, null, run.attempt(), false);
+            return new Decision(Outcome.CANCELLED, null, null, run.attempt(), false, false);
         return switch (result.getOutcome()) {
-            case CALL_OUTCOME_SUCCEEDED -> new Decision(Outcome.SUCCEEDED, null, null, run.attempt(), false);
-            case CALL_OUTCOME_SKIPPED -> new Decision(Outcome.SKIPPED, null, null, run.attempt(), false);
+            case CALL_OUTCOME_SUCCEEDED -> new Decision(Outcome.SUCCEEDED, null, null, run.attempt(), false, false);
+            case CALL_OUTCOME_SKIPPED -> new Decision(Outcome.SKIPPED, null, null, run.attempt(), false, false);
             case CALL_OUTCOME_DEFERRED ->
                 new Decision(
                         null,
                         null,
                         clock.instant().plusMillis(Math.max(1000, result.getRetryAfterMs())),
                         run.attempt(),
-                        true);
+                        true,
+                        false);
             case CALL_OUTCOME_FAILED, CALL_OUTCOME_UNKNOWN -> failure(run, result, policy);
             default -> throw new IllegalArgumentException("Unsupported result outcome");
         };
@@ -58,8 +59,10 @@ public final class ResultDecider {
                 case UNKNOWN_OUTCOME -> FailureKind.UNKNOWN_OUTCOME;
                 default -> FailureKind.NON_RETRYABLE;
             };
+        boolean retryable = kind == FailureKind.RETRYABLE
+                || kind == FailureKind.UNKNOWN_OUTCOME && policy.unknown().retries();
         if (run.attempt() == Short.MAX_VALUE)
-            return new Decision(Outcome.DEAD_LETTERED, error, null, run.attempt(), false);
+            return new Decision(Outcome.DEAD_LETTERED, error, null, run.attempt(), false, retryable);
         RetryDecision decision = planner.plan(
                 new FailedAttempt(
                         run.runId(),
@@ -72,9 +75,9 @@ public final class ResultDecider {
                 policy.unknown());
         return switch (decision) {
             case RetryDecision.Retry retry ->
-                new Decision(Outcome.FAILED_RETRYING, error, retry.dueAt(), retry.nextAttempt(), false);
+                new Decision(Outcome.FAILED_RETRYING, error, retry.dueAt(), retry.nextAttempt(), false, retryable);
             case RetryDecision.DeadLetter dead ->
-                new Decision(Outcome.DEAD_LETTERED, dead.reason(), null, run.attempt(), false);
+                new Decision(Outcome.DEAD_LETTERED, dead.reason(), null, run.attempt(), false, retryable);
         };
     }
 
@@ -83,7 +86,8 @@ public final class ResultDecider {
             @Nullable ErrorClass error,
             @Nullable Instant dueAt,
             int nextAttempt,
-            boolean deferred) {
+            boolean deferred,
+            boolean retryableFailure) {
         public boolean terminal() {
             return !deferred && outcome != Outcome.FAILED_RETRYING;
         }

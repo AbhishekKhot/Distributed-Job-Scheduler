@@ -41,6 +41,10 @@ logging:
 
 kairos:
   state:
+    stats:
+      enabled: true
+      flush-interval: 10s
+      maximum-buckets: 100000
     workflow:
       enabled: true
       reconcile-interval: 1s
