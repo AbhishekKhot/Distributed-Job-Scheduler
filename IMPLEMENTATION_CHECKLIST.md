@@ -878,12 +878,14 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t262-final1 ARGS='spotlessApply build check'` passed: 2,406 tests, zero failures/errors/skips. Compose configuration validation also passed; the state service receives the local profile and KEK. Temporary generated credentials were removed. State: 149 tests / 96.28% line coverage; engine: 122 / 91.31%; API: 428 / 92.49%; watcher: 120 / 90.93%. Twenty-three workflow acceptance cases cover the diamond/join, encrypted A-to-D header rendering, typed public outputs, concurrent results, default review and fail-fast, review expiry, retry re-entry with retained pins, cancellation/skipping, invalid output rollback and child-outbox failure rollback. Shared engine input tests and real API/watcher tests cover retry/DLQ/recovery envelopes and durable expiry reset. A new cell migration persists `workflow_runs.review_expired`; a bounded reconciliation pass handles watcher/operator changes without another Kafka result. Required integration changes are confined to input propagation, workflow lock ordering and review expiry; no production dependency versions changed.
 
 ### T-263 Stats aggregator
-**Status:** in progress (Abhishek Khot) · **Needs:** T-261 · **Owns:** `dev.kairos.state.stats`
+**Status:** review · **Needs:** T-261 · **Owns:** `dev.kairos.state.stats`
 
-- [ ] In-memory counters per endpoint and team per minute from settled results, flushed every 10s with an upsert into `endpoint_health_minute` and `team_stats_minute` keyed by node id (no cross-node contention).
-- [ ] Flush on shutdown; bounded memory (evict minutes older than 2).
+- [x] In-memory counters per endpoint and team per minute from settled results, flushed every 10s with an upsert into `endpoint_health_minute` and `team_stats_minute` keyed by node id (no cross-node contention).
+- [x] Flush on shutdown; bounded memory (evict minutes older than 2).
 
 **Acceptance:** totals in the tables match the number of settled results across two state replicas.
+
+**Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t263-final1 ARGS='spotlessApply build check'` passed: 2,422 tests, zero failures/errors/skips. State: 165 tests / 96.78% line coverage. Sixteen new tests cover two independent state/settler instances writing both PostgreSQL cells, exact endpoint/team totals, settlement and flush replay, ambiguous/out-of-order commits, partial-cell settlement/flush failures, endpoint/team transaction rollback, pinned retry overrides and exhausted retry classification, concurrent recording during flush, clock rollback, capacity/age bounds, restart identity and shutdown drain. The after-commit record now carries resolved retryability. Statistics use current/previous UTC settlement minutes and cumulative monotonic per-process upserts; deferrals do not consume attempts. Buffered statistics are best effort under process failure or capacity/age eviction; history remains durable. No schema, dependency or Compose changes.
 
 ### 8.5 kairos-maintenance
 
