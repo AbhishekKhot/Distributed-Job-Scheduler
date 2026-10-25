@@ -24,3 +24,27 @@ logging:
   structured:
     format:
       console: ecs
+
+kairos:
+  maintenance:
+    partitions:
+      enabled: true
+      lock-timeout: 2s
+      statement-timeout: 30s
+      transaction-timeout: 2m
+      purge-batch-size: 2000
+  datasource:
+    control:
+      url: ${KAIROS_CONTROL_DB_URL}
+      username: ${KAIROS_DB_USERNAME}
+      password: ${KAIROS_DB_PASSWORD}
+    cells:
+      - url: ${KAIROS_CELL_0_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
+      - url: ${KAIROS_CELL_1_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
+    pool:
+      maximum-size: 1
+      minimum-idle: 0
