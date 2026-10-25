@@ -8,6 +8,8 @@ dependencies {
     implementation(project(":libs:kairos-persistence"))
     implementation(project(":libs:kairos-security"))
     implementation(libs.picocli)
+    implementation("com.zaxxer:HikariCP")
+    implementation("tools.jackson.core:jackson-databind")
     testImplementation(project(":libs:kairos-test-support"))
 }
 

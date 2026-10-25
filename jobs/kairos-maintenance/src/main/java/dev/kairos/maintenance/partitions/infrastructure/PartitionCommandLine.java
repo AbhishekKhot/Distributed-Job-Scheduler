@@ -1,9 +1,14 @@
 package dev.kairos.maintenance.partitions.infrastructure;
 
+import dev.kairos.maintenance.commands.application.OperatorCommand;
+import dev.kairos.maintenance.commands.application.OperatorResult;
+import dev.kairos.maintenance.commands.infrastructure.OperatorCommandLine;
 import dev.kairos.maintenance.partitions.application.PartitionStore;
 import java.io.PrintWriter;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -27,17 +32,44 @@ public final class PartitionCommandLine implements Callable<Integer> {
 
     public static int execute(
             String[] args, Supplier<List<PartitionStore.Result>> action, PrintWriter out, PrintWriter err) {
-        var command = new CommandLine(new PartitionCommandLine())
-                .addSubcommand("partitions", new Partitions(action))
-                .setOut(out)
-                .setErr(err);
+        return execute(
+                args,
+                action,
+                request -> {
+                    throw new IllegalStateException("Operator commands unavailable.");
+                },
+                () -> false,
+                out,
+                err);
+    }
+
+    public static int execute(
+            String[] args,
+            Supplier<List<PartitionStore.Result>> action,
+            Function<OperatorCommand, OperatorResult> operators,
+            BooleanSupplier terminal,
+            PrintWriter out,
+            PrintWriter err) {
+        var command = new CommandLine(new PartitionCommandLine()).addSubcommand("partitions", new Partitions(action));
+        OperatorCommandLine.register(command, operators, terminal);
+        command.setOut(out).setErr(err);
+        command.setParameterExceptionHandler((exception, arguments) -> {
+            exception.getCommandLine().getErr().println("Invalid command arguments. Use --help for usage.");
+            return 2;
+        });
         command.setExecutionExceptionHandler((exception, line, result) -> {
             line.getErr()
-                    .println("Partition maintenance failed: "
+                    .println("Maintenance command failed: "
                             + exception.getClass().getSimpleName());
-            return 1;
+            return exception instanceof IllegalArgumentException ? 2 : 1;
         });
-        return command.execute(args);
+        try {
+            return command.execute(args);
+        } finally {
+            // Console.writer() is buffered: flush the one-time credential before main calls System.exit.
+            out.flush();
+            err.flush();
+        }
     }
 
     @Command(

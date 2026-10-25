@@ -60,7 +60,7 @@ locks: ## Refresh dependency lockfiles and checksums after changing a dependency
 	$(GRADLE) --write-locks --write-verification-metadata sha256 resolveAndLockAll build
 
 images: env ## Build every application image
-	$(COMPOSE) --profile bench --profile maintenance build
+	$(COMPOSE) --profile bench --profile maintenance --profile tools build
 
 up: env ## Build and start the stack (API on http://127.0.0.1:8080)
 	$(COMPOSE) up --build --detach --wait
@@ -72,7 +72,7 @@ partitions: env ## Run UTC partition creation and retention once with schema-own
 	$(COMPOSE) --profile maintenance run --build --rm kairos-partitions
 
 down: ## Stop the stack and keep the data volumes
-	$(COMPOSE) --profile observability --profile bench --profile maintenance down
+	$(COMPOSE) --profile observability --profile bench --profile maintenance --profile tools down
 
 ps: ## Show container status
 	$(COMPOSE) --profile observability ps
@@ -81,5 +81,5 @@ logs: ## Follow logs, e.g. make logs S=kairos-executor
 	$(COMPOSE) logs --follow $(S)
 
 clean: ## Stop the stack and delete its data volumes and the Gradle cache volume
-	$(COMPOSE) --profile observability --profile bench --profile maintenance down --volumes --remove-orphans
+	$(COMPOSE) --profile observability --profile bench --profile maintenance --profile tools down --volumes --remove-orphans
 	-docker volume rm kairos-gradle-home
