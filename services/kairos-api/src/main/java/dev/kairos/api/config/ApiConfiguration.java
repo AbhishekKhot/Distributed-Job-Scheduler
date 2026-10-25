@@ -19,6 +19,7 @@ import dev.kairos.api.support.ratelimit.infrastructure.Bucket4jRateLimiter;
 import dev.kairos.api.support.ratelimit.infrastructure.RateLimitRedis;
 import dev.kairos.api.support.ratelimit.infrastructure.RateLimitRedisHealthIndicator;
 import dev.kairos.api.support.web.ClientAddresses;
+import dev.kairos.api.workflows.WorkflowsConfiguration;
 import dev.kairos.engine.lock.RedisProperties;
 import dev.kairos.engine.outbox.OutboxConfiguration;
 import dev.kairos.http.config.HttpConfiguration;
@@ -58,7 +59,8 @@ import tools.jackson.databind.json.JsonMapper;
     ApiKeyConfiguration.class,
     HttpConfiguration.class,
     EndpointsConfiguration.class,
-    JobsConfiguration.class
+    JobsConfiguration.class,
+    WorkflowsConfiguration.class
 })
 public class ApiConfiguration {
 

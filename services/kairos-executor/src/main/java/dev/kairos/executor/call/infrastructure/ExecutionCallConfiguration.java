@@ -68,8 +68,9 @@ public class ExecutionCallConfiguration {
             @Qualifier("controlJdbcClient") JdbcClient control,
             JsonMapper json,
             KeysetService keysets,
-            SecretCipher cipher) {
-        return new JdbcExecutionSecrets(control, json, keysets, cipher);
+            SecretCipher cipher,
+            dev.kairos.persistence.cell.CellRouter cells) {
+        return new JdbcExecutionSecrets(control, json, keysets, cipher, cells);
     }
 
     /** Owns one Resilience4j breaker and rate limiter per endpoint. */

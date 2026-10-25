@@ -71,7 +71,11 @@ public final class DelayedDispatchLoader implements DelayedDispatchSource {
                     int timeoutMs = timeout.isNumber() ? timeout.intValue() : 30_000;
                     return new LoadedDispatch(
                             rs.getString(1),
-                            new CallSpec(timeoutMs, snapshot(finalRequest, endpoint)),
+                            new CallSpec(
+                                    timeoutMs,
+                                    run.targetType() == TargetType.WORKFLOW_TASK
+                                            ? RequestSnapshot.getDefaultInstance()
+                                            : snapshot(finalRequest, endpoint)),
                             maxExecPerSecond(json.readTree(rs.getString(3))));
                 })
                 .optional()

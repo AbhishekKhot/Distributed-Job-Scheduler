@@ -175,6 +175,7 @@ workflow_runs|skipped|smallint|NO
 workflow_runs|blocked_until|timestamp with time zone|YES
 workflow_runs|started_at|timestamp with time zone|YES
 workflow_runs|finished_at|timestamp with time zone|YES
+workflow_runs|task_pins|jsonb|NO
 workflow_versions|workflow_id|uuid|NO
 workflow_versions|version|integer|NO
 workflow_versions|spec|jsonb|NO
