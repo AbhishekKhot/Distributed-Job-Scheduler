@@ -221,6 +221,8 @@ services:
         MODULE_PATH: services/kairos-api
     environment:
       <<: *app-env
+      KAIROS_TARGET_POLICY_ALLOWED_HOSTS: mock-target
+      KAIROS_TARGET_POLICY_ALLOWED_PORTS: 443,8443
       KAIROS_SWAGGER_UI_ENABLED: "true"
       SPRING_PROFILES_ACTIVE: local
       KAIROS_LOCAL_KEK: ${KAIROS_LOCAL_KEK:?run make env}
@@ -252,6 +254,8 @@ services:
         MODULE_PATH: services/kairos-executor
     environment:
       <<: *app-env
+      KAIROS_TARGET_POLICY_ALLOWED_HOSTS: mock-target
+      KAIROS_TARGET_POLICY_ALLOWED_PORTS: 443,8443
       # Opens the team keysets that decrypt target credentials and sign requests.
       SPRING_PROFILES_ACTIVE: local
       KAIROS_LOCAL_KEK: ${KAIROS_LOCAL_KEK:?run make env}
@@ -343,7 +347,14 @@ services:
       args:
         MODULE_PATH: tools/mock-target
     depends_on: {}
-    environment: {}
+    environment:
+      KAIROS_MOCK_TARGET_VERIFICATION_KEYS: ${KAIROS_MOCK_TARGET_VERIFICATION_KEYS:-}
+    tmpfs:
+      - /tmp:size=256m
+    deploy:
+      resources:
+        limits:
+          memory: 1g
 
   bench-cli:
     <<: [*hardening, *logging]
