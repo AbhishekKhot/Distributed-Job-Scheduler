@@ -296,7 +296,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-263 | Stats aggregator | kairos-state | todo |
 | T-281 | Partition manager | kairos-maintenance | done |
 | T-282 | Operator commands | kairos-maintenance | done |
-| T-301 | Mock target | tools/mock-target | in progress |
+| T-301 | Mock target | tools/mock-target | review |
 | T-302 | Benchmark CLI | tools/bench-cli | todo |
 | T-303 | Cross-module integration suites | tests | todo |
 | T-304 | End-to-end scenarios | tools/bench-cli | todo |
@@ -921,16 +921,20 @@ This task implements the guarantee that no run executes twice. Review it with ex
 ## 9. Phase 3: verification and benchmarks
 
 ### T-301 Mock target
-**Status:** in progress (AbhishekKhot) · **Needs:** T-002 · **Owns:** `tools/mock-target/**`, its compose block
+**Status:** review · **Needs:** T-002 · **Owns:** `tools/mock-target/**`, its compose block
 
-- [ ] HTTPS on port 8443 with a certificate issued at startup by an in-memory development CA. The CA certificate (public part only) is served on the management port (`/ca.pem`), so bench-cli can register it as a team CA bundle and the executor keeps full certificate verification. This development CA exists only in this tool.
-- [ ] Behaviour controlled per request through path or query (`/behave?status=500&latencyMs=200&failRate=0.1&bodyBytes=1024`) and through named profiles for benchmarks.
-- [ ] Duplicate detector: records every `Idempotency-Key` with a count (in memory plus periodic snapshot), and exposes `/stats` (total calls, unique keys, keys seen more than once) on the management port.
-- [ ] Verifies `X-Kairos-Signature` when a verification key is configured, and counts failures.
-- [ ] Sized for 50K requests/s across replicas (Tomcat with virtual threads, no per-request logging).
-- [ ] Compose: add `KAIROS_TARGET_POLICY_ALLOWED_HOSTS=mock-target` and port 8443 to the executor and API environments for local use only.
+- [x] HTTPS on port 8443 with a certificate issued at startup by an in-memory development CA. The CA certificate (public part only) is served on the management port (`/ca.pem`), so bench-cli can register it as a team CA bundle and the executor keeps full certificate verification. This development CA exists only in this tool.
+- [x] Behaviour controlled per request through path or query (`/behave?status=500&latencyMs=200&failRate=0.1&bodyBytes=1024`) and through named profiles for benchmarks.
+- [x] Duplicate detector: records every `Idempotency-Key` with a count (in memory plus periodic snapshot), and exposes `/stats` (total calls, unique keys, keys seen more than once) on the management port.
+- [x] Verifies `X-Kairos-Signature` when a verification key is configured, and counts failures.
+- [x] Sized for 50K requests/s across replicas (Tomcat with virtual threads, no per-request logging).
+- [x] Compose: add `KAIROS_TARGET_POLICY_ALLOWED_HOSTS=mock-target` and port 8443 to the executor and API environments for local use only.
 
 **Acceptance:** a test call from the executor to `https://mock-target:8443` succeeds with verification on; `/stats` reports duplicates correctly in a unit test.
+
+**Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t301-final2 ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips. Mock target: 114 tests / 95.70% line coverage; 45 new tests cover real TLS with a public CA and hostname checks, signed raw and form bodies, failure/profile/size bounds, management-only CA/stats, 10K concurrent duplicate receptions, capacity refusal without eviction, coherent periodic snapshots and write failures. Packaged isolated Compose acceptance started API, two watchers, two executors, state, Kafka, Redis, PostgreSQL and the mock target. A real immediate job reached `https://mock-target:8443` from an executor with the team CA and a configured Kairos signing key; one final successful history row settled in a cell. A client without the CA failed verification. Three additional signed/invalid requests produced exact duplicate/signature counters, snapshot key counts and a periodic file snapshot. Target logs contained no key, request id or payload. All acceptance containers, volumes, networks and generated credentials were removed. The target uses in-memory TLS material, bounded request bodies/key tracking, virtual threads and no access log. 50K capacity remains a T-306 benchmark target. Existing BOM-managed Bouncy Castle and Jackson versions were added to the mock module and locks regenerated; no version upgrades or SQL migrations.
+
+**Related integration follow-up:** The existing public endpoint-test route reaches the executor but generates a UUIDv4 test run id; `CallRenderer` requires Kairos UUIDv7 and rejects it before making an HTTP request. T-301 acceptance used a normal scheduled run with a valid id. Correct the endpoint-test route in an executor integration follow-up before relying on it for T-303/T-304.
 
 ### T-302 Benchmark CLI
 **Status:** todo · **Needs:** T-205, T-206, T-301 · **Owns:** `tools/bench-cli/**`

@@ -1,0 +1,15 @@
+# Mock target
+
+Development HTTPS target for scheduler acceptance and benchmarks. Start with `make up`; the service runs on the internal Compose network with HTTPS on 8443 and management HTTP on 8081. The API and executor allow `mock-target:8443` only in local Compose configuration. Private CA/leaf keys exist only in memory.
+
+Fetch `http://mock-target:8081/ca.pem` from a container on the backend network and register the PEM as a team CA bundle. Use an endpoint such as `https://mock-target:8443/behave?status=200&latencyMs=20`. Keep TLS verification enabled. A target restart creates a new CA; refresh the team CA bundle before further calls.
+
+Profiles: `/behave/healthy`, `/behave/retryable`, `/behave/client-error`, `/behave/slow`, `/behave/mixed`. Query overrides: `status=200..599`, `latencyMs=0..60000`, `failRate=0..1` (503 injection), `bodyBytes=0..1048576`. Defaults return JSON `{"ok":true}`. Exact-sized bodies contain `x` bytes. HEAD, 204 and 304 have no body. Unknown/duplicate/invalid options return 400; oversized request bodies return 413. The tool never echoes request data.
+
+Set `KAIROS_MOCK_TARGET_VERIFICATION_KEYS` to one or two comma-separated exported `ksig_v<n>_...` signing keys to require Kairos signatures and a timestamp within five minutes. Configure keys through the environment; never commit them. Unconfigured verification accepts unsigned requests.
+
+`GET /stats` on management reports exact per-instance aggregate counts. `duplicateKeys` counts keys seen at least twice; `duplicateCalls` counts receptions beyond the first. This target observes duplicate calls and does not deduplicate them. A million unique keys fit the default tracker; configure `kairos.mock-target.max-keys` for the chosen run length and replica count. New keys receive 503 at capacity, with `capacityRejected` and `trackingComplete=false`. Unkeyed calls also make tracking incomplete. Incomplete tracking cannot establish a zero-duplicate result.
+
+`GET /stats/snapshot` returns a coherent versioned snapshot with per-key counts. The same structure is atomically written every 30 seconds and at graceful shutdown to `/tmp/kairos-mock-target/stats.json`. The snapshot interval and path are configurable. The default Compose tmpfs is ephemeral. Snapshots are diagnostic and are not loaded on restart; retain them externally when required. Merge per-key counts across every replica for duplicate verification, and detect restarts from `instanceId`. Aggregate duplicate-key counts alone cannot identify a key delivered once to each of two replicas.
+
+Virtual threads, reusable response chunks and no per-request logging support load tests. The 50K target is a sizing goal, not an established result; benchmark CLI and capacity verification follow in T-302/T-306. See the mock-target contract in LLD.md for complete fields and limits.
