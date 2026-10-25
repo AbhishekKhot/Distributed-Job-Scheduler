@@ -168,4 +168,23 @@ class RunFactoryTest {
         assertThatThrownBy(() -> factory.waiting(task, NOW, Trigger.SCHEDULE, 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void workflowRetryUsesNewRunIdsAndContinuesAttemptsWithNewSeries() {
+        RunTarget task = EngineFixtures.task(77, "settle");
+        var ready = factory.workflowRetry(task, NOW.minusSeconds(60), 4, 0).run();
+        var waiting = factory.workflowRetry(task, NOW.minusSeconds(60), 4, 2).run();
+        assertThat(ready.runId()).isNotEqualTo(waiting.runId());
+        assertThat(ready.state()).isEqualTo(RunState.QUEUED);
+        assertThat(ready.fence()).isEqualTo(new Fence(1));
+        assertThat(waiting.state()).isEqualTo(RunState.WAITING);
+        assertThat(waiting.fence()).isEqualTo(Fence.INITIAL);
+        assertThat(waiting.remainingDeps()).isEqualTo(2);
+        assertThat(ready.attempt()).isEqualTo(4);
+        assertThat(ready.seriesStart()).isEqualTo(4);
+        assertThat(ready.infraAttempt()).isZero();
+        assertThatThrownBy(() -> factory.workflowRetry(job, NOW, 2, 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> factory.workflowRetry(task, NOW, 1, 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> factory.workflowRetry(task, NOW, 2, 200)).isInstanceOf(IllegalArgumentException.class);
+    }
 }

@@ -239,6 +239,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | total, succeeded, failed, cancelled, skipped | smallint | Task counters |
 | blocked_until | timestamptz | Review deadline when `BLOCKED` |
 | started_at, finished_at | timestamptz | |
+| task_pins | jsonb | Task key to `{endpointId, version}` resolved at occurrence creation; retained after task completion for immutable workflow retry |
 
 **task_outputs** (PK `scheduled_at, workflow_run_id, task_key`; partitioned by day): `team_id` uuid, `outputs` jsonb (non-sensitive values), `sealed` bytea (encrypted sensitive values), `created_at` timestamptz; ≤ 24 KB per task.
 
@@ -3122,6 +3123,15 @@ Content-Type: application/problem+json
 ### 3.7 Workflows and workflow runs
 
 Workflow body rules: `name` follows the job name rule; task keys match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; acyclic, at most 200 tasks and 10 levels; placeholders (`{{ tasks.<task>.outputs.<name> }}`, `{{ run.id }}`) may reference only declared outputs of ancestor tasks and never the URL host; `onTaskFailure` is `BLOCK_FOR_REVIEW` (default) or `FAIL_FAST`.
+
+The API validates resolved endpoint outputs and stores the complete trusted plan (`levels`, `roots`, `remainingDependencies`, `downstream`, `ancestors`) inside each immutable `workflow_versions.spec`. Serialized definitions, including the plan, are bounded to 512 KiB. `reviewTimeoutSec` defaults to 86400 and ranges from 60 to 604800. Duplicate JSON task keys are rejected before map conversion.
+
+Manual, immediate and scheduled occurrences use the shared `WorkflowRunCreator`: the workflow-run row, task endpoint pins, task rows and root dispatch outbox messages commit together in one cell transaction. Workflow dispatches carry the pinned definition id/version/task key; the executor loads the request template from that immutable, team-scoped version. Large bodies and credential-bearing templates stay out of Kafka snapshots, and endpoint default headers are merged at rendering time.
+
+Workflow retry retains the workflow run id, occurrence time, definition version and original task endpoint versions. Failed and upstream-failed/skipped task executions receive new run ids, continue their attempt numbers, reset infrastructure attempts and start new retry series. New run ids isolate messages from previous task executions without reopening absorbing terminal run states. Successful tasks and their outputs are preserved; tasks whose parents have all succeeded are queued, and other retried tasks wait with recomputed unfinished-parent counts. Settlement and workflow advancement must acquire the workflow-run lock before changing task states or counters so they serialize with operator cancellation/retry.
+
+`RequestSnapshot.sealed_inputs` accepts the existing `{v:1,tasks:{taskKey:{outputName:base64(ciphertext)}}}` envelope and an optional `publicTasks:{taskKey:{outputName:jsonValue}}` map. Only referenced retained outputs are included on an immediately dispatchable retry; sensitive ciphertext remains encrypted with the existing OUTPUTS AAD, public values retain their JSON types, and duplicate public/sensitive names are rejected. API workflow-run details show sensitive names as `[REDACTED]` without decrypting values. T-262 must produce the same envelope when it releases dependent tasks.
+
 
 Template values support only `{{ run.id }}` and `{{ tasks.<task>.outputs.<name> }}`. The producer must be an ancestor and the named output must be declared by its resolved endpoint configuration. A single placeholder used as a JSON value preserves its type; mixed text accepts scalar values only. JSON property names, URL hosts and schemes cannot contain placeholders. Sensitive outputs may render into headers or body values, never path or query values. Path segments and query values use UTF-8 percent encoding exactly once; path traversal, pre-encoded path separators/traversal sequences, and header control characters are rejected. Templates are limited to 16384 characters per field, rendered scalar fields to 64 KiB, and JSON trees to 32 nested levels and 16384 nodes; rendered bodies remain capped at 1 MiB. Total request-template bytes across a workflow cannot exceed 512 KiB.
 

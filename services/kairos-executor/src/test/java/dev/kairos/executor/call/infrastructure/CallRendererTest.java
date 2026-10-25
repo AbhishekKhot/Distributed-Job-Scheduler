@@ -41,6 +41,15 @@ class CallRendererTest {
 
     @Test
     void preservesEncodedPathAndQueryAndAddsExecutionHeadersAndSignature() throws Exception {
+        assertRenderedCall(false);
+    }
+
+    @Test
+    void restoresPinnedWorkflowRequestsAndPreservesEndpointDefaultHeaders() throws Exception {
+        assertRenderedCall(true);
+    }
+
+    private void assertRenderedCall(boolean pinned) throws Exception {
         var team = TestIds.teamId();
         var run = TestIds.runId(0);
         var workflowRun = TestIds.workflowRunId(0);
@@ -60,10 +69,19 @@ class CallRendererTest {
                 .setEndpointVersion(3)
                 .setAttempt(4)
                 .setTraceParent("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-                .setRequest(snapshot)
+                .setRequest(pinned ? RequestSnapshot.getDefaultInstance() : snapshot)
                 .build();
         EndpointVersion endpoint = endpoint("https://target.example.test/orders/{orderId}?fixed=a%2Fb");
         JdbcExecutionSecrets secrets = mock(JdbcExecutionSecrets.class);
+        when(secrets.workflowRequest(dispatch))
+                .thenReturn(
+                        pinned
+                                ? java.util.Optional.of(new dev.kairos.domain.template.RequestTemplate(
+                                        Map.of("orderId", "a/b"),
+                                        Map.of("search+term", "x+y"),
+                                        Map.of("X-Mode", "snapshot"),
+                                        dev.kairos.domain.template.JsonValue.of(Map.of("quantity", 2))))
+                                : java.util.Optional.empty());
         when(secrets.inputs(
                         team,
                         new RunId(workflowRun.value()),

@@ -6,16 +6,17 @@ import dev.kairos.domain.id.TeamId;
 import dev.kairos.domain.model.Priority;
 import dev.kairos.domain.model.TargetType;
 import dev.kairos.domain.model.TaskKey;
+import dev.kairos.domain.model.Trigger;
 import dev.kairos.domain.schedule.Fire;
 import dev.kairos.engine.run.CallSpec;
 import dev.kairos.engine.run.PlannedRun;
 import dev.kairos.engine.run.RunCreator;
 import dev.kairos.engine.run.RunFactory;
 import dev.kairos.engine.run.RunTarget;
+import dev.kairos.engine.run.WorkflowRunCreator;
 import dev.kairos.persistence.cell.Cell;
 import dev.kairos.proto.v1.NameValue;
 import dev.kairos.proto.v1.RequestSnapshot;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -47,14 +48,6 @@ public final class JdbcFireMaterializer implements FireMaterializer {
             """;
     private static final Set<String> CREDENTIAL_HEADERS =
             Set.of("authorization", "proxy-authorization", "cookie", "set-cookie");
-    private static final String WORKFLOW_RUN = """
-            INSERT INTO scheduler.workflow_runs (
-                workflow_run_id, workflow_id, workflow_version, team_id, shard_id, scheduled_at,
-                trigger, status, total)
-            VALUES (:run, :workflow, :version, :team, :shard, :scheduled, 1, 1, :total)
-            ON CONFLICT (workflow_id, workflow_version, scheduled_at) DO NOTHING
-            """;
-
     private final JdbcClient control;
     private final JsonMapper json;
     private final KairosIdFactory ids;
@@ -111,18 +104,7 @@ public final class JdbcFireMaterializer implements FireMaterializer {
         for (Fire occurrence : occurrences) {
             UUID workflowRun = ids.newWorkflowRunId(dev.kairos.domain.shard.Shard.of(schedule.shard()))
                     .value();
-            int inserted = cell.jdbc()
-                    .sql(WORKFLOW_RUN)
-                    .param("run", workflowRun)
-                    .param("workflow", schedule.id())
-                    .param("version", schedule.definitionVersion())
-                    .param("team", schedule.teamId())
-                    .param("shard", schedule.shard())
-                    .param("scheduled", Timestamp.from(occurrence.at()))
-                    .param("total", tasks.size())
-                    .update();
-            if (inserted == 0) continue;
-            List<PlannedRun> planned = new ArrayList<>(tasks.size());
+            List<WorkflowRunCreator.Task> planned = new ArrayList<>(tasks.size());
             for (Map.Entry<String, JsonNode> task : tasks.properties()) {
                 JsonNode taskSpec = task.getValue();
                 Endpoint endpoint = endpoint(schedule.teamId(), requiredText(taskSpec, "endpoint"));
@@ -136,13 +118,19 @@ public final class JdbcFireMaterializer implements FireMaterializer {
                         taskSpec.path("maxLatenessSec"));
                 JsonNode dependencies = taskSpec.path("dependsOn");
                 int remaining = dependencies.isArray() ? dependencies.size() : 0;
-                planned.add(
-                        remaining == 0
-                                ? factory.scheduled(target, occurrence.at(), Duration.ofMillis(schedule.spreadMillis()))
-                                : factory.waiting(
-                                        target, occurrence.at(), dev.kairos.domain.model.Trigger.SCHEDULE, remaining));
+                planned.add(new WorkflowRunCreator.Task(target, remaining));
             }
-            creator.create(planned, null);
+            if (!new WorkflowRunCreator(factory, creator)
+                    .create(
+                            cell,
+                            new TeamId(schedule.teamId()),
+                            schedule.id(),
+                            schedule.definitionVersion(),
+                            workflowRun,
+                            occurrence.at(),
+                            Trigger.SCHEDULE,
+                            Duration.ofMillis(schedule.spreadMillis()),
+                            planned)) continue;
             count++;
         }
         return count;
@@ -193,7 +181,11 @@ public final class JdbcFireMaterializer implements FireMaterializer {
                 endpoint.version(),
                 new Priority(schedule.priority()),
                 limit,
-                new CallSpec(timeoutMs, snapshot(request, endpoint.spec())));
+                new CallSpec(
+                        timeoutMs,
+                        type == TargetType.WORKFLOW_TASK
+                                ? RequestSnapshot.getDefaultInstance()
+                                : snapshot(request, endpoint.spec())));
     }
 
     private RequestSnapshot snapshot(JsonNode request, JsonNode endpoint) {

@@ -29,13 +29,20 @@ public final class JdbcExecutionSecrets {
     private final JsonMapper json;
     private final KeysetService keysets;
     private final SecretCipher cipher;
+    private final dev.kairos.persistence.cell.CellRouter cells;
 
     /** Creates the credential adapter. */
-    public JdbcExecutionSecrets(JdbcClient control, JsonMapper json, KeysetService keysets, SecretCipher cipher) {
+    public JdbcExecutionSecrets(
+            JdbcClient control,
+            JsonMapper json,
+            KeysetService keysets,
+            SecretCipher cipher,
+            dev.kairos.persistence.cell.CellRouter cells) {
         this.control = Objects.requireNonNull(control, "control");
         this.json = Objects.requireNonNull(json, "json");
         this.keysets = Objects.requireNonNull(keysets, "keysets");
         this.cipher = Objects.requireNonNull(cipher, "cipher");
+        this.cells = Objects.requireNonNull(cells, "cells");
     }
 
     /** Loads current secret fields and creates the HTTP authentication material for this one call. */
@@ -91,6 +98,43 @@ public final class JdbcExecutionSecrets {
         return keysets.signingKey(team, sealed);
     }
 
+    /** Loads a workflow task request from its immutable, team-scoped definition version. */
+    public java.util.Optional<dev.kairos.domain.template.RequestTemplate> workflowRequest(
+            dev.kairos.proto.v1.Dispatch dispatch) {
+        if (dispatch.getTargetTypeValue() != 2) return java.util.Optional.empty();
+        java.util.UUID definition = dev.kairos.proto.ProtoIds.toUuid(dispatch.getDefinitionId());
+        String encoded = cells.forId(definition)
+                .jdbc()
+                .sql("""
+                SELECT v.spec::text FROM scheduler.workflow_versions v JOIN scheduler.workflows w ON w.workflow_id=v.workflow_id
+                WHERE w.team_id=:team AND v.workflow_id=:definition AND v.version=:version
+                """)
+                .param("team", dev.kairos.proto.ProtoIds.toUuid(dispatch.getTeamId()))
+                .param("definition", definition)
+                .param("version", dispatch.getDefinitionVersion())
+                .query(String.class)
+                .optional()
+                .orElseThrow(() -> new IllegalStateException("Pinned workflow definition is unavailable"));
+        JsonNode task = json.readTree(encoded).path("tasks").path(dispatch.getTaskKey());
+        if (!task.isObject()) throw new IllegalStateException("Pinned workflow task is unavailable");
+        JsonNode request = task.path("request");
+        Map<String, String> path = new LinkedHashMap<>(),
+                query = new LinkedHashMap<>(),
+                headers = new LinkedHashMap<>();
+        request.path("pathParams")
+                .properties()
+                .forEach(e -> path.put(e.getKey(), e.getValue().asString()));
+        request.path("query")
+                .properties()
+                .forEach(e -> query.put(e.getKey(), e.getValue().asString()));
+        request.path("headers")
+                .properties()
+                .forEach(e -> headers.put(e.getKey(), e.getValue().asString()));
+        JsonValue body =
+                request.has("body") ? JsonValue.of(json.convertValue(request.get("body"), Object.class)) : null;
+        return java.util.Optional.of(new dev.kairos.domain.template.RequestTemplate(path, query, headers, body));
+    }
+
     /** Opens the OUTPUTS keyset when the request snapshot contains encrypted upstream values. */
     public Map<TaskKey, Map<String, OutputValue>> inputs(TeamId team, RunId workflowRunId, byte[] sealedInputs) {
         if (sealedInputs.length == 0) return Map.of();
@@ -107,7 +151,8 @@ public final class JdbcExecutionSecrets {
                 || tasks.size() > 200) {
             throw new IllegalArgumentException("Workflow inputs exceed limits");
         }
-        TeamAead outputKeys = keysets.aead(team, KeyPurpose.OUTPUTS, keyset(team, KeyPurpose.OUTPUTS));
+        TeamAead outputKeys =
+                tasks.isEmpty() ? null : keysets.aead(team, KeyPurpose.OUTPUTS, keyset(team, KeyPurpose.OUTPUTS));
         Map<TaskKey, Map<String, OutputValue>> inputs = new LinkedHashMap<>();
         tasks.properties().forEach(task -> {
             TaskKey taskKey = TaskKey.of(task.getKey());
@@ -122,7 +167,8 @@ public final class JdbcExecutionSecrets {
                 } catch (IllegalArgumentException invalid) {
                     throw new IllegalArgumentException("The encrypted workflow inputs are invalid", invalid);
                 }
-                byte[] plaintext = cipher.decryptOutput(outputKeys, workflowRunId, output.getKey(), ciphertext);
+                byte[] plaintext = cipher.decryptOutput(
+                        Objects.requireNonNull(outputKeys), workflowRunId, output.getKey(), ciphertext);
                 try {
                     Object value = json.readValue(plaintext, Object.class);
                     values.put(output.getKey(), new OutputValue(JsonValue.of(value), true));
@@ -134,6 +180,23 @@ public final class JdbcExecutionSecrets {
             });
             inputs.put(taskKey, Map.copyOf(values));
         });
+        JsonNode publicTasks = root.path("publicTasks");
+        if (!publicTasks.isMissingNode() && (!publicTasks.isObject() || publicTasks.size() > 200))
+            throw new IllegalArgumentException("Workflow inputs exceed limits");
+        publicTasks.properties().forEach(task -> {
+            TaskKey key = TaskKey.of(task.getKey());
+            if (!task.getValue().isObject() || task.getValue().size() > 256)
+                throw new IllegalArgumentException("Workflow inputs exceed limits");
+            Map<String, OutputValue> values = new LinkedHashMap<>(inputs.getOrDefault(key, Map.of()));
+            task.getValue().properties().forEach(output -> {
+                if (values.containsKey(output.getKey())) throw new IllegalArgumentException("Duplicate workflow input");
+                values.put(
+                        output.getKey(),
+                        new OutputValue(JsonValue.of(json.convertValue(output.getValue(), Object.class)), false));
+            });
+            inputs.put(key, Map.copyOf(values));
+        });
+        if (inputs.size() > 200) throw new IllegalArgumentException("Workflow inputs exceed limits");
         return Map.copyOf(inputs);
     }
 
