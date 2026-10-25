@@ -221,6 +221,40 @@ public final class RunFactory {
                 target, scheduledAt, scheduledAt, RunState.WAITING, trigger, remainingDeps, clock.instant());
     }
 
+    /**
+     * Starts a new workflow task execution after an operator retries its failed occurrence.
+     * A new run id isolates old dispatch fences while attempts and retry-series counters continue.
+     * @param target pinned workflow task
+     * @param scheduledAt original workflow occurrence
+     * @param attempt next task attempt number
+     * @param remainingDeps unfinished direct parents
+     * @return queued when ready, otherwise waiting for its parents
+     */
+    public PlannedRun workflowRetry(RunTarget target, Instant scheduledAt, int attempt, int remainingDeps) {
+        if (target.targetType() != dev.kairos.domain.model.TargetType.WORKFLOW_TASK
+                || attempt < 2
+                || attempt > RunRules.MAX_SMALLINT
+                || remainingDeps < 0
+                || remainingDeps > 199) {
+            throw new IllegalArgumentException("Invalid workflow retry");
+        }
+        Instant now = clock.instant();
+        RunState state = remainingDeps == 0 ? RunState.QUEUED : RunState.WAITING;
+        return new PlannedRun(
+                row(
+                        target,
+                        ids.newRunId(target.shard()),
+                        scheduledAt,
+                        now,
+                        state,
+                        attempt,
+                        now,
+                        RunStateMachine.initialFence(RunStatus.of(state)),
+                        remainingDeps,
+                        Trigger.MANUAL),
+                target.call());
+    }
+
     private PlannedRun dueNow(RunTarget target, Instant scheduledAt, Trigger trigger) {
         Objects.requireNonNull(scheduledAt, "scheduledAt");
         Instant now = clock.instant();

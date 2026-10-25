@@ -79,6 +79,7 @@ class JdbcFireMaterializerIntegrationTest {
                 "shard_leases",
                 postgres);
         apply(postgres.cellOwnerDataSource(1), "cell/V2026_10_20_0915__partition_cell_tables.sql", null, postgres);
+        apply(postgres.cellOwnerDataSource(1), "cell/V2026_10_25_0900__workflow_task_pins.sql", null, postgres);
         SimpleMeterRegistry meters = new SimpleMeterRegistry();
         control = Database.of("control", postgres.controlOwnerDataSource(), DatabaseOptions.defaults(), meters);
         Database first = Database.of("cell-0", postgres.cellOwnerDataSource(0), DatabaseOptions.defaults(), meters);
