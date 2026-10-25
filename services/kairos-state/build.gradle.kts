@@ -7,6 +7,7 @@ description = "Kairos state processor: settles results in batches"
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation(project(":libs:kairos-engine"))
+    implementation(project(":libs:kairos-security"))
     testImplementation(project(":libs:kairos-test-support"))
     testImplementation("org.testcontainers:testcontainers")
 }

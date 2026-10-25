@@ -21,7 +21,6 @@ import dev.kairos.domain.model.TaskKey;
 import dev.kairos.domain.model.Trigger;
 import dev.kairos.domain.schedule.ScheduleCalculator;
 import dev.kairos.domain.schedule.ScheduleSpec;
-import dev.kairos.domain.template.Template;
 import dev.kairos.engine.outbox.OutboxMessage;
 import dev.kairos.engine.outbox.OutboxWriter;
 import dev.kairos.engine.run.CallSpec;
@@ -371,7 +370,7 @@ public final class JdbcWorkflowStore implements WorkflowStore {
             if (retried.isEmpty()) invalid("The workflow run has no failed or skipped tasks to retry.");
             creator.create(planned, null);
             jdbc.sql(
-                            "UPDATE scheduler.workflow_runs SET status=1,failed=0,skipped=0,blocked_until=NULL,finished_at=NULL WHERE team_id=:team AND workflow_run_id=:run")
+                            "UPDATE scheduler.workflow_runs SET status=1,failed=0,skipped=0,blocked_until=NULL,review_expired=false,finished_at=NULL WHERE team_id=:team AND workflow_run_id=:run")
                     .param("team", team.value())
                     .param("run", id)
                     .update();
@@ -628,46 +627,7 @@ public final class JdbcWorkflowStore implements WorkflowStore {
     }
 
     private byte[] inputs(JdbcClient jdbc, TeamId team, UUID run, JsonNode task) {
-        Map<String, Set<String>> needed = new LinkedHashMap<>();
-        collect(task.path("request"), needed);
-        Map<String, Map<String, JsonNode>> publicTasks = new LinkedHashMap<>(), sealedTasks = new LinkedHashMap<>();
-        jdbc.sql(
-                        "SELECT task_key,outputs::text,sealed FROM scheduler.task_outputs WHERE team_id=:team AND workflow_run_id=:run")
-                .param("team", team.value())
-                .param("run", run)
-                .query((rs, row) -> {
-                    String key = rs.getString(1);
-                    Set<String> names = needed.get(key);
-                    if (names == null) return 0;
-                    String raw = rs.getString(2);
-                    Map<String, JsonNode> plain = new LinkedHashMap<>(), sealed = new LinkedHashMap<>();
-                    if (raw != null)
-                        json.readTree(raw).properties().forEach(entry -> {
-                            if (names.contains(entry.getKey())) plain.put(entry.getKey(), entry.getValue());
-                        });
-                    byte[] ciphertext = rs.getBytes(3);
-                    if (ciphertext != null && ciphertext.length > 0)
-                        json.readTree(ciphertext).path("values").properties().forEach(entry -> {
-                            if (names.contains(entry.getKey())) sealed.put(entry.getKey(), entry.getValue());
-                        });
-                    if (!plain.isEmpty()) publicTasks.put(key, plain);
-                    if (!sealed.isEmpty()) sealedTasks.put(key, sealed);
-                    return 1;
-                })
-                .list();
-        return json.writeValueAsBytes(Map.of("v", 1, "tasks", sealedTasks, "publicTasks", publicTasks));
-    }
-
-    private static void collect(JsonNode node, Map<String, Set<String>> references) {
-        if (node.isString())
-            for (var reference : Template.compile(node.asString()).references()) {
-                if (reference instanceof Template.OutputReference output)
-                    references
-                            .computeIfAbsent(output.task().value(), ignored -> new java.util.HashSet<>())
-                            .add(output.output());
-            }
-        else if (node.isObject()) node.properties().forEach(entry -> collect(entry.getValue(), references));
-        else if (node.isArray()) node.forEach(child -> collect(child, references));
+        return dev.kairos.engine.run.WorkflowInputs.load(jdbc, team, run, task.path("request"), json);
     }
 
     private static List<String> parents(JsonNode body, String key) {

@@ -32,7 +32,7 @@ public final class ReviewTimeoutSweeper {
             """;
     private static final String DEAD_TASKS = """
             SELECT DISTINCT task_key FROM scheduler.dead_letters
-             WHERE target_type = 2 AND target_id = :workflowRun AND status = 1
+             WHERE target_type = 2 AND target_id = :workflowRun AND status IN (1, 2)
             """;
     private static final String VERSION = """
             SELECT spec::text FROM scheduler.workflow_versions
@@ -58,7 +58,7 @@ public final class ReviewTimeoutSweeper {
             """;
     private static final String UNBLOCK = """
             UPDATE scheduler.workflow_runs
-               SET status = 1, blocked_until = NULL, failed = failed + :failed
+               SET status = 1, blocked_until = NULL, review_expired = true, failed = failed + :failed
              WHERE workflow_run_id = :workflowRun AND status = 2
             """;
 

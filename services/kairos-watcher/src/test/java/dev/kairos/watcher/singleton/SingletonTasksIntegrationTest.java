@@ -72,7 +72,7 @@ class SingletonTasksIntegrationTest {
                         "CREATE TABLE scheduler.endpoint_health_minute (endpoint_id uuid NOT NULL, minute timestamptz NOT NULL, attempts integer NOT NULL, successes integer NOT NULL, dead_lettered integer NOT NULL)")
                 .update();
         jdbc.sql(
-                        "CREATE TABLE scheduler.workflow_runs (workflow_run_id uuid PRIMARY KEY, workflow_id uuid NOT NULL, workflow_version integer NOT NULL, status smallint NOT NULL, failed smallint NOT NULL, blocked_until timestamptz)")
+                        "CREATE TABLE scheduler.workflow_runs (workflow_run_id uuid PRIMARY KEY, workflow_id uuid NOT NULL, workflow_version integer NOT NULL, status smallint NOT NULL, failed smallint NOT NULL, blocked_until timestamptz, review_expired boolean NOT NULL DEFAULT false)")
                 .update();
         jdbc.sql(
                         "CREATE TABLE scheduler.workflow_versions (workflow_id uuid NOT NULL, version integer NOT NULL, spec jsonb NOT NULL, PRIMARY KEY(workflow_id, version))")
