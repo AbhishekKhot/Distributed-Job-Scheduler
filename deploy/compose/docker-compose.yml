@@ -268,6 +268,11 @@ services:
       <<: *build
       args:
         MODULE_PATH: services/kairos-state
+    environment:
+      <<: *app-env
+      # Authenticates sensitive workflow outputs with the team's OUTPUTS keyset.
+      SPRING_PROFILES_ACTIVE: local
+      KAIROS_LOCAL_KEK: ${KAIROS_LOCAL_KEK:?run make env}
 
   # ------------------------------------------------------------------ test tools
   mock-target:

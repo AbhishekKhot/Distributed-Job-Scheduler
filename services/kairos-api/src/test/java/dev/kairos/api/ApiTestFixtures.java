@@ -61,7 +61,8 @@ public final class ApiTestFixtures {
             MIGRATIONS + "cell/V2026_10_20_0910__create_cell_schema.sql",
             MIGRATIONS + "cell/V2026_10_21_0900__add_dead_letter_fence.sql",
             MIGRATIONS + "cell/V2026_10_20_0915__partition_cell_tables.sql",
-            MIGRATIONS + "cell/V2026_10_25_0900__workflow_task_pins.sql");
+            MIGRATIONS + "cell/V2026_10_25_0900__workflow_task_pins.sql",
+            MIGRATIONS + "cell/V2026_10_25_1100__workflow_review_expiry.sql");
     private static final String APP_ROLE_PLACEHOLDER = "${appRole}";
     private static final String SEED_CELL = """
             INSERT INTO scheduler.cell_map (cell_id, shard_from, shard_to, datasource_ref, status)

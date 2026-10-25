@@ -220,6 +220,65 @@ class DelayedPollerIntegrationTest {
     }
 
     @Test
+    void workflowRetryRebuildsReferencedPublicAndEncryptedInputs() {
+        var jdbc = database.jdbc();
+        jdbc.sql("CREATE TABLE IF NOT EXISTS scheduler.workflow_versions(workflow_id uuid,version integer,spec jsonb)")
+                .update();
+        jdbc.sql(
+                        "CREATE TABLE IF NOT EXISTS scheduler.task_outputs(workflow_run_id uuid,team_id uuid,task_key text,outputs jsonb,sealed bytea)")
+                .update();
+        UUID team = ids.newTeamId().value(),
+                endpoint = ids.newEndpointId().value(),
+                workflow = ids.newWorkflowId(SHARD).value(),
+                occurrence = ids.newWorkflowRunId(SHARD).value();
+        RunId run = ids.newRunId(SHARD);
+        jdbc.sql("INSERT INTO scheduler.teams VALUES (:id,'{}')")
+                .param("id", team)
+                .update();
+        jdbc.sql("INSERT INTO scheduler.api_endpoints VALUES (:id,:team,'ACTIVE')")
+                .param("id", endpoint)
+                .param("team", team)
+                .update();
+        jdbc.sql("INSERT INTO scheduler.api_endpoint_versions VALUES (:id,1,'{\"timeoutMs\":30000}')")
+                .param("id", endpoint)
+                .update();
+        jdbc.sql("INSERT INTO scheduler.workflow_versions VALUES (:id,1,CAST(:spec AS jsonb))")
+                .param("id", workflow)
+                .param(
+                        "spec",
+                        "{\"tasks\":{\"child\":{\"request\":{\"headers\":{\"Authorization\":\"Bearer {{ tasks.parent.outputs.token }}\"},\"body\":\"{{ tasks.parent.outputs.id }}\"}}}}")
+                .update();
+        jdbc.sql("INSERT INTO scheduler.task_outputs VALUES (:run,:team,'parent','{\"id\":42}',:sealed)")
+                .param("run", occurrence)
+                .param("team", team)
+                .param(
+                        "sealed",
+                        "{\"v\":1,\"values\":{\"token\":\"ciphertext\"}}"
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                .update();
+        insert(run, team, workflow, endpoint, NOW, 3, 1);
+        jdbc.sql(
+                        "UPDATE scheduler.run_inflight SET target_type=2,target_id=:occurrence,task_key='child' WHERE run_id=:id")
+                .param("occurrence", occurrence)
+                .param("id", run.value())
+                .update();
+        var loader = new DelayedDispatchLoader(jdbc, JsonMapper.shared());
+        var loaded = cell.transactions().execute(tx -> {
+            var claimed = new DelayedRunStore()
+                    .claim(cell, 0, NOW).stream()
+                            .filter(row -> row.run().runId().equals(run))
+                            .findFirst()
+                            .orElseThrow();
+            return loader.load(cell, claimed);
+        });
+        var inputs = JsonMapper.shared()
+                .readTree(loaded.call().request().getSealedInputs().toByteArray());
+        assertThat(inputs.path("publicTasks").path("parent").path("id").asInt()).isEqualTo(42);
+        assertThat(inputs.path("tasks").path("parent").path("token").asString()).isEqualTo("ciphertext");
+        assertThat(loaded.call().request().getHeadersList()).isEmpty();
+    }
+
+    @Test
     void transactionFailureRollsBackBothQueueAndOutbox() {
         RunId run = seed(NOW, 2, 2);
         try (Harness harness = harness("ACTIVE")) {
