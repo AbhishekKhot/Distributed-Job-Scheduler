@@ -416,7 +416,7 @@ class WorkflowsIntegrationTest extends ApiApplicationTest {
         archive(workflow, run, "join", 6);
         db(workflow)
                 .sql(
-                        "UPDATE scheduler.workflow_runs SET status=4,succeeded=2,failed=1,skipped=1,finished_at=now() WHERE workflow_run_id=:id")
+                        "UPDATE scheduler.workflow_runs SET status=4,succeeded=2,failed=1,skipped=1,review_expired=true,finished_at=now() WHERE workflow_run_id=:id")
                 .param("id", run)
                 .update();
         db(workflow)
@@ -434,6 +434,12 @@ class WorkflowsIntegrationTest extends ApiApplicationTest {
                 send("POST", "/v1/workflow-runs/" + run + "/retry", caller.token(), "{\"from\":\"FAILED_TASKS\"}"),
                 202);
         assertThat(retried.path("requeuedTasks").size()).isEqualTo(2);
+        assertThat(db(workflow)
+                        .sql("SELECT review_expired FROM scheduler.workflow_runs WHERE workflow_run_id=:id")
+                        .param("id", run)
+                        .query(Boolean.class)
+                        .single())
+                .isFalse();
         assertThat(taskRun(workflow, run, "left")).isNotEqualTo(left);
         assertThat(db(workflow)
                         .sql("SELECT state FROM scheduler.run_inflight WHERE target_id=:id AND task_key='left'")
@@ -556,6 +562,53 @@ class WorkflowsIntegrationTest extends ApiApplicationTest {
                 .isEqualTo(1);
         assertThat(db(workflow)
                         .sql("SELECT blocked_until IS NULL FROM scheduler.workflow_runs WHERE workflow_run_id=:id")
+                        .param("id", run)
+                        .query(Boolean.class)
+                        .single())
+                .isTrue();
+    }
+
+    @Test
+    void taskDlqRedriveLocksAndResumesOccurrenceWithOriginalGraphPins() {
+        Caller caller = caller();
+        UUID workflow = create(caller, "task-redrive", INTERVAL, DIAMOND);
+        UUID run = start(caller, workflow);
+        archive(workflow, run, "root", 1);
+        UUID left = taskRun(workflow, run, "left");
+        UUID dlq = ids.newDlqId(dev.kairos.domain.id.KairosId.shardOf(run)).value();
+        db(workflow).sql("""
+                INSERT INTO scheduler.dead_letters(dlq_id,team_id,run_id,shard_id,scheduled_at,target_type,definition_id,
+                  definition_version,target_id,task_key,endpoint_id,endpoint_version,attempt,infra_attempt,priority,reason,status,created_at,fence)
+                SELECT :dlq,team_id,run_id,shard_id,scheduled_at,target_type,definition_id,definition_version,target_id,task_key,
+                  endpoint_id,endpoint_version,attempt,infra_attempt,priority,11,1,now(),2 FROM scheduler.run_inflight WHERE run_id=:id
+                """).param("dlq", dlq).param("id", left).update();
+        archive(workflow, run, "left", 3);
+        db(workflow)
+                .sql(
+                        "UPDATE scheduler.workflow_runs SET status=2,succeeded=1,failed=1,blocked_until=now()+interval '1 day' WHERE workflow_run_id=:id")
+                .param("id", run)
+                .update();
+        db(workflow)
+                .sql(
+                        "INSERT INTO scheduler.task_outputs(scheduled_at,workflow_run_id,task_key,team_id,outputs,created_at) SELECT scheduled_at,workflow_run_id,'root',team_id,'{\"id\":42}',now() FROM scheduler.workflow_runs WHERE workflow_run_id=:id")
+                .param("id", run)
+                .update();
+        db(workflow)
+                .sql("UPDATE scheduler.workflows SET version=2,spec='{}' WHERE workflow_id=:id")
+                .param("id", workflow)
+                .update();
+        ok(send("POST", "/v1/dlq/" + dlq + "/redrive", caller.token(), "{\"mode\":\"CURRENT\"}"), 202);
+        assertThat(taskRun(workflow, run, "left")).isEqualTo(left);
+        assertThat(db(workflow)
+                        .sql(
+                                "SELECT definition_version=1 AND endpoint_version=1 AND attempt=2 AND state=4 AND fence=2 FROM scheduler.run_inflight WHERE run_id=:id")
+                        .param("id", left)
+                        .query(Boolean.class)
+                        .single())
+                .isTrue();
+        assertThat(db(workflow)
+                        .sql(
+                                "SELECT status=1 AND blocked_until IS NULL AND NOT review_expired FROM scheduler.workflow_runs WHERE workflow_run_id=:id")
                         .param("id", run)
                         .query(Boolean.class)
                         .single())

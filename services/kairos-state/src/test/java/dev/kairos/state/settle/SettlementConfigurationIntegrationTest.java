@@ -15,17 +15,23 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @KairosIntegrationTest(redis = false)
+@org.springframework.test.context.ActiveProfiles("local")
 @org.springframework.test.annotation.DirtiesContext
 @SpringBootTest(
         properties = {
             "management.server.port=0",
             "kairos.state.settle.group-id=t261-config",
-            "kairos.state.settle.audit-interval=1h"
+            "kairos.state.settle.audit-interval=1h",
+            "kairos.state.workflow.reconcile-interval=1h"
         })
 class SettlementConfigurationIntegrationTest {
     @DynamicPropertySource
     static void schema(DynamicPropertyRegistry properties) {
         SettlementFixtures.ensureSchema(KairosPostgres.get());
+        byte[] key = new byte[32];
+        new java.security.SecureRandom().nextBytes(key);
+        properties.add(
+                "kairos.security.kek.local-key", () -> java.util.HexFormat.of().formatHex(key));
     }
 
     @Autowired
