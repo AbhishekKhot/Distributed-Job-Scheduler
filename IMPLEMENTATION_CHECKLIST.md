@@ -849,7 +849,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 ### 8.4 kairos-state
 
 ### T-261 Result settler
-**Status:** review · **Needs:** T-108, T-113, T-103 · **Owns:** `dev.kairos.state.settle`
+**Status:** done · **Needs:** T-108, T-113, T-103 · **Owns:** `dev.kairos.state.settle`
 
 - [x] Consume `kairos.run.result` in batches (≤ 1K). Group by cell and settle each cell's group in one transaction; commit offsets after all cells commit.
 - [x] Fence check: ignore a result whose fence does not match the row (late or duplicate result).
@@ -866,7 +866,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t261-final1 ARGS='spotlessApply build check'` passed: 2,379 tests, zero failures/errors/skips. State: 126 tests, 95.28% line coverage. Real PostgreSQL/Kafka checks cover concurrent batch replay, stale fences/counters, retry exhaustion in 15–17 simulated minutes, retry precedence and pinned status overrides, unknown review, max age, deferral, cancellation, one-time finalization, durable auto-pause audit replay, workflow transaction rollback and partial-cell replay. A Kafka restart after the database commit replays the result without duplicate history. Resume of an AUTO_PAUSED job resets its consecutive-dead counter. T-262 supplies the transactional workflow callback; until then, final task results roll back and remain replayable. Completed events default off through `teams.completed_events_enabled`.
 
 ### T-262 Workflow progression
-**Status:** todo · **Needs:** T-261 (interface), T-104, T-113, T-109 · **Owns:** `dev.kairos.state.workflow`
+**Status:** in progress (Abhishek Khot) · **Needs:** T-261 (interface), T-104, T-113, T-109 · **Owns:** `dev.kairos.state.workflow`
 
 - [ ] On task success: store `task_outputs` (non-sensitive values as JSON, sensitive values sealed), decrement `remaining_deps` of downstream tasks, and for each downstream task reaching 0, set it `QUEUED` with the rendered snapshot and a dispatch outbox row.
 - [ ] On task failure (final): mark descendants `UPSTREAM_FAILED` under `FAIL_FAST`, or set the workflow run `BLOCKED` with `blocked_until = now + 24h` under `BLOCK_FOR_REVIEW`.
