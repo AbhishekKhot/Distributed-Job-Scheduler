@@ -67,6 +67,7 @@ docker compose -f deploy/compose/docker-compose.yml exec postgres psql -U postgr
 | `make gradle ARGS=spotlessApply` | Format Java sources and build scripts (the build fails on unformatted code) |
 | `make bg ARGS=check` | Same as `make gradle`, but in a detached container; then `make bg-logs` or `make bg-wait` |
 | `make logs S=kairos-executor` | Follow one service's logs |
+| `make partitions` | Run UTC partition creation/retention once using the schema owner |
 | `make locks` | Refresh lockfiles and checksums after changing a dependency |
 | `make down` / `make clean` | Stop the stack / also delete its volumes |
 

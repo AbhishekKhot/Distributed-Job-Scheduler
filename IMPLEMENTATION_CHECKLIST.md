@@ -890,13 +890,15 @@ This task implements the guarantee that no run executes twice. Review it with ex
 ### 8.5 kairos-maintenance
 
 ### T-281 Partition manager
-**Status:** in progress (Abhishek Khot) · **Needs:** T-106, T-107 · **Owns:** `dev.kairos.maintenance.partitions`
+**Status:** review · **Needs:** T-106, T-107 · **Owns:** `dev.kairos.maintenance.partitions`
 
-- [ ] Daily run (a CronJob in Helm, a `make` target locally): create daily partitions 3 days ahead for `run_history`, `task_outputs` and `audit_log`; drop `run_history` and `task_outputs` partitions older than 7 days and `audit_log` partitions older than 90 days.
-- [ ] Partition names are derived from dates only (no user input). DDL statements are built from that fixed format and validated against a strict pattern before execution.
-- [ ] Idempotent and safe to run concurrently (advisory lock).
+- [x] Daily one-shot command (invoked by the T-401 Helm CronJob; `make partitions` locally): create daily partitions 3 days ahead for `run_history`, `task_outputs` and `audit_log`; drop `run_history` and `task_outputs` partitions older than 7 days and `audit_log` partitions older than 90 days.
+- [x] Partition names are derived from dates only (no user input). DDL statements are built from that fixed format and validated against a strict pattern before execution.
+- [x] Idempotent and safe to run concurrently (advisory lock).
 
 **Acceptance:** running it on day N creates N+1..N+3, and drops partitions older than the retention, in every cell.
+
+**Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t281-final1 ARGS='spotlessApply build check'` passed: 2,460 tests, zero failures/errors/skips. Maintenance: 107 tests / 96.88% line coverage. Thirty-eight new unit/PostgreSQL tests cover today/N+1..N+3 across control and both cells, 7/90-day cutoff boundaries, fallback moves and bounded purges, copy rollback, idempotence/concurrent managers, lock timeout/release, name/bound validation, DML grants, unresolved-DLQ preservation, partial-database replay and CLI/configuration behavior. An isolated detached Compose run used the packaged image: 5 missing daily partitions created, 5 fallback rows moved, 5 expired partitions dropped and 5 expired fallback rows purged; a second run changed nothing. Retained boundary partitions and row counts were verified, then test containers, volumes and generated credentials were removed. The owner-only `partitions` command and local `make partitions` entry point are delivered; Helm scheduling is explicitly owned by T-401. Picocli uses the existing pinned 4.7.7 version, with regenerated locks/checksums. No SQL migrations or dependency upgrades.
 
 ### T-282 Operator commands
 **Status:** todo · **Needs:** T-107, T-109 · **Owns:** `dev.kairos.maintenance.commands`

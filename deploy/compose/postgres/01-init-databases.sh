@@ -2,7 +2,7 @@
 # Runs once, on the first start of an empty data volume (docker-entrypoint-initdb.d).
 #
 # Creates the control database and the two cell databases, with two login roles:
-#   sched_owner  owns the "scheduler" schema; only kairos-migrations uses it (DDL).
+#   sched_owner  owns the "scheduler" schema; migrations and partition maintenance use it (DDL).
 #   sched_app    is used by the services; it gets DML on tables created by sched_owner.
 #
 # Passwords come from the environment and reach SQL as psql variables (:'name'), which psql
