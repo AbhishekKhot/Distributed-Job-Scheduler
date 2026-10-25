@@ -279,7 +279,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
 | T-204 | Endpoint APIs (25–33) | kairos-api | done |
 | T-205 | Job APIs (34–45) | kairos-api | done |
-| T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | review |
+| T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | done |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | done |
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
 | T-222 | Fire poller | kairos-watcher | done |
@@ -291,7 +291,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-242 | Execution gates | kairos-executor | done |
 | T-243 | Render, call, classify and publish result | kairos-executor | done |
 | T-244 | Cancel listener and graceful drain | kairos-executor | done |
-| T-261 | Result settler | kairos-state | todo |
+| T-261 | Result settler | kairos-state | in progress |
 | T-262 | Workflow progression | kairos-state | todo |
 | T-263 | Stats aggregator | kairos-state | todo |
 | T-281 | Partition manager | kairos-maintenance | todo |
@@ -689,7 +689,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-t205-acceptance-final ARGS='spotlessApply build check'` passed all repository checks: 2,302 tests, zero failures/errors/skips. API: 412 tests, 91.62% line coverage; executor: 103 tests, 72.87%. Added 36 definition-validation cases and 22 HTTP/PostgreSQL integration tests covering APIs 34–45, eight concurrent same-key creates, concurrent distinct-name quota admission, concurrent delete with exactly one fenced cancel outbox row, rollback of job/version/run/outbox, both cells, immutable dispatch versions, run overrides, history/redrive deduplication, and 1,501 paced backfill occurrences. Existing watcher checks cover misfire and delayed-release policies. `git diff --check` is clean.
 
 ### T-206 Workflow and workflow-run APIs (LLD APIs 46–58)
-**Status:** review (Abhishek Khot) · **Needs:** T-201, T-104, T-113, T-204 · **Owns:** `dev.kairos.api.workflows`, `dev.kairos.api.workflowruns`
+**Status:** done (PR #42 merged) · **Needs:** T-201, T-104, T-113, T-204 · **Owns:** `dev.kairos.api.workflows`, `dev.kairos.api.workflowruns`
 
 - [x] Workflow spec validation through T-104, plus endpoint existence for every task, and the team quota `maxWorkflowTasks`. Size ≤ 512 KB. The computed plan is stored with the version.
 - [x] 46 create, 47 list, 48 get, 49 update (`If-Match`), 50 delete, 51 pause, 52 resume, 53 cancel, 54 run now, 55 list a workflow's runs.
@@ -702,7 +702,7 @@ The single place where runs and their outbox rows are created, used by the API (
 
 **Integration scope:** The shared `WorkflowRunCreator` and `RunFactory.workflowRetry` in `kairos-engine`, watcher fire/delayed dispatch adapters, executor pinned workflow-request/input loading, API configuration/OpenAPI inventory, and new cell migration are required seams of this task. `V2026_10_25_0900__workflow_task_pins.sql` retains per-task endpoint versions in `workflow_runs.task_pins`; the migration schema snapshot and API/watcher fixtures are updated. No dependency changes.
 
-**Verification (2026-10-25):** Docker detached `make bg BG_NAME=kairos-t206-check2 ARGS='spotlessApply build check'` passed all repository checks: 2,322 tests, zero failures/errors/skips. API: 427 tests, 92.38% line coverage; engine: 120 tests, 90.97%; executor: 107 tests, 74.21%; watcher: 119 tests, 90.79%. Fifteen real HTTP/PostgreSQL workflow tests cover APIs 46–58, cycle paths, duplicate JSON keys, quotas, concurrent idempotency, both cells, immutable definitions/endpoint pins, one queued root in a diamond, pending/running cancellation, FAILED/BLOCKED retry, output redaction/reuse, 300 KiB pinned bodies and rollback. Additional engine/executor tests cover retry series and pinned request/public-input restoration. The OpenAPI inventory includes all 68 LLD operations. `git diff --check` is clean.
+**Verification (2026-10-25):** PR #42 merged to `develop` at `49fa354`. Docker detached `make bg BG_NAME=kairos-t206-check2 ARGS='spotlessApply build check'` passed all repository checks: 2,322 tests, zero failures/errors/skips. API: 427 tests, 92.38% line coverage; engine: 120 tests, 90.97%; executor: 107 tests, 74.21%; watcher: 119 tests, 90.79%. Fifteen real HTTP/PostgreSQL workflow tests cover APIs 46–58, cycle paths, duplicate JSON keys, quotas, concurrent idempotency, both cells, immutable definitions/endpoint pins, one queued root in a diamond, pending/running cancellation, FAILED/BLOCKED retry, output redaction/reuse, 300 KiB pinned bodies and rollback. Additional engine/executor tests cover retry series and pinned request/public-input restoration. The OpenAPI inventory includes all 68 LLD operations. `git diff --check` is clean.
 
 ### T-207 Run, DLQ and stats APIs (LLD APIs 59–68)
 **Status:** done · **Needs:** T-201, T-113 · **Owns:** `dev.kairos.api.runs`, `dev.kairos.api.dlq`, `dev.kairos.api.stats`
@@ -849,7 +849,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 ### 8.4 kairos-state
 
 ### T-261 Result settler
-**Status:** todo · **Needs:** T-108, T-113, T-103 · **Owns:** `dev.kairos.state.settle`
+**Status:** in progress (Abhishek Khot) · **Needs:** T-108, T-113, T-103 · **Owns:** `dev.kairos.state.settle`
 
 - [ ] Consume `kairos.run.result` in batches (≤ 1K). Group by cell and settle each cell's group in one transaction; commit offsets after all cells commit.
 - [ ] Fence check: ignore a result whose fence does not match the row (late or duplicate result).
