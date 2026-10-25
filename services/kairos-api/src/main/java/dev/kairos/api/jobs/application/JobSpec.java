@@ -176,6 +176,7 @@ public record JobSpec(
 
     private static @Nullable RetryPolicy parseRetry(JsonNode node) {
         if (node.isMissingNode() || node.isNull()) return null;
+        if (!node.isObject()) invalid("retryPolicy", FieldError.FORMAT);
         try {
             return new RetryPolicy(
                     integer(node, "maxRetries", 5, "retryPolicy.maxRetries"),
