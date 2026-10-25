@@ -35,3 +35,35 @@ tasks.withType<Javadoc>().configureEach {
     // section 4.4), so missing comments on members are not reported.
     (options as StandardJavadocDocletOptions).addBooleanOption("Xdoclint:all,-missing", true)
 }
+
+if (project.path.startsWith(":services:")) {
+    val integrationTest =
+        sourceSets.create("integrationTest") {
+            compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+            runtimeClasspath += output + compileClasspath
+        }
+
+    configurations.named(integrationTest.implementationConfigurationName) {
+        extendsFrom(configurations.testImplementation.get())
+    }
+    configurations.named(integrationTest.runtimeOnlyConfigurationName) {
+        extendsFrom(configurations.testRuntimeOnly.get())
+    }
+
+    val integrationTestTask =
+        tasks.register<Test>("integrationTest") {
+            description = "Runs full-context service integration tests against Testcontainers."
+            group = LifecycleBasePlugin.VERIFICATION_GROUP
+            testClassesDirs = integrationTest.output.classesDirs
+            classpath = integrationTest.runtimeClasspath + sourceSets.test.get().output
+            shouldRunAfter(tasks.named("test"))
+            jvmArgs("--enable-native-access=ALL-UNNAMED")
+            inputs
+                .dir(isolated.rootProject.projectDirectory.dir("jobs/kairos-migrations/src/main/resources/db"))
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+        }
+
+    tasks.named("check") {
+        dependsOn(integrationTestTask)
+    }
+}
