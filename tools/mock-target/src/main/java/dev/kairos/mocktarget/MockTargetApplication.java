@@ -9,7 +9,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * <p>Simulates team endpoints with configurable latency, status codes, failure rates and
  * idempotency-key tracking, so duplicate deliveries can be counted.
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"dev.kairos.mocktarget.config", "dev.kairos.mocktarget.behavior"})
 public class MockTargetApplication {
 
     /**
