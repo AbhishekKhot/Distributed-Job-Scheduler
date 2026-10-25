@@ -952,7 +952,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification:** Detached Docker `make bg BG_NAME=kairos-t302-full-final ARGS='build check'` passed: 2,562 tests, zero failures/errors/skips. Bench CLI line coverage was 75.85%, above its 70% gate. Dependency locks and verification metadata were refreshed with `resolveAndLockAll build`; no dependency versions changed.
 
 ### T-303 Cross-module integration suites
-**Status:** todo · **Needs:** the services in phase 2 · **Owns:** `services/*/src/integrationTest/**` (a new source set added by this task in build-logic)
+**Status:** in progress (AbhishekKhot) · **Needs:** the services in phase 2 · **Owns:** `services/*/src/integrationTest/**` (a new source set added by this task in build-logic)
 
 - [ ] An `integrationTest` source set and Gradle task in the service conventions, run by `make test`.
 - [ ] Per service: Testcontainers with the real migrations applied, the service started with `@SpringBootTest`, and its flows exercised against real Postgres, Kafka and Redis (API: create a job and observe the outbox row; watcher: fire and publish; executor: consume and call the mock target; state: settle).
