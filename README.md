@@ -71,6 +71,18 @@ docker compose -f deploy/compose/docker-compose.yml exec postgres psql -U postgr
 | `make locks` | Refresh lockfiles and checksums after changing a dependency |
 | `make down` / `make clean` | Stop the stack / also delete its volumes |
 
+### Operator commands
+
+The optional `tools` service uses control-database DML credentials. Run from the repository root after migrations:
+
+```bash
+docker compose -f deploy/compose/docker-compose.yml --profile tools run --build --rm kairos-maintenance team set-quota --team payments --max-jobs 1000 --max-exec-per-sec 100
+docker compose -f deploy/compose/docker-compose.yml --profile tools run --rm kairos-maintenance user disable --email alice@example.com
+docker compose -f deploy/compose/docker-compose.yml --profile tools run --rm -it kairos-maintenance user reset-password --email alice@example.com
+```
+
+Quota changes preserve unspecified values. Both user commands revoke existing sessions; a password reset also clears login lockout and keeps disabled users disabled. Each change and its audit entry commit together. Password reset requires an interactive terminal and prints the generated password once after commit. The operator service disables Docker log capture for that output. Other commands can run detached when needed. Use `--help` on any command for its options; help requires no database configuration.
+
 ## Repository layout
 
 ```

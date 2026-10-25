@@ -26,7 +26,19 @@ public class KairosMaintenanceApplication {
                                 .run();
                     }
                 },
-                new java.io.PrintWriter(System.out, true),
+                request -> {
+                    try (var context = SpringApplication.run(
+                            KairosMaintenanceApplication.class,
+                            "--kairos.maintenance.partitions.enabled=false",
+                            "--kairos.maintenance.commands.enabled=true")) {
+                        return context.getBean(dev.kairos.maintenance.commands.application.OperatorService.class)
+                                .execute(request);
+                    }
+                },
+                () -> System.console() != null && System.console().isTerminal(),
+                System.console() == null
+                        ? new java.io.PrintWriter(System.out, true)
+                        : System.console().writer(),
                 new java.io.PrintWriter(System.err, true));
         System.exit(status);
     }
