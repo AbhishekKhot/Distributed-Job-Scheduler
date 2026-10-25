@@ -242,7 +242,7 @@ public final class JdbcResultSettler implements SettlementBatch {
             }
             if (!decision.deferred() && run.targetType() == TargetType.WORKFLOW_TASK)
                 workflows.settled(run, result, Objects.requireNonNull(decision.outcome()), now);
-            settled.add(new Settled(run, result, decision.outcome(), decision.deferred()));
+            settled.add(new Settled(run, result, decision.outcome(), decision.deferred(), decision.retryableFailure()));
         }
         outbox.write(messages);
         return List.copyOf(settled);

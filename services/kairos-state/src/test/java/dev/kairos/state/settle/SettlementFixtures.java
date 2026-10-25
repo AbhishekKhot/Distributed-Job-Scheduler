@@ -43,7 +43,7 @@ final class SettlementFixtures {
     final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     final CellRouter cells;
     final JdbcClient control;
-    final List<SettlementBatch.Settled> observed = new ArrayList<>();
+    final List<SettlementBatch.Settled> observed = java.util.Collections.synchronizedList(new ArrayList<>());
     final UUID team = ids.newTeamId().value();
     final UUID endpoint = ids.newEndpointId().value();
 
@@ -195,12 +195,18 @@ final class SettlementFixtures {
     }
 
     JdbcResultSettler settler(WorkflowResultHandler workflows) {
+        return settler(workflows, List.of());
+    }
+
+    JdbcResultSettler settler(WorkflowResultHandler workflows, List<SettlementBatch.Observer> extra) {
+        List<SettlementBatch.Observer> observers = new ArrayList<>(extra);
+        observers.add(observed::addAll);
         return new JdbcResultSettler(
                 cells,
                 new SettlementPolicyLoader(control, JsonMapper.shared()),
                 new ResultDecider(clock, new RetryPlanner(clock, () -> new Random(0))),
                 workflows,
-                List.of(observed::addAll),
+                observers,
                 new OutboxWriter(new CellTransactionGuard(cells), ids, clock),
                 ids,
                 clock,
