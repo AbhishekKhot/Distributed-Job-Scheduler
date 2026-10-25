@@ -952,7 +952,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification:** Detached Docker `make bg BG_NAME=kairos-t302-full-final ARGS='build check'` passed: 2,562 tests, zero failures/errors/skips. Bench CLI line coverage was 75.85%, above its 70% gate. Dependency locks and verification metadata were refreshed with `resolveAndLockAll build`; no dependency versions changed.
 
 ### T-303 Cross-module integration suites
-**Status:** review (AbhishekKhot) · **Needs:** the services in phase 2 · **Owns:** `services/*/src/integrationTest/**` (a new source set added by this task in build-logic)
+**Status:** done (PR #51 merged) · **Needs:** the services in phase 2 · **Owns:** `services/*/src/integrationTest/**` (a new source set added by this task in build-logic)
 
 - [x] An `integrationTest` source set and Gradle task in the service conventions, run by `make test`.
 - [x] Per service: Testcontainers with the real migrations applied, the service started with `@SpringBootTest`, and its flows exercised against real Postgres, Kafka and Redis (API: create a job and observe the outbox row; watcher: fire and publish; executor: consume and call the mock target; state: settle).
@@ -962,7 +962,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-26):** Fresh detached Docker `make bg BG_NAME=kairos-t303-fresh-acceptance ARGS='integrationTest --rerun-tasks'` passed all four service suites in 1m 11s (47 executed tasks). `make bg BG_NAME=kairos-t303-full ARGS='spotlessCheck check'` passed in 3m 49s: 2,566 tests, zero failures/errors/skips. API uses real HTTP to create an immediate job and inspects the pinned dispatch outbox; watcher fires a schedule and observes Kafka; executor consumes Kafka, makes a fenced claim with PostgreSQL/Redis, and calls an in-process mock HTTP target through a test action; state consumes a Kafka result and settles history. The production executor HTTPS action and packaged whole-stack path are covered separately by T-243/T-301; T-304 owns the end-to-end scenarios. No dependencies or SQL migrations changed.
 
 ### T-304 End-to-end scenarios
-**Status:** todo · **Needs:** T-302 · **Owns:** `tools/bench-cli/src/main/java/dev/kairos/bench/scenario/**`
+**Status:** in progress (AbhishekKhot) · **Needs:** T-302 · **Owns:** `tools/bench-cli/src/main/java/dev/kairos/bench/scenario/**`
 
 Scenarios run with `bench-cli scenario <name>` against the detached stack (`make up`):
 
