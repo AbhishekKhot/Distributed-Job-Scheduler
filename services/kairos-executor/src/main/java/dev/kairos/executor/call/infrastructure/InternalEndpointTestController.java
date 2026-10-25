@@ -1,6 +1,7 @@
 package dev.kairos.executor.call.infrastructure;
 
 import dev.kairos.domain.id.EndpointId;
+import dev.kairos.domain.id.KairosIdFactory;
 import dev.kairos.domain.id.TeamId;
 import dev.kairos.domain.retry.CallResult;
 import dev.kairos.domain.retry.Classification;
@@ -47,6 +48,7 @@ public final class InternalEndpointTestController {
     private final Redactor redactor;
     private final JsonMapper json;
     private final Clock clock;
+    private final KairosIdFactory ids;
     private final ConcurrentHashMap<UUID, Window> windows = new ConcurrentHashMap<>();
 
     /** Creates the internal endpoint test handler. */
@@ -56,13 +58,15 @@ public final class InternalEndpointTestController {
             AccessTokenService tokens,
             Redactor redactor,
             JsonMapper json,
-            Clock clock) {
+            Clock clock,
+            KairosIdFactory ids) {
         this.endpoints = endpoints;
         this.renderer = renderer;
         this.tokens = tokens;
         this.redactor = redactor;
         this.json = json;
         this.clock = clock;
+        this.ids = ids;
     }
 
     /** Runs one target call with the same renderer and HTTP client used by normal execution. */
@@ -87,7 +91,7 @@ public final class InternalEndpointTestController {
         EndpointVersion endpoint = endpoints
                 .find(team, endpointId, version)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "The endpoint does not exist."));
-        UUID run = UUID.randomUUID();
+        UUID run = ids.newId();
         Dispatch dispatch = dispatch(team, endpointId, run, version, request);
         try {
             RenderedCall rendered = renderer.render(dispatch, endpoint);

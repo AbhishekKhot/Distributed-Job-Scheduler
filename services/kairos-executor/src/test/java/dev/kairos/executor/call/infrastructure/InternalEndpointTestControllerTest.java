@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.kairos.domain.id.EndpointId;
+import dev.kairos.domain.id.RunId;
 import dev.kairos.domain.id.TeamId;
 import dev.kairos.domain.retry.StatusRules;
 import dev.kairos.domain.template.OutputSpec;
@@ -18,6 +21,8 @@ import dev.kairos.http.client.ResponseBody;
 import dev.kairos.http.redact.Redactor;
 import dev.kairos.http.request.HttpMethod;
 import dev.kairos.http.request.OutboundRequest;
+import dev.kairos.proto.ProtoIds;
+import dev.kairos.proto.v1.Dispatch;
 import dev.kairos.security.token.AccessTokenClaims;
 import dev.kairos.security.token.AccessTokenService;
 import dev.kairos.security.token.TokenVerification;
@@ -33,6 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -142,6 +148,11 @@ class InternalEndpointTestControllerTest {
         assertThat(response.outcome()).isEqualTo("SUCCESS");
         assertThat(response.outputs()).containsEntry("orderId", "ord-22").containsEntry("secret", "<redacted>");
         assertThat(response.error()).isEmpty();
+        ArgumentCaptor<Dispatch> dispatch = ArgumentCaptor.forClass(Dispatch.class);
+        verify(renderer).render(dispatch.capture(), eq(endpoint));
+        RunId runId = new RunId(ProtoIds.toUuid(dispatch.getValue().getRunId()));
+        assertThat(new RunId(ProtoIds.toUuid(dispatch.getValue().getTargetId())))
+                .isEqualTo(runId);
     }
 
     private static InternalEndpointTestController controller(
@@ -156,7 +167,13 @@ class InternalEndpointTestControllerTest {
     private static InternalEndpointTestController controller(
             JdbcEndpointVersions endpoints, CallRenderer renderer, AccessTokenService tokens, JsonMapper json) {
         return new InternalEndpointTestController(
-                endpoints, renderer, tokens, new Redactor(java.util.List.of()), json, Clock.fixed(NOW, ZoneOffset.UTC));
+                endpoints,
+                renderer,
+                tokens,
+                new Redactor(java.util.List.of()),
+                json,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                TestIds.factory(Clock.fixed(NOW, ZoneOffset.UTC)));
     }
 
     private static InternalEndpointTestController.TestRequest request() {
