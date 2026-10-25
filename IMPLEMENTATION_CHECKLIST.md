@@ -294,8 +294,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-261 | Result settler | kairos-state | in progress |
 | T-262 | Workflow progression | kairos-state | todo |
 | T-263 | Stats aggregator | kairos-state | todo |
-| T-281 | Partition manager | kairos-maintenance | todo |
-| T-282 | Operator commands | kairos-maintenance | todo |
+| T-281 | Partition manager | kairos-maintenance | done |
+| T-282 | Operator commands | kairos-maintenance | review |
 | T-301 | Mock target | tools/mock-target | todo |
 | T-302 | Benchmark CLI | tools/bench-cli | todo |
 | T-303 | Cross-module integration suites | tests | todo |
@@ -890,7 +890,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 ### 8.5 kairos-maintenance
 
 ### T-281 Partition manager
-**Status:** review · **Needs:** T-106, T-107 · **Owns:** `dev.kairos.maintenance.partitions`
+**Status:** done (merged PR #46, `9a3d96f`) · **Needs:** T-106, T-107 · **Owns:** `dev.kairos.maintenance.partitions`
 
 - [x] Daily one-shot command (invoked by the T-401 Helm CronJob; `make partitions` locally): create daily partitions 3 days ahead for `run_history`, `task_outputs` and `audit_log`; drop `run_history` and `task_outputs` partitions older than 7 days and `audit_log` partitions older than 90 days.
 - [x] Partition names are derived from dates only (no user input). DDL statements are built from that fixed format and validated against a strict pattern before execution.
@@ -901,16 +901,18 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t281-final1 ARGS='spotlessApply build check'` passed: 2,460 tests, zero failures/errors/skips. Maintenance: 107 tests / 96.88% line coverage. Thirty-eight new unit/PostgreSQL tests cover today/N+1..N+3 across control and both cells, 7/90-day cutoff boundaries, fallback moves and bounded purges, copy rollback, idempotence/concurrent managers, lock timeout/release, name/bound validation, DML grants, unresolved-DLQ preservation, partial-database replay and CLI/configuration behavior. An isolated detached Compose run used the packaged image: 5 missing daily partitions created, 5 fallback rows moved, 5 expired partitions dropped and 5 expired fallback rows purged; a second run changed nothing. Retained boundary partitions and row counts were verified, then test containers, volumes and generated credentials were removed. The owner-only `partitions` command and local `make partitions` entry point are delivered; Helm scheduling is explicitly owned by T-401. Picocli uses the existing pinned 4.7.7 version, with regenerated locks/checksums. No SQL migrations or dependency upgrades.
 
 ### T-282 Operator commands
-**Status:** todo · **Needs:** T-107, T-109 · **Owns:** `dev.kairos.maintenance.commands`
+**Status:** review · **Needs:** T-107, T-109 · **Owns:** `dev.kairos.maintenance.commands`
 
-- [ ] picocli commands (Command pattern), run as `docker compose run --rm kairos-maintenance <command>` locally and as a Kubernetes Job in production:
+- [x] picocli commands (Command pattern), run as `docker compose run --rm kairos-maintenance <command>` locally and as a Kubernetes Job in production:
   - `team set-quota --team <slug> --max-jobs ... --max-exec-per-sec ...`;
   - `user disable --email ...` (also revokes sessions);
   - `user reset-password --email ...` (generates a random temporary password, shows it once on the terminal, revokes sessions).
-- [ ] Every command validates its arguments, writes an audit entry (`operator:<command>`) and prints a short result. No secrets are written to logs.
-- [ ] Add a `kairos-maintenance` service to compose under a `tools` profile.
+- [x] Every command validates its arguments, writes an audit entry (`operator:<command>`) and prints a short result. No secrets are written to logs.
+- [x] Add a `kairos-maintenance` service to compose under a `tools` profile.
 
 **Acceptance:** each command works against the running stack and leaves an audit entry.
+
+**Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t282-final2 ARGS='spotlessApply build check'` passed: 2,513 tests, zero failures/errors/skips. Maintenance: 160 tests / 97.55% line coverage; 53 new CLI/PostgreSQL/configuration cases cover validation before connecting, all six quota options, concurrent patch preservation, concurrent disable/reset, Argon2id/password policy, lockout clearing, session revocation, disabled/teamless users, DML-only permissions, atomic audit rollback, redacted failures and buffered terminal flushing. Packaged Compose/API acceptance passed: quota changes visible through the public API; non-terminal reset refused without mutation; interactive reset prints the credential exactly once with Docker logging disabled; old password and refresh tokens refused, new password accepted; disable blocks login/refresh, and cached bearer access is refused within the 30-second cache bound. All three audit actors/actions were verified and credentials were absent from API logs/audit details. The optional `tools` service needs only control DML credentials; help requires no configuration. Compose validation passed. Acceptance containers, volumes, networks and generated credentials were removed. Locks were regenerated for existing BOM-managed HikariCP/Jackson versions; no dependency upgrades or SQL migrations. Production operator Job manifests remain T-401.
 
 ---
 
