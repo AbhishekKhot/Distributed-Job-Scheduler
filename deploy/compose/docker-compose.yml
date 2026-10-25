@@ -274,6 +274,35 @@ services:
       SPRING_PROFILES_ACTIVE: local
       KAIROS_LOCAL_KEK: ${KAIROS_LOCAL_KEK:?run make env}
 
+  # One-shot owner-privileged DDL job, independent of the long-running services.
+  kairos-partitions:
+    <<: [*hardening, *logging]
+    profiles: [maintenance]
+    image: kairos/kairos-maintenance:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: jobs/kairos-maintenance
+    command: [partitions]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    environment:
+      KAIROS_CONTROL_DB_URL: jdbc:postgresql://postgres:5432/kairos_control
+      KAIROS_CELL_0_DB_URL: jdbc:postgresql://postgres:5432/kairos_cell0
+      KAIROS_CELL_1_DB_URL: jdbc:postgresql://postgres:5432/kairos_cell1
+      KAIROS_DB_USERNAME: sched_owner
+      KAIROS_DB_PASSWORD: ${KAIROS_DB_OWNER_PASSWORD:?run make env}
+    networks: [backend]
+    depends_on:
+      kairos-migrations:
+        condition: service_completed_successfully
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
   # ------------------------------------------------------------------ test tools
   mock-target:
     <<: *app

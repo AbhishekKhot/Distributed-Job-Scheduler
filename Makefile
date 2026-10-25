@@ -28,7 +28,7 @@ GRADLE := docker run --rm --tty $(GRADLE_OPTS_DOCKER) $(JDK_IMAGE) $(GRADLE_ARGS
 BG_NAME := kairos-gradle
 GRADLE_BG := docker run --detach --name $(BG_NAME) $(GRADLE_OPTS_DOCKER) $(JDK_IMAGE) $(GRADLE_ARGS)
 
-.PHONY: help env build test gradle bg bg-logs bg-wait locks images up up-all down ps logs clean
+.PHONY: help env build test gradle bg bg-logs bg-wait locks images up up-all down ps logs clean partitions
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
@@ -60,7 +60,7 @@ locks: ## Refresh dependency lockfiles and checksums after changing a dependency
 	$(GRADLE) --write-locks --write-verification-metadata sha256 resolveAndLockAll build
 
 images: env ## Build every application image
-	$(COMPOSE) --profile bench build
+	$(COMPOSE) --profile bench --profile maintenance build
 
 up: env ## Build and start the stack (API on http://127.0.0.1:8080)
 	$(COMPOSE) up --build --detach --wait
@@ -68,8 +68,11 @@ up: env ## Build and start the stack (API on http://127.0.0.1:8080)
 up-all: env ## Same as up, plus Prometheus (127.0.0.1:9090) and Grafana (127.0.0.1:3000)
 	$(COMPOSE) --profile observability up --build --detach --wait
 
+partitions: env ## Run UTC partition creation and retention once with schema-owner credentials
+	$(COMPOSE) --profile maintenance run --build --rm kairos-partitions
+
 down: ## Stop the stack and keep the data volumes
-	$(COMPOSE) --profile observability --profile bench down
+	$(COMPOSE) --profile observability --profile bench --profile maintenance down
 
 ps: ## Show container status
 	$(COMPOSE) --profile observability ps
@@ -78,5 +81,5 @@ logs: ## Follow logs, e.g. make logs S=kairos-executor
 	$(COMPOSE) logs --follow $(S)
 
 clean: ## Stop the stack and delete its data volumes and the Gradle cache volume
-	$(COMPOSE) --profile observability --profile bench down --volumes --remove-orphans
+	$(COMPOSE) --profile observability --profile bench --profile maintenance down --volumes --remove-orphans
 	-docker volume rm kairos-gradle-home

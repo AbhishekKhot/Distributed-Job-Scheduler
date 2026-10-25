@@ -18,6 +18,16 @@ public class KairosMaintenanceApplication {
      * @param args command-line arguments passed to Spring Boot
      */
     public static void main(String[] args) {
-        SpringApplication.run(KairosMaintenanceApplication.class, args);
+        int status = dev.kairos.maintenance.partitions.infrastructure.PartitionCommandLine.execute(
+                args,
+                () -> {
+                    try (var context = SpringApplication.run(KairosMaintenanceApplication.class)) {
+                        return context.getBean(dev.kairos.maintenance.partitions.application.PartitionManager.class)
+                                .run();
+                    }
+                },
+                new java.io.PrintWriter(System.out, true),
+                new java.io.PrintWriter(System.err, true));
+        System.exit(status);
     }
 }
