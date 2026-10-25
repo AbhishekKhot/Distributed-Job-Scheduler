@@ -16,7 +16,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -31,12 +30,8 @@ import tools.jackson.databind.json.JsonMapper;
  */
 class OpenApiDocumentTest extends ApiApplicationTest {
 
-    /**
-     * LLD operation numbers whose feature tasks are not implemented yet. Endpoint APIs 25–33 are implemented by T-204;
-     * workflows through 58 and maintenance APIs remain pending.
-     */
-    static final Set<Integer> NOT_YET_IMPLEMENTED =
-            Set.copyOf(IntStream.rangeClosed(46, 58).boxed().toList());
+    /** All 68 LLD operations are implemented after T-206. */
+    static final Set<Integer> NOT_YET_IMPLEMENTED = Set.of();
 
     private static final Pattern OPERATION = Pattern.compile(
             "^<summary><b>(\\d{1,2})\\. [^<]{1,80}</b> &nbsp; <code>(GET|POST|PUT|PATCH|DELETE) (/[^<\\s]{1,120})</code></summary>$");

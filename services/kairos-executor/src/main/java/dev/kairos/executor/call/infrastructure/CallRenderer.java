@@ -80,7 +80,15 @@ public final class CallRenderer {
                 throw new IllegalArgumentException("The request body could not be rendered", invalid);
             }
         }
-        RequestTemplate template = new RequestTemplate(path, query, headers, body);
+        var pinned = secrets.workflowRequest(dispatch);
+        RequestTemplate template;
+        if (pinned.isPresent()) {
+            RequestTemplate task = pinned.get();
+            task.headers().forEach((name, value) -> putHeader(headers, name, value));
+            template = new RequestTemplate(task.pathParams(), task.query(), headers, task.body());
+        } else {
+            template = new RequestTemplate(path, query, headers, body);
+        }
         Map<TaskKey, Map<String, OutputValue>> inputs = secrets.inputs(
                 team, workflowRunId, dispatch.getRequest().getSealedInputs().toByteArray());
         TemplateEngine.RenderedRequest rendered =
