@@ -189,6 +189,21 @@ public final class JdbcDlqQueries implements DlqQueries {
     public Optional<Entry> redrive(TeamId team, UUID dlqId, String mode, String actor) {
         Cell cell = cells.forId(dlqId);
         Optional<DlqRow> row = cell.transactions().execute(jdbc -> {
+            // Lock the workflow parent before its DLQ/task rows, matching state progression and workflow retry.
+            jdbc.sql(
+                            "SELECT target_id FROM scheduler.dead_letters WHERE team_id=:team AND dlq_id=:id AND target_type=2")
+                    .param("team", team.value())
+                    .param("id", dlqId)
+                    .query(UUID.class)
+                    .optional()
+                    .ifPresent(parent -> {
+                        jdbc.sql(
+                                        "SELECT workflow_run_id FROM scheduler.workflow_runs WHERE team_id=:team AND workflow_run_id=:id FOR UPDATE")
+                                .param("team", team.value())
+                                .param("id", parent)
+                                .query(UUID.class)
+                                .single();
+                    });
             Optional<DlqRow> selected = jdbc.sql(LOCK)
                     .param("team", team.value())
                     .param("id", dlqId)
@@ -207,7 +222,7 @@ public final class JdbcDlqQueries implements DlqQueries {
             creator.create(planned, null);
             if (value.targetType() == 2) {
                 jdbc.sql(
-                                "UPDATE scheduler.workflow_runs SET status=1, blocked_until=NULL WHERE workflow_run_id=:id AND status=2")
+                                "UPDATE scheduler.workflow_runs SET status=1, blocked_until=NULL,review_expired=false WHERE workflow_run_id=:id AND status=2")
                         .param("id", value.targetId())
                         .update();
             }
@@ -255,7 +270,8 @@ public final class JdbcDlqQueries implements DlqQueries {
     }
 
     private TargetConfig target(TeamId team, Cell cell, DlqRow row, String mode) {
-        boolean current = "CURRENT".equals(mode);
+        // A task remains part of the immutable occurrence graph; CURRENT selects newer versions for jobs.
+        boolean current = "CURRENT".equals(mode) && row.targetType() == 1;
         String endpointSql = current
                 ? "SELECT endpoint_id, name, status, version, spec::text AS spec FROM scheduler.api_endpoints WHERE team_id=:team AND endpoint_id=:id"
                 : "SELECT e.endpoint_id, e.name, e.status, v.version, v.spec::text AS spec FROM scheduler.api_endpoints e JOIN scheduler.api_endpoint_versions v ON v.endpoint_id=e.endpoint_id WHERE e.team_id=:team AND e.endpoint_id=:id AND v.version=:version";
@@ -327,7 +343,15 @@ public final class JdbcDlqQueries implements DlqQueries {
                 endpoint.version(),
                 new Priority(row.priority()),
                 maxLateness,
-                new CallSpec(endpoint.spec().path("timeoutMs").asInt(30_000), snapshot(request, endpoint.spec()))));
+                new CallSpec(
+                        endpoint.spec().path("timeoutMs").asInt(30_000),
+                        type == 2
+                                ? RequestSnapshot.newBuilder()
+                                        .setSealedInputs(com.google.protobuf.ByteString.copyFrom(
+                                                dev.kairos.engine.run.WorkflowInputs.load(
+                                                        cell.jdbc(), team, row.targetId(), request, json)))
+                                        .build()
+                                : snapshot(request, endpoint.spec()))));
     }
 
     private EndpointConfig endpointForName(TeamId team, String name) {

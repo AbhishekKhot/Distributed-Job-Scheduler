@@ -74,7 +74,15 @@ public final class DelayedDispatchLoader implements DelayedDispatchSource {
                             new CallSpec(
                                     timeoutMs,
                                     run.targetType() == TargetType.WORKFLOW_TASK
-                                            ? RequestSnapshot.getDefaultInstance()
+                                            ? RequestSnapshot.newBuilder()
+                                                    .setSealedInputs(com.google.protobuf.ByteString.copyFrom(
+                                                            dev.kairos.engine.run.WorkflowInputs.load(
+                                                                    cell.jdbc(),
+                                                                    run.teamId(),
+                                                                    run.targetId(),
+                                                                    finalRequest,
+                                                                    json)))
+                                                    .build()
                                             : snapshot(finalRequest, endpoint)),
                             maxExecPerSecond(json.readTree(rs.getString(3))));
                 })

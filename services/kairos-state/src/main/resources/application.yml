@@ -41,6 +41,9 @@ logging:
 
 kairos:
   state:
+    workflow:
+      enabled: true
+      reconcile-interval: 1s
     settle:
       enabled: true
       group-id: kairos-state-results
@@ -63,3 +66,23 @@ kairos:
   kafka:
     bootstrap-servers: ${KAIROS_KAFKA_BOOTSTRAP_SERVERS}
     client-id-prefix: kairos-state
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+kairos:
+  security:
+    kek:
+      local-key: ${KAIROS_LOCAL_KEK}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: "!local"
+kairos:
+  security:
+    kek:
+      uri: ${KAIROS_KEK_URI:}

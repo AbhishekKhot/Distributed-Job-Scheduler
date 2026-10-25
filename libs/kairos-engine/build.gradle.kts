@@ -13,6 +13,7 @@ dependencies {
     // configuration properties, the Spring configuration and the meter registry appear in the public API.
     implementation("io.lettuce:lettuce-core")
     api("org.springframework:spring-context")
+    api("tools.jackson.core:jackson-databind")
 
     testImplementation(project(":libs:kairos-test-support"))
     // A dedicated Redis container that the fail-closed test stops.
