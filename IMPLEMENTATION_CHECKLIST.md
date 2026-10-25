@@ -836,6 +836,8 @@ This task implements the guarantee that no run executes twice. Review it with ex
 
 **Verification:** Docker `make bg BG_NAME=kairos-gradle-t243-final-check ARGS='check'` passed. The executor suite reports 98 tests with no failures, errors or skips; executor line coverage is 70.65%. T-243 tests cover rendered URL encoding and signatures, success/output extraction and sealing, HTTP 500 and 409 classification, sent timeout uncertainty, send-veto deferral, retry-until-ack publication, breaker/rate-limit behavior, internal token validation, endpoint-test rate limiting and sensitive-output redaction.
 
+**Endpoint-test UUID follow-up (2026-10-25):** The synthetic dispatch now gets a Kairos UUIDv7 from the executor's shared ID factory for both run and target ids. A regression assertion verifies that the normal renderer receives valid typed run ids; the route can send the call instead of failing during rendering. Detached Docker `make bg BG_NAME=kairos-endpoint-uuid-check ARGS='spotlessApply build check'` passed: 2,513 tests, zero failures/errors/skips; executor 107 tests.
+
 ### T-244 Cancel listener and graceful drain
 **Status:** done · **Needs:** T-241, T-243 · **Owns:** `dev.kairos.executor.cancel`, `dev.kairos.executor.lifecycle`, executor dispatch/call lifecycle integration seams, cancellable-call API in `libs/kairos-http`
 
