@@ -16,5 +16,6 @@ public interface SettlementBatch {
         void committed(List<Settled> results);
     }
 
-    record Settled(InflightRun run, Result result, @Nullable Outcome outcome, boolean deferred) {}
+    record Settled(
+            InflightRun run, Result result, @Nullable Outcome outcome, boolean deferred, boolean retryableFailure) {}
 }

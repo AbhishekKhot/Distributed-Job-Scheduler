@@ -46,12 +46,23 @@ class SettlementConfigurationIntegrationTest {
     @Autowired
     SettlementProperties properties;
 
+    @Autowired
+    dev.kairos.state.stats.infrastructure.StatsAggregator statistics;
+
+    @Autowired
+    dev.kairos.state.stats.infrastructure.StatsProperties statsProperties;
+
     @Test
     void productionWiringStartsBoundedResultConsumer() {
         assertThat(consumer.isRunning()).isTrue();
         assertThat(settlement).isNotNull();
         assertThat(audit).isNotNull();
         assertThat(properties.maxPollRecords()).isEqualTo(1000);
+        assertThat(statistics.isRunning()).isTrue();
+        assertThat(statistics.getPhase()).isLessThan(consumer.getPhase());
+        assertThat(statsProperties.flushInterval()).isEqualTo(java.time.Duration.ofSeconds(10));
         consumer.stop();
+        statistics.stop();
+        assertThat(statistics.isRunning()).isFalse();
     }
 }
