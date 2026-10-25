@@ -278,8 +278,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-203c | Secrets and CA bundle APIs (16–22) | kairos-api | done |
 | T-203d | Signing key and audit log APIs (23–24) | kairos-api | done |
 | T-204 | Endpoint APIs (25–33) | kairos-api | done |
-| T-205 | Job APIs (34–45) | kairos-api | review |
-| T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | todo |
+| T-205 | Job APIs (34–45) | kairos-api | done |
+| T-206 | Workflow and workflow-run APIs (46–58) | kairos-api | in progress |
 | T-207 | Run, DLQ and stats APIs (59–68) | kairos-api | done |
 | T-221 | Shard lease manager and node registry | kairos-watcher | done |
 | T-222 | Fire poller | kairos-watcher | done |
@@ -669,9 +669,9 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-gradle-t204-final ARGS='spotlessApply build check'` passed. The API suite reports 354 tests and the watcher suite 119 tests, with no failures, errors or skips. `git diff --check` is clean. The API now explicitly depends on `kairos-http`; its dependency lock was refreshed. T-204 was merged to `develop` through PR #39 on 2026-10-24.
 
 ### T-205 Job APIs (LLD APIs 34–45)
-**Status:** review (Abhishek Khot; acceptance follow-up) · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`
+**Status:** done (PR #41 merged) · **Needs:** T-201, T-102, T-103, T-113, T-204 (endpoint lookup) · **Owns:** `dev.kairos.api.jobs`
 
-**Merge and acceptance state (2026-10-24):** The initial implementation merged through PR #40 at `0cb5af6`. Acceptance follow-up `t-205-acceptance` fixes double URL encoding, per-cell batch transactions/savepoints, concurrent job-quota admission, resume misfire cursors, pre-creation cron backfill, final-attempt deduplication, and cancellation races. The follow-up awaits merge.
+**Merge and acceptance state (2026-10-24):** The initial implementation merged through PR #40 at `0cb5af6`. Acceptance follow-up `t-205-acceptance` fixes double URL encoding, per-cell batch transactions/savepoints, concurrent job-quota admission, resume misfire cursors, pre-creation cron backfill, final-attempt deduplication, and cancellation races. The follow-up merged through PR #41 at `4d2bf26`.
 
 - [x] `JobSpec` record and validation (LLD section 3.6): schedule (`IMMEDIATE`, `ONE_TIME`, `CRON`, `INTERVAL`), request values for the endpoint's parameters, priority, misfire policy, retry override, `autoPauseAfter`, `maxLatenessSec` (converted to stored `maxLatenessMs`). Size ≤ 128 KB.
 - [x] 34 create (`Idempotency-Key`): the shard is computed from team and name; writes `jobs`, `job_versions` and `schedules` (or, for `IMMEDIATE`, a run and its outbox row through T-113) in one cell transaction; enforces the team's `maxJobs` quota; returns `nextFireAt`.
@@ -689,7 +689,7 @@ The single place where runs and their outbox rows are created, used by the API (
 **Verification (2026-10-24):** Docker detached `make bg BG_NAME=kairos-t205-acceptance-final ARGS='spotlessApply build check'` passed all repository checks: 2,302 tests, zero failures/errors/skips. API: 412 tests, 91.62% line coverage; executor: 103 tests, 72.87%. Added 36 definition-validation cases and 22 HTTP/PostgreSQL integration tests covering APIs 34–45, eight concurrent same-key creates, concurrent distinct-name quota admission, concurrent delete with exactly one fenced cancel outbox row, rollback of job/version/run/outbox, both cells, immutable dispatch versions, run overrides, history/redrive deduplication, and 1,501 paced backfill occurrences. Existing watcher checks cover misfire and delayed-release policies. `git diff --check` is clean.
 
 ### T-206 Workflow and workflow-run APIs (LLD APIs 46–58)
-**Status:** todo · **Needs:** T-201, T-104, T-113, T-204 · **Owns:** `dev.kairos.api.workflows`, `dev.kairos.api.workflowruns`
+**Status:** in progress (Abhishek Khot) · **Needs:** T-201, T-104, T-113, T-204 · **Owns:** `dev.kairos.api.workflows`, `dev.kairos.api.workflowruns`
 
 - [ ] Workflow spec validation through T-104, plus endpoint existence for every task, and the team quota `maxWorkflowTasks`. Size ≤ 512 KB. The computed plan is stored with the version.
 - [ ] 46 create, 47 list, 48 get, 49 update (`If-Match`), 50 delete, 51 pause, 52 resume, 53 cancel, 54 run now, 55 list a workflow's runs.
