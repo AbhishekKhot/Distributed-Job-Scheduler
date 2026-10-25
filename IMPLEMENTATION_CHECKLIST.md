@@ -291,13 +291,13 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-242 | Execution gates | kairos-executor | done |
 | T-243 | Render, call, classify and publish result | kairos-executor | done |
 | T-244 | Cancel listener and graceful drain | kairos-executor | done |
-| T-261 | Result settler | kairos-state | in progress |
-| T-262 | Workflow progression | kairos-state | todo |
-| T-263 | Stats aggregator | kairos-state | todo |
+| T-261 | Result settler | kairos-state | done |
+| T-262 | Workflow progression | kairos-state | done |
+| T-263 | Stats aggregator | kairos-state | done |
 | T-281 | Partition manager | kairos-maintenance | done |
 | T-282 | Operator commands | kairos-maintenance | done |
 | T-301 | Mock target | tools/mock-target | done |
-| T-302 | Benchmark CLI | tools/bench-cli | in progress |
+| T-302 | Benchmark CLI | tools/bench-cli | review |
 | T-303 | Cross-module integration suites | tests | todo |
 | T-304 | End-to-end scenarios | tools/bench-cli | todo |
 | T-305 | Resilience and duplicate-execution proof | tools, scripts | todo |
@@ -937,15 +937,19 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Related integration follow-up:** PR #48 fixed the executor endpoint-test route to generate a Kairos UUIDv7 synthetic run id; its regression test validates both dispatch ids. The packaged T-301 acceptance preceded the fix and used a normal immediate job. A packaged public endpoint-test call remains for T-303/T-304 integration coverage. After rebasing onto PR #48, detached Docker `make bg BG_NAME=kairos-t301-pr48-check ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips; mock target 114 tests.
 
 ### T-302 Benchmark CLI
-**Status:** in progress (AbhishekKhot) · **Needs:** T-205, T-206, T-301 · **Owns:** `tools/bench-cli/**`
+**Status:** review (AbhishekKhot) · **Needs:** T-205, T-206, T-301 · **Owns:** `tools/bench-cli/**`
 
-- [ ] picocli commands: `seed` (signs up a user, creates a team, an API key, the CA bundle, endpoints pointing at the mock target, and N jobs with a chosen schedule mix through the batch API), `load` (drives a target executions-per-second profile using immediate jobs, run now and cron fan-out), `verify` (compares created occurrences with mock-target `/stats` and `run_history`) and `report`.
-- [ ] Profiles: `steady-20k` (20K executions/s for 30 minutes), `ramp-50k` (ramp from 20K to 50K over 10 minutes, hold for 10), `burst` (top-of-minute spike of 50K cron fires) and `smoke` (500/s for 2 minutes for local runs).
-- [ ] Metrics reported: achieved executions/s, schedule lag p50/p95/p99 (from `run_history.started_at − scheduled_at`), outcome mix, duplicates (must be 0), missing runs (must be 0), and DLQ count.
-- [ ] Output: a console summary plus a JSON and Markdown report under `build/bench/`.
-- [ ] Runs as a container: `docker compose --profile bench run --rm bench-cli load --profile smoke`. A laptop runs `smoke`; `steady-20k` and `ramp-50k` run on GKE (T-306).
+- [x] picocli commands: `seed` (signs up a user, creates a team, an API key, the CA bundle, endpoints pointing at the mock target, and N jobs with a chosen schedule mix through the batch API), `load` (drives a target executions-per-second profile using immediate jobs, run now and cron fan-out), `verify` (compares created occurrences with mock-target `/stats` and `run_history`) and `report`.
+- [x] Profiles: `steady-20k` (20K executions/s for 30 minutes), `ramp-50k` (ramp from 20K to 50K over 10 minutes, hold for 10), `burst` (top-of-minute spike of 50K cron fires) and `smoke` (500/s for 2 minutes for local runs).
+- [x] Metrics reported: achieved executions/s, schedule lag p50/p95/p99 (from `run_history.started_at − scheduled_at`), outcome mix, duplicates (must be 0), missing runs (must be 0), and DLQ count.
+- [x] Output: a console summary plus a JSON and Markdown report under `build/bench/`.
+- [x] Runs as a container: `docker compose --profile bench run --rm bench-cli load --profile smoke`. A laptop runs `smoke`; `steady-20k` and `ramp-50k` run on GKE (T-306).
 
 **Acceptance:** `smoke` passes locally with 0 duplicates, 0 missing runs and lag p99 ≤ 2s.
+
+**Local acceptance (2026-10-26):** The isolated packaged Compose stack passed the two-minute smoke after a 120-second steady-state warm-up: 60,001 offered and accepted, 500/s achieved, schedule lag p50/p95/p99 118/252/310 ms across 60,002 final successes, zero duplicates, zero missing runs, zero DLQ entries, no target capacity or signature failures, and complete per-key tracking. A prior five-second warm-up run failed due to backlog, so 120 seconds is now the default. A separate 5/s immediate/run-now diagnostic passed with 10 final runs, zero duplicates/missing/DLQ and lag p99 610 ms. The 20K/50K capacity proof is T-306.
+
+**Verification:** Detached Docker `make bg BG_NAME=kairos-t302-full-final ARGS='build check'` passed: 2,562 tests, zero failures/errors/skips. Bench CLI line coverage was 75.85%, above its 70% gate. Dependency locks and verification metadata were refreshed with `resolveAndLockAll build`; no dependency versions changed.
 
 ### T-303 Cross-module integration suites
 **Status:** todo · **Needs:** the services in phase 2 · **Owns:** `services/*/src/integrationTest/**` (a new source set added by this task in build-logic)
