@@ -296,8 +296,8 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-263 | Stats aggregator | kairos-state | todo |
 | T-281 | Partition manager | kairos-maintenance | done |
 | T-282 | Operator commands | kairos-maintenance | done |
-| T-301 | Mock target | tools/mock-target | review |
-| T-302 | Benchmark CLI | tools/bench-cli | todo |
+| T-301 | Mock target | tools/mock-target | done |
+| T-302 | Benchmark CLI | tools/bench-cli | in progress |
 | T-303 | Cross-module integration suites | tests | todo |
 | T-304 | End-to-end scenarios | tools/bench-cli | todo |
 | T-305 | Resilience and duplicate-execution proof | tools, scripts | todo |
@@ -921,7 +921,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 ## 9. Phase 3: verification and benchmarks
 
 ### T-301 Mock target
-**Status:** review · **Needs:** T-002 · **Owns:** `tools/mock-target/**`, its compose block
+**Status:** done (PR #49 merged) · **Needs:** T-002 · **Owns:** `tools/mock-target/**`, its compose block
 
 - [x] HTTPS on port 8443 with a certificate issued at startup by an in-memory development CA. The CA certificate (public part only) is served on the management port (`/ca.pem`), so bench-cli can register it as a team CA bundle and the executor keeps full certificate verification. This development CA exists only in this tool.
 - [x] Behaviour controlled per request through path or query (`/behave?status=500&latencyMs=200&failRate=0.1&bodyBytes=1024`) and through named profiles for benchmarks.
@@ -937,7 +937,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Related integration follow-up:** PR #48 fixed the executor endpoint-test route to generate a Kairos UUIDv7 synthetic run id; its regression test validates both dispatch ids. The packaged T-301 acceptance preceded the fix and used a normal immediate job. A packaged public endpoint-test call remains for T-303/T-304 integration coverage. After rebasing onto PR #48, detached Docker `make bg BG_NAME=kairos-t301-pr48-check ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips; mock target 114 tests.
 
 ### T-302 Benchmark CLI
-**Status:** todo · **Needs:** T-205, T-206, T-301 · **Owns:** `tools/bench-cli/**`
+**Status:** in progress (AbhishekKhot) · **Needs:** T-205, T-206, T-301 · **Owns:** `tools/bench-cli/**`
 
 - [ ] picocli commands: `seed` (signs up a user, creates a team, an API key, the CA bundle, endpoints pointing at the mock target, and N jobs with a chosen schedule mix through the batch API), `load` (drives a target executions-per-second profile using immediate jobs, run now and cron fan-out), `verify` (compares created occurrences with mock-target `/stats` and `run_history`) and `report`.
 - [ ] Profiles: `steady-20k` (20K executions/s for 30 minutes), `ramp-50k` (ramp from 20K to 50K over 10 minutes, hold for 10), `burst` (top-of-minute spike of 50K cron fires) and `smoke` (500/s for 2 minutes for local runs).
