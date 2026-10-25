@@ -81,6 +81,7 @@ teams|quotas|jsonb|NO
 teams|retry_default|jsonb|YES
 teams|created_at|timestamp with time zone|NO
 teams|updated_at|timestamp with time zone|NO
+teams|completed_events_enabled|boolean|NO
 user_sessions|session_id|uuid|NO
 user_sessions|user_id|uuid|NO
 user_sessions|family_id|uuid|NO

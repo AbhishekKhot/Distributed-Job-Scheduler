@@ -849,19 +849,21 @@ This task implements the guarantee that no run executes twice. Review it with ex
 ### 8.4 kairos-state
 
 ### T-261 Result settler
-**Status:** in progress (Abhishek Khot) · **Needs:** T-108, T-113, T-103 · **Owns:** `dev.kairos.state.settle`
+**Status:** review · **Needs:** T-108, T-113, T-103 · **Owns:** `dev.kairos.state.settle`
 
-- [ ] Consume `kairos.run.result` in batches (≤ 1K). Group by cell and settle each cell's group in one transaction; commit offsets after all cells commit.
-- [ ] Fence check: ignore a result whose fence does not match the row (late or duplicate result).
-- [ ] Success: append to `run_history` (final), delete from `run_inflight`, update `job_health`, and write a `completed` outbox row when the team opted in.
-- [ ] Retryable failure within policy (attempts and max age): append history (`FAILED_RETRYING`) and set the run `DELAYED` with `due_at = now + backoff`, `attempt + 1` and a new fence.
-- [ ] Exhausted or non-retryable: append history (`DEAD_LETTERED`, final), insert `dead_letters` with the run's current `fence` (a redrive continues from it), write a `dead` outbox row, and update `job_health` (auto-pause the job after N consecutive dead runs; audit `system:auto-pause`).
-- [ ] Unknown outcome: apply `unknownOutcomePolicy`.
-- [ ] Cancelled: history `CANCELLED`, delete from inflight.
-- [ ] Workflow task results are handed to T-262 inside the same transaction (an interface agreed first).
-- [ ] One-time jobs move to `COMPLETED` or `FAILED` after their final run.
+- [x] Consume `kairos.run.result` in batches (≤ 1K). Group by cell and settle each cell's group in one transaction; commit offsets after all cells commit.
+- [x] Fence check: ignore a result whose fence does not match the row (late or duplicate result).
+- [x] Success: append to `run_history` (final), delete from `run_inflight`, update `job_health`, and write a `completed` outbox row when the team opted in.
+- [x] Retryable failure within policy (attempts and max age): append history (`FAILED_RETRYING`) and set the run `DELAYED` with `due_at = now + backoff`, `attempt + 1` and a new fence.
+- [x] Exhausted or non-retryable: append history (`DEAD_LETTERED`, final), insert `dead_letters` with the run's current `fence` (a redrive continues from it), write a `dead` outbox row, and update `job_health` (auto-pause the job after N consecutive dead runs; audit `system:auto-pause`).
+- [x] Unknown outcome: apply `unknownOutcomePolicy`.
+- [x] Cancelled: history `CANCELLED`, delete from inflight.
+- [x] Workflow task results are handed to T-262 inside the same transaction (an interface agreed first).
+- [x] One-time jobs move to `COMPLETED` or `FAILED` after their final run.
 
 **Acceptance:** replaying the same batch twice changes nothing the second time; a run that fails 6 times lands in the DLQ after about 15 minutes of simulated time (with the injected clock); three consecutive dead runs auto-pause the job.
+
+**Verification (2026-10-25):** Detached Docker `make bg BG_NAME=kairos-t261-final1 ARGS='spotlessApply build check'` passed: 2,379 tests, zero failures/errors/skips. State: 126 tests, 95.28% line coverage. Real PostgreSQL/Kafka checks cover concurrent batch replay, stale fences/counters, retry exhaustion in 15–17 simulated minutes, retry precedence and pinned status overrides, unknown review, max age, deferral, cancellation, one-time finalization, durable auto-pause audit replay, workflow transaction rollback and partial-cell replay. A Kafka restart after the database commit replays the result without duplicate history. Resume of an AUTO_PAUSED job resets its consecutive-dead counter. T-262 supplies the transactional workflow callback; until then, final task results roll back and remain replayable. Completed events default off through `teams.completed_events_enabled`.
 
 ### T-262 Workflow progression
 **Status:** todo · **Needs:** T-261 (interface), T-104, T-113, T-109 · **Owns:** `dev.kairos.state.workflow`

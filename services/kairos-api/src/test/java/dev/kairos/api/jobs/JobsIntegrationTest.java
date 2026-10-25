@@ -298,7 +298,16 @@ class JobsIntegrationTest extends ApiApplicationTest {
         db(job).sql("UPDATE scheduler.jobs SET status='AUTO_PAUSED' WHERE job_id=:id")
                 .param("id", job)
                 .update();
+        db(job).sql(
+                        "INSERT INTO scheduler.job_health(job_id,team_id,consecutive_dead,updated_at) SELECT job_id,team_id,3,updated_at FROM scheduler.jobs WHERE job_id=:id")
+                .param("id", job)
+                .update();
         ok(send("POST", "/v1/jobs/" + job + "/resume", caller.token(), null), 200);
+        assertThat(db(job).sql("SELECT consecutive_dead FROM scheduler.job_health WHERE job_id=:id")
+                        .param("id", job)
+                        .query(Integer.class)
+                        .single())
+                .isZero();
     }
 
     @Test

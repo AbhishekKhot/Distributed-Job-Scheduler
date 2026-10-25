@@ -47,6 +47,7 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | slug | text | Unique; `^[a-z][a-z0-9-]{2,62}$`, for example `payments` |
 | quotas | jsonb | `maxJobs`, `maxExecPerSec`, `maxInflight`, `maxWorkflowTasks`, `backfillPerSec`, `redrivePerSec` |
 | retry_default | jsonb | Team-level retry policy, nullable |
+| completed_events_enabled | boolean | Opt-in to completed events; default false, configured by operators |
 | created_at, updated_at | timestamptz | |
 
 **users**
@@ -262,7 +263,9 @@ References from cell tables to control tables (`team_id`, `endpoint_id`) are che
 | redrive_mode | smallint | 1 original configuration, 2 current |
 | created_at | timestamptz | |
 
-**job_health** (only for jobs with recent failures): `job_id` uuid PK, `team_id` uuid, `recent_mask` smallint (last 10 outcomes as bits), `recent_count` smallint, `consecutive_dead` smallint, `unhealthy_since` timestamptz, `updated_at` timestamptz.
+**job_health** (one row per job with a settled success or dead-letter outcome): `job_id` uuid PK, `team_id` uuid, `recent_mask` smallint (last 10 outcomes as bits), `recent_count` smallint, `consecutive_dead` smallint, `unhealthy_since` timestamptz, `updated_at` timestamptz.
+
+**settlement_audits** (durable auto-pause audit intents): `audit_id` uuid PK, `at` timestamptz, `team_id` uuid, `job_id` uuid, `consecutive_dead` smallint. The cell transaction writes the intent with the job pause. A relay copies it to control `audit_log`, preserving `(at, audit_id)` for idempotence, then removes the intent. A failed copy or a crash before removal is retried; transactions never span databases.
 
 **endpoint_health_minute** (PK `endpoint_id, minute, node_id`): `team_id` uuid, `attempts`, `successes`, `retryable`, `non_retryable`, `dead_lettered` int, `latency_sum_ms` bigint, `latency_max_ms` int.
 
@@ -4720,10 +4723,17 @@ The node registry upserts each watcher every 5 seconds. A node is live while its
 | Cancel listener | kairos-executor | Continuous | Topic `kairos.run.cancel`, one consumer group per pod | Aborts the matching in-flight call |
 Each executor derives its cancel consumer group from its pod hostname, so Kafka broadcasts every cancel to every executor. A cancel applies when its fence is at least the active claim fence. The HTTP client accepts a per-call cancellation signal and aborts the active exchange; the executor publishes `CANCELLED` with the sent-marker state. A cancel that arrives after the exchange finishes has no effect. On SIGTERM, readiness changes to `REFUSING_TRAFFIC`, dispatch polling stops, and the executor waits up to 60 seconds for active work. Calls that have not crossed the send cut-off are cancelled and transactionally returned to `QUEUED` with a new fence and a dispatch outbox row. The owning tier's poll thread commits the corresponding Kafka offset only after that transaction succeeds and before closing its consumer; a failed requeue leaves the offset uncommitted for replay. The send cut-off and drain requeue are serialized per active call, so a request cannot begin after its run was returned to the queue. Any sent call still active at the deadline is aborted as an unknown outcome; its run is settled from the result or lease recovery.
 | Result settler | kairos-state | Continuous | Topic `kairos.run.result`, ≤ 1K records per batch, one transaction per cell; retries 5, base 30s, cap 10 min, max age 24h; auto-pause after 3 dead runs | Writes history, schedules retries, dead-letters, advances workflows, writes follow-up outbox rows |
+| Auto-pause audit relay | kairos-state | Every 1s | Up to 100 intents per cell per pass | Copies committed `settlement_audits` to control audit log idempotently |
 | Stats aggregator | kairos-state | Every 10s | Per minute and node | Flushes `endpoint_health_minute` and `team_stats_minute` |
 | Signing-key expiry | kairos-api | Every 60s | Overlap 24h; batch 100 teams; optimistic replacement per keyset | Removes expired non-primary signing keys and audits the change; safe across API replicas |
 | Partition manager | kairos-maintenance | Daily (CronJob) | Create partitions 3 days ahead; drop after 7 days (audit 90 days) | Manages `run_history`, `task_outputs` and `audit_log` partitions |
 | Operator commands | kairos-maintenance | On demand | `team set-quota`, `user disable`, `user reset-password` | Audited operator actions |
+
+Result settlement uses consumer group `kairos-state-results`, a 250ms poll, at most 1K records, and a 500ms replay delay (`kairos.state.settle.group-id`, `poll-timeout`, `max-poll-records`, `retry-delay`). Cell groups commit independently; offsets commit only after every group succeeds. A failed transaction or offset commit replays the batch, and committed groups ignore duplicate results. Only a `RUNNING` row with matching fence, attempt and infrastructure attempt is accepted. Wire and semantic poison records are counted and skipped without logging payloads.
+
+The settler locks jobs and workflow runs before task rows, serializing final settlement with operator actions. It resolves whole retry policies from pinned job, pinned endpoint, team and platform defaults, in that order. Retries and no-call deferrals advance the fence, clear the owner and lease, and move to `DELAYED`; redispatch and claiming advance the fence again. A deferral preserves attempt and infrastructure counters and adds no history. A committed cancellation request wins a concurrent call result. Health changes only for success and final dead-letter outcomes; recurring jobs pause at their current `autoPauseAfter` threshold, and resume resets the consecutive-dead counter. Original one-time/immediate occurrences finalize the current matching job version; manual runs and old versions cannot finalize an updated definition. A dead result after redrive reopens the existing DLQ id with the current fence and clears prior resolution metadata.
+
+Workflow results enter progression within the same owning cell transaction. Until a progression handler is installed, terminal task results roll back and remain available for replay; retrying task results can commit without advancing the graph. Statistics observers receive accepted results after the cell commit; replayed duplicates produce no callback. Observer failures are counted and cannot undo committed settlement.
 
 ### 4.2 Kafka topics
 
