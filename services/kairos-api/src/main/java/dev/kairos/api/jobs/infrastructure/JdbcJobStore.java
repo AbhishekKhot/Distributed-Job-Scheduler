@@ -369,6 +369,11 @@ public final class JdbcJobStore implements JobStore {
                             .param("id", id)
                             .param("team", team.value())
                             .update();
+                    if ("AUTO_PAUSED".equals(current.status()))
+                        jdbc.sql("UPDATE scheduler.job_health SET consecutive_dead=0,updated_at=:now WHERE job_id=:id")
+                                .param("now", utc(now))
+                                .param("id", id)
+                                .update();
                     if (schedule.kind() != null) {
                         String scheduleStatus =
                                 endpoint != null && !"ACTIVE".equals(endpoint.status()) ? "HELD" : "ACTIVE";

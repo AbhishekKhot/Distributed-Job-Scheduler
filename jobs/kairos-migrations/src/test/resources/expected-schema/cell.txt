@@ -141,6 +141,11 @@ schedules|max_catchup|smallint|NO
 schedules|definition_version|integer|NO
 schedules|priority|smallint|NO
 schedules|last_fired_local|timestamp without time zone|YES
+settlement_audits|audit_id|uuid|NO
+settlement_audits|at|timestamp with time zone|NO
+settlement_audits|team_id|uuid|NO
+settlement_audits|job_id|uuid|NO
+settlement_audits|consecutive_dead|smallint|NO
 shard_leases|shard_id|smallint|NO
 shard_leases|owner_node|text|YES
 shard_leases|generation|bigint|NO
