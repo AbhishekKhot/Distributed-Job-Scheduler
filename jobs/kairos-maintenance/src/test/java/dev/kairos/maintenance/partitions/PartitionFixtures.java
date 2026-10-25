@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.UUID;
 import javax.sql.DataSource;
 
-final class PartitionFixtures {
+public final class PartitionFixtures {
     static final LocalDate TODAY = LocalDate.of(2026, 10, 25);
     static final PartitionProperties LIMITS =
             new PartitionProperties(Duration.ofMillis(200), Duration.ofSeconds(10), Duration.ofSeconds(30), 2);
@@ -38,7 +38,7 @@ final class PartitionFixtures {
         cell1 = db(Database.cellName(1), postgres.cellOwnerDataSource(1));
     }
 
-    static synchronized void ensureSchema(KairosPostgres postgres) {
+    public static synchronized void ensureSchema(KairosPostgres postgres) {
         if (ready) return;
         apply(postgres.controlOwnerDataSource(), "control", postgres.appUsername());
         for (int i = 0; i < 2; i++) apply(postgres.cellOwnerDataSource(i), "cell", postgres.appUsername());

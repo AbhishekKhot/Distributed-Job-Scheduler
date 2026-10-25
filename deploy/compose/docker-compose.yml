@@ -303,6 +303,37 @@ services:
         limits:
           memory: 512m
 
+  # Interactive DML operator job. No Docker log capture: reset passwords are terminal-only.
+  kairos-maintenance:
+    <<: *hardening
+    profiles: [tools]
+    image: kairos/kairos-maintenance:dev
+    build:
+      <<: *build
+      args:
+        MODULE_PATH: jobs/kairos-maintenance
+    command: [--help]
+    stdin_open: true
+    tty: true
+    logging:
+      driver: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    environment:
+      KAIROS_CONTROL_DB_URL: jdbc:postgresql://postgres:5432/kairos_control
+      KAIROS_DB_USERNAME: sched_app
+      KAIROS_DB_PASSWORD: ${KAIROS_DB_APP_PASSWORD:?run make env}
+    networks: [backend]
+    depends_on:
+      kairos-migrations:
+        condition: service_completed_successfully
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
   # ------------------------------------------------------------------ test tools
   mock-target:
     <<: *app

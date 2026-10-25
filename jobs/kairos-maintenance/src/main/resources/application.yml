@@ -27,6 +27,12 @@ logging:
 
 kairos:
   maintenance:
+    commands:
+      enabled: false
+      database:
+        url: ${KAIROS_CONTROL_DB_URL}
+        username: ${KAIROS_DB_USERNAME}
+        password: ${KAIROS_DB_PASSWORD}
     partitions:
       enabled: true
       lock-timeout: 2s
