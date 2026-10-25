@@ -1,8 +1,10 @@
 package dev.kairos.api.jobs;
 
+import dev.kairos.api.jobs.application.JobCreationGuard;
 import dev.kairos.api.jobs.application.JobEndpointCatalog;
 import dev.kairos.api.jobs.application.JobStore;
 import dev.kairos.api.jobs.application.JobsUseCase;
+import dev.kairos.api.jobs.infrastructure.JdbcJobCreationGuard;
 import dev.kairos.api.jobs.infrastructure.JdbcJobEndpointCatalog;
 import dev.kairos.api.jobs.infrastructure.JdbcJobStore;
 import dev.kairos.api.team.TeamProperties;
@@ -13,6 +15,7 @@ import dev.kairos.engine.run.RunCreationConfiguration;
 import dev.kairos.engine.run.RunCreator;
 import dev.kairos.engine.run.RunFactory;
 import dev.kairos.persistence.cell.CellRouter;
+import dev.kairos.persistence.jdbc.DataSourceRegistry;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,8 +46,14 @@ public class JobsConfiguration {
     }
 
     @Bean
+    public JobCreationGuard jobCreationGuard(DataSourceRegistry databases) {
+        return new JdbcJobCreationGuard(databases.control().dataSource());
+    }
+
+    @Bean
     public JobsUseCase jobsUseCase(
             JobStore store,
+            JobCreationGuard creationGuard,
             JobEndpointCatalog endpoints,
             TeamStore teams,
             TeamUsageReader usage,
@@ -52,6 +61,6 @@ public class JobsConfiguration {
             dev.kairos.domain.id.KairosIdFactory ids,
             Clock clock,
             JsonMapper json) {
-        return new JobsUseCase(store, endpoints, teams, usage, teamProperties, ids, clock, json);
+        return new JobsUseCase(store, creationGuard, endpoints, teams, usage, teamProperties, ids, clock, json);
     }
 }

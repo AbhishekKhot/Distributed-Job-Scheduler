@@ -1,6 +1,7 @@
 package dev.kairos.api.jobs.web;
 
 import dev.kairos.api.jobs.application.JobStore;
+import dev.kairos.api.jobs.application.JobStore.BatchResult;
 import dev.kairos.api.jobs.application.JobStore.Filter;
 import dev.kairos.api.jobs.application.JobStore.Job;
 import dev.kairos.api.jobs.application.JobStore.JobRun;
@@ -10,7 +11,6 @@ import dev.kairos.api.jobs.application.JobStore.RunFilter;
 import dev.kairos.api.jobs.application.JobStore.RunKey;
 import dev.kairos.api.jobs.application.JobsUseCase;
 import dev.kairos.api.jobs.application.JobsUseCase.Backfill;
-import dev.kairos.api.jobs.application.JobsUseCase.BatchResult;
 import dev.kairos.api.security.TeamContext;
 import dev.kairos.api.support.etag.ETags;
 import dev.kairos.api.support.etag.IfMatch;
