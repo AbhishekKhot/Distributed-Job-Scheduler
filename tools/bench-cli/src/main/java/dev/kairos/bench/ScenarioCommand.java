@@ -27,6 +27,7 @@ final class ScenarioCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        if (name.equals("chaos")) return new ChaosReport(parent.files()).run();
         List<String> names = name.equals("all") ? ScenarioRunner.NAMES : List.of(name);
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("startedAt", Instant.now().toString());
