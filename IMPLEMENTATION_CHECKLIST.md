@@ -304,7 +304,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-306 | Per-cell write test and tuning | perf | todo |
 | T-401 | Helm chart | deploy/helm | todo |
 | T-402 | Terraform for GCP | deploy/terraform | todo |
-| T-403 | CI pipeline | .github | todo |
+| T-403 | CI pipeline | .github | in progress (AbhishekKhot) |
 | T-404 | kind validation | deploy/kind | todo |
 
 ---
@@ -1030,7 +1030,7 @@ Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mo
 **Acceptance:** `terraform validate` and `tflint` pass, and `terraform plan` succeeds with a dummy project id in CI (offline providers mocked where needed).
 
 ### T-403 CI pipeline
-**Status:** todo · **Needs:** T-002 · **Owns:** `.github/workflows/**`, `.github/dependabot.yml`
+**Status:** in progress (AbhishekKhot) · **Needs:** T-002 · **Owns:** `.github/workflows/**`, `.github/dependabot.yml`
 
 - [ ] Workflow on pull requests and on `develop`: `make build`, `make test` (Testcontainers on the runner's Docker), the OpenAPI export diff, `make images`, a Trivy scan of the images (fail on high or critical vulnerabilities with a fix available), an SBOM (Syft) uploaded as an artefact, `helm lint`, and the Terraform checks.
 - [ ] Every third-party action pinned by full commit SHA with the version in a comment; `permissions` set to the minimum per job; no long-lived cloud credentials.
