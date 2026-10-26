@@ -49,9 +49,9 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 ## Progress and next steps (update at the end of every session)
 
-**Verified repository state (2026-10-26):** `origin/develop` points to `9fab1f2`, which merges T-304 end-to-end scenarios through PR #52. There are **51 checklist tasks: 45 done, 1 in progress (T-305), and 5 todo**.
+**Verified repository state (2026-10-26):** `origin/develop` points to `9fab1f2`, which merges T-304 end-to-end scenarios through PR #52. There are **51 checklist tasks: 45 done, 1 review (T-305), and 5 todo**.
 
-**Implementation boundary:** Repository/build tooling, Phase 1 libraries, API operations, watcher, executor, state, partition maintenance, operator commands, mock target, benchmark CLI, cross-module integration suites and T-304 end-to-end scenarios are merged. T-305's fault harness is in progress. Resilience under injected failures and the 20K / 50K capacity targets have not yet been demonstrated.
+**Implementation boundary:** Repository/build tooling, Phase 1 libraries, API operations, watcher, executor, state, partition maintenance, operator commands, mock target, benchmark CLI, cross-module integration suites and T-304 end-to-end scenarios are merged. T-305's fault harness is in review through PR #53. Resilience under injected failures and the 20K / 50K capacity targets have not yet been demonstrated.
 
 **Verification provenance:** T-241 Docker `spotlessApply` and the full `:services:kairos-executor:test` task passed before PR #34 merged: all 78 executor tests passed, including a 5K Kafka flood against the 4K capacity ceiling, contiguous offset tracking and restart replay, PostgreSQL quota deferral and the application context test. T-226 Docker `make bg BG_NAME=t226-final2 ARGS='spotlessApply build check'` passed on 2026-10-24: 2,185 tests, no failures, errors or skips. T-225 merged through PR #32 after its 2,181-test full build. Earlier task results below are recorded from their implementation sessions.
 
@@ -99,7 +99,7 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 **Latest merged:** T-304 end-to-end scenarios (#52) are merged at `9fab1f2`; T-303 cross-module integration suites (#51), T-302 benchmark CLI (#50) and T-301 mock target (#49) preceded them. Earlier merged tasks and verification provenance are recorded below.
 
-**Pending (5 tasks `todo`; T-305 is in progress):**
+**Pending (5 tasks `todo`; T-305 is in review):**
 
 - `kairos-api`: no remaining API implementation checklist tasks after T-206; all 68 operations are implemented.
 - `kairos-watcher`: no remaining tasks after T-226 is completed.
@@ -108,7 +108,7 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 - Verification: T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Current task:** T-305 is in progress on `t-305-resilience-proof`. The bench CLI has a chaos report, fault-aware verification and an extended full smoke window; `scripts/chaos/run.sh` injects all seven specified faults with cleanup and a 10 GiB host disk preflight. Detached Docker `:tools:bench-cli:check` passed after the main implementation. A packaged executor-kill trial completed five kills during a 500/s, 300-second load but could not be accepted: hundreds of connection timeouts reached the DLQ, PostgreSQL entered recovery, and Docker stopped responding. The host filesystem had only about 364 MiB free, with Docker.raw occupying about 43 GiB. Its ignored partial evidence is under `build/bench/t305-exec-debug2/`. Restore adequate host disk and Docker health, rerun detached verification after the final report changes, then execute the seven packaged fault trials. Do not mark T-305 done until duplicates, missing runs, and recovery targets all pass; T-306 follows T-305.
+**Current task:** T-305 is in review through PR #53 on `t-305-resilience-proof`. The bench CLI has a chaos report, fault-aware verification and an extended full smoke window; `scripts/chaos/run.sh` injects all seven specified faults with cleanup and a 10 GiB host disk preflight. Detached Docker `:tools:bench-cli:check` passed after the main implementation. A packaged executor-kill trial completed five kills during a 500/s, 300-second load but could not be accepted: hundreds of connection timeouts reached the DLQ, PostgreSQL entered recovery, and Docker stopped responding. The host filesystem had only about 364 MiB free, with Docker.raw occupying about 43 GiB. Its ignored partial evidence is under `build/bench/t305-exec-debug2/`. On the verification device, run the final detached checks and all seven packaged fault trials before merging or marking T-305 done. T-306 follows T-305.
 
 **Endpoint-test follow-up:** PR #48 fixed the executor synthetic dispatch to use the shared Kairos UUIDv7 factory and added a regression assertion for its run and target ids. The T-301 packaged acceptance ran before this fix and used a normal immediate job; the public endpoint-test path has not been repeated against the packaged mock target. After rebasing T-301 onto PR #48, detached Docker `make bg BG_NAME=kairos-t301-pr48-check ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips; mock target 114 tests.
 
