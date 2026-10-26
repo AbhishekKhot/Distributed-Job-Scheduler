@@ -116,7 +116,7 @@ jobs:
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           syft-version: v1.55.0
-      - name: Scan images and create SBOMs
+      - name: Create SBOMs
         shell: bash
         run: |
           set -euo pipefail
@@ -132,12 +132,29 @@ jobs:
           )
           mkdir -p build/sbom
           for image in "${images[@]}"; do
-            trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
             name="${image#kairos/}"
             name="${name%:dev}"
             "${{ steps.syft.outputs.cmd }}" "$image" --output "spdx-json=build/sbom/$name.spdx.json"
           done
+      - name: Scan images
+        shell: bash
+        run: |
+          set -euo pipefail
+          images=(
+            kairos/kairos-api:dev
+            kairos/kairos-watcher:dev
+            kairos/kairos-executor:dev
+            kairos/kairos-state:dev
+            kairos/kairos-migrations:dev
+            kairos/kairos-maintenance:dev
+            kairos/mock-target:dev
+            kairos/bench-cli:dev
+          )
+          for image in "${images[@]}"; do
+            trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
       - name: Upload SBOMs
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: image-sboms
