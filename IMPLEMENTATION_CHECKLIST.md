@@ -297,10 +297,10 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-281 | Partition manager | kairos-maintenance | done |
 | T-282 | Operator commands | kairos-maintenance | done |
 | T-301 | Mock target | tools/mock-target | done |
-| T-302 | Benchmark CLI | tools/bench-cli | review |
-| T-303 | Cross-module integration suites | tests | todo |
-| T-304 | End-to-end scenarios | tools/bench-cli | todo |
-| T-305 | Resilience and duplicate-execution proof | tools, scripts | todo |
+| T-302 | Benchmark CLI | tools/bench-cli | done |
+| T-303 | Cross-module integration suites | tests | done |
+| T-304 | End-to-end scenarios | tools/bench-cli | done |
+| T-305 | Resilience and duplicate-execution proof | tools, scripts | review |
 | T-306 | Per-cell write test and tuning | perf | todo |
 | T-401 | Helm chart | deploy/helm | todo |
 | T-402 | Terraform for GCP | deploy/terraform | todo |
@@ -962,7 +962,7 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-26):** Fresh detached Docker `make bg BG_NAME=kairos-t303-fresh-acceptance ARGS='integrationTest --rerun-tasks'` passed all four service suites in 1m 11s (47 executed tasks). `make bg BG_NAME=kairos-t303-full ARGS='spotlessCheck check'` passed in 3m 49s: 2,566 tests, zero failures/errors/skips. API uses real HTTP to create an immediate job and inspects the pinned dispatch outbox; watcher fires a schedule and observes Kafka; executor consumes Kafka, makes a fenced claim with PostgreSQL/Redis, and calls an in-process mock HTTP target through a test action; state consumes a Kafka result and settles history. The production executor HTTPS action and packaged whole-stack path are covered separately by T-243/T-301; T-304 owns the end-to-end scenarios. No dependencies or SQL migrations changed.
 
 ### T-304 End-to-end scenarios
-**Status:** review (AbhishekKhot) · **Needs:** T-302 · **Owns:** `tools/bench-cli/src/main/java/dev/kairos/bench/scenario/**`
+**Status:** done (PR #52 merged) · **Needs:** T-302 · **Owns:** `tools/bench-cli/src/main/java/dev/kairos/bench/scenario/**`
 
 Scenarios run with `bench-cli scenario <name>` against the detached stack (`make up`):
 
@@ -978,17 +978,17 @@ Scenarios run with `bench-cli scenario <name>` against the detached stack (`make
 **Verification (2026-10-26):** Reset only the Kairos Compose volumes, started the complete stack with `make up`, rebuilt the bench CLI image, and ran `scenario all` from its packaged container. All six checks passed in sequence in 52 seconds; the report is `build/bench/t304-fresh-final/scenarios.json` (local, ignored). Isolation checked 47 ID or list routes, retry made six attempts before DLQ, workflow output was asserted by the signed mock target, and auto-protection reached the 50-dead-letter suspension threshold. Detached `make bg BG_NAME=kairos-t304-final-gate ARGS='spotlessCheck build check'` passed in 2m 18s: 2,568 tests, zero failures, errors or skips. The scenario harness is exercised in this whole-stack acceptance; its runner and environment classes are excluded from unit-JVM JaCoCo accounting while the HTTP adapter has unit tests. No dependencies or SQL migrations changed.
 
 ### T-305 Resilience and duplicate-execution proof
-**Status:** todo · **Needs:** T-302, T-304 · **Owns:** `scripts/chaos/**`, `tools/bench-cli` scenario `chaos`
+**Status:** review (PR #53) · **Needs:** T-302, T-304 · **Owns:** `scripts/chaos/**`, `tools/bench-cli` scenario `chaos`
 
 Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mock-target `/stats`) and 0 missing runs (`verify`).
 
-- [ ] Kill an executor (`docker kill`) mid-load, repeated 5 times.
-- [ ] Kill a watcher during lease handover.
-- [ ] Pause Kafka for 60s (`docker pause`), then resume; the outbox backs up and drains.
-- [ ] Restart Redis (executors pause and resume); then simulate a failover to check that quarantine handles missing markers.
-- [ ] Pause a cell database for 30s; only that cell's shards stall.
-- [ ] Slow target (5s latency) at full load; the breaker and back-pressure hold.
-- [ ] Rolling restart of every service under load.
+- [x] Kill an executor (`docker kill`) mid-load, repeated 5 times.
+- [x] Kill a watcher during lease handover.
+- [x] Pause Kafka for 60s (`docker pause`), then resume; the outbox backs up and drains.
+- [x] Restart Redis (executors pause and resume); then simulate a failover to check that quarantine handles missing markers.
+- [x] Pause a cell database for 30s; only that cell's shards stall.
+- [x] Slow target (5s latency) at full load; the breaker and back-pressure hold.
+- [x] Rolling restart of every service under load.
 
 **Acceptance:** a report listing each experiment with duplicates = 0 and missing = 0, and recovery times within the HLD targets.
 

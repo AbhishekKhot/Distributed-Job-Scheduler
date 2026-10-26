@@ -49,9 +49,9 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 
 ## Progress and next steps (update at the end of every session)
 
-**Verified repository state (2026-10-26):** `origin/develop` points to `cb8f50c`, which merges T-303 cross-module integration suites through PR #51 after T-302 benchmark CLI through PR #50. T-304 end-to-end scenarios are in review through PR #52. There are **51 checklist tasks: 44 done, 1 review (T-304), and 6 todo**.
+**Verified repository state (2026-10-26):** `origin/develop` points to `9fab1f2`, which merges T-304 end-to-end scenarios through PR #52. There are **51 checklist tasks: 45 done, 1 review (T-305), and 5 todo**.
 
-**Implementation boundary:** Repository/build tooling, Phase 1 libraries, API operations, watcher, executor, state, partition maintenance, operator commands, mock target, benchmark CLI and cross-module integration suites are merged. T-304's packaged end-to-end scenarios pass on a fresh stack and await PR #52 review. Resilience under injected failures and the 20K / 50K capacity targets have not yet been demonstrated.
+**Implementation boundary:** Repository/build tooling, Phase 1 libraries, API operations, watcher, executor, state, partition maintenance, operator commands, mock target, benchmark CLI, cross-module integration suites and T-304 end-to-end scenarios are merged. T-305's fault harness is in review through PR #53. Resilience under injected failures and the 20K / 50K capacity targets have not yet been demonstrated.
 
 **Verification provenance:** T-241 Docker `spotlessApply` and the full `:services:kairos-executor:test` task passed before PR #34 merged: all 78 executor tests passed, including a 5K Kafka flood against the 4K capacity ceiling, contiguous offset tracking and restart replay, PostgreSQL quota deferral and the application context test. T-226 Docker `make bg BG_NAME=t226-final2 ARGS='spotlessApply build check'` passed on 2026-10-24: 2,185 tests, no failures, errors or skips. T-225 merged through PR #32 after its 2,181-test full build. Earlier task results below are recorded from their implementation sessions.
 
@@ -97,18 +97,18 @@ The host needs Docker with Compose v2, make, bash, and openssl; no local JDK is 
 - Libraries: T-101 ids/shards (#4), T-102 schedules (#21), T-103 retry/outcomes/run state machine (#8), T-104 workflow DAG validation/templates (#26), T-105 proto contracts (#3), T-106 migrations (#5), T-107 persistence + cell routing (#7), T-108 messaging (#15), T-109 security (#10), T-110 outbound HTTP client + target policy (#12), T-111 Redis run lock + sent markers (#11), T-113 run creation + outbox writer (#9).
 - Follow-ups: dead-letter `fence` column + LLD/checklist fixes (#13); engine Spring configuration `OutboxConfiguration`/`RunCreationConfiguration` (#14); trace/key docs (#16); migrations create the JWT signing keyset after migrating (#17, closes old open item 1); API session/team refresh correction (#22).
 
-**Latest merged:** T-303 cross-module integration suites (#51) are merged at `cb8f50c`; T-302 benchmark CLI (#50) and T-301 mock target (#49) preceded them. Earlier merged tasks and verification provenance are recorded below.
+**Latest merged:** T-304 end-to-end scenarios (#52) are merged at `9fab1f2`; T-303 cross-module integration suites (#51), T-302 benchmark CLI (#50) and T-301 mock target (#49) preceded them. Earlier merged tasks and verification provenance are recorded below.
 
-**Pending (6 tasks `todo`; T-304 is in `review`):**
+**Pending (5 tasks `todo`; T-305 is in review):**
 
 - `kairos-api`: no remaining API implementation checklist tasks after T-206; all 68 operations are implemented.
 - `kairos-watcher`: no remaining tasks after T-226 is completed.
 - `kairos-state`: no remaining implementation checklist tasks after T-263 merged.
 - `kairos-maintenance`: no remaining implementation checklist tasks; T-281 (#46) and T-282 (#47) are merged.
-- Verification: T-304 end-to-end scenarios (PR #52 review), T-305 resilience/duplicate proof, T-306 per-cell write test.
+- Verification: T-305 resilience/duplicate proof, T-306 per-cell write test.
 - Deployment: T-401 Helm, T-402 Terraform, T-403 CI, T-404 kind.
 
-**Current task:** T-304 is ready for review in PR #52 on `t-304-end-to-end-scenarios`. Its six packaged scenarios passed in sequence against a fresh `make up` stack in 52 seconds, including 47 team-isolation route checks. Detached `spotlessCheck build check` passed 2,568 tests with no failures, errors or skips. The checklist and bench CLI README contain the commands and acceptance details. After PR #52 merges, pull `develop` on the next device and start T-305 resilience and duplicate-execution proof in `scripts/chaos/**`; T-306 capacity and T-401–T-404 deployment tasks follow. The old checkout's locally modified documentation is based on commits before PR #50 and must not replace the current `develop` files.
+**Current task:** T-305 is in review through PR #53 on `t-305-resilience-proof`. The bench CLI has a chaos report, fault-aware verification and an extended full smoke window; `scripts/chaos/run.sh` injects all seven specified faults with cleanup and a 10 GiB host disk preflight. Detached Docker `:tools:bench-cli:check` passed after the main implementation. A packaged executor-kill trial completed five kills during a 500/s, 300-second load but could not be accepted: hundreds of connection timeouts reached the DLQ, PostgreSQL entered recovery, and Docker stopped responding. The host filesystem had only about 364 MiB free, with Docker.raw occupying about 43 GiB. Its ignored partial evidence is under `build/bench/t305-exec-debug2/`. On the verification device, run the final detached checks and all seven packaged fault trials before merging or marking T-305 done. T-306 follows T-305.
 
 **Endpoint-test follow-up:** PR #48 fixed the executor synthetic dispatch to use the shared Kairos UUIDv7 factory and added a regression assertion for its run and target ids. The T-301 packaged acceptance ran before this fix and used a normal immediate job; the public endpoint-test path has not been repeated against the packaged mock target. After rebasing T-301 onto PR #48, detached Docker `make bg BG_NAME=kairos-t301-pr48-check ARGS='spotlessApply build check'` passed: 2,558 tests, zero failures/errors/skips; mock target 114 tests.
 

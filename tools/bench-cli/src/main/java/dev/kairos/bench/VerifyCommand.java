@@ -28,6 +28,11 @@ final class VerifyCommand implements Callable<Integer> {
     @CommandLine.Option(names = "--wait-seconds", defaultValue = "120")
     int waitSeconds;
 
+    @CommandLine.Option(
+            names = "--chaos",
+            description = "Allow recovery lag caused by a recorded fault; retain all delivery checks")
+    boolean chaos;
+
     @Override
     public Integer call() throws Exception {
         if (waitSeconds < 0 || waitSeconds > 3_600) throw new IllegalArgumentException("Invalid wait time");
@@ -152,10 +157,11 @@ final class VerifyCommand implements Callable<Integer> {
                 && signatureFailures == 0
                 && capacityRejected == 0
                 && lags.size() == expected.size()
-                && (!load.path("profile").asString().equals("smoke") || p99 <= 2_000);
+                && (chaos || !load.path("profile").asString().equals("smoke") || p99 <= 2_000);
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("profile", load.path("profile").asString());
         report.put("diagnostic", load.path("diagnostic").asBoolean());
+        report.put("chaos", chaos);
         report.put("startedAt", started.toString());
         report.put("endedAt", ended.toString());
         report.put("passed", passed);
@@ -176,6 +182,30 @@ final class VerifyCommand implements Callable<Integer> {
         report.put("signatureFailures", signatureFailures);
         report.put("capacityRejected", capacityRejected);
         report.put("trackingComplete", trackingComplete);
+        if (chaos) {
+            JsonNode fault = files.read("fault.json");
+            Instant faultStarted = Instant.parse(BenchApi.required(fault, "startedAt"));
+            Instant faultRestored = Instant.parse(BenchApi.required(fault, "restoredAt"));
+            List<History.Row> affected = history.rows.values().stream()
+                    .filter(row -> !row.scheduledAt().isBefore(faultStarted)
+                            && !row.scheduledAt().isAfter(faultRestored))
+                    .toList();
+            long recoverySeconds = affected.stream()
+                    .filter(row -> row.startedAt() != null)
+                    .mapToLong(row -> Math.max(
+                            0, Duration.between(faultRestored, row.startedAt()).toSeconds()))
+                    .max()
+                    .orElse(-1);
+            long maxFaultLagSeconds = affected.stream()
+                    .filter(row -> row.startedAt() != null)
+                    .mapToLong(row -> Math.max(
+                            0, Duration.between(row.scheduledAt(), row.startedAt()).toSeconds()))
+                    .max()
+                    .orElse(-1);
+            report.put("faultAffectedRuns", affected.size());
+            report.put("deliveryRecoverySeconds", recoverySeconds);
+            report.put("faultMaxLagSeconds", maxFaultLagSeconds);
+        }
         files.write("verification.json", report);
         ReportCommand.render(files, report);
         System.out.printf(
