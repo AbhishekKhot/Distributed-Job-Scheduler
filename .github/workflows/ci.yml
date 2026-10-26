@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build
+        run: make build
+      - name: Prove dependency verification rejects tampering
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup="$(mktemp)"
+          cp gradle/verification-metadata.xml "$backup"
+          trap 'cp "$backup" gradle/verification-metadata.xml; rm -f "$backup"' EXIT
+          perl -0pi -e 's{(<artifact name="guava-33\.7\.2-jre\.jar">\s*<sha256 value=")[0-9a-f]+}{$1 . ("0" x 64)}e' gradle/verification-metadata.xml
+          if make gradle ARGS=':libs:kairos-domain:compileJava --rerun-tasks'; then
+            echo 'Gradle accepted a deliberately invalid dependency checksum' >&2
+            exit 1
+          fi
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Run all checks with Testcontainers
+        run: make test
+
+  openapi:
+    name: OpenAPI export diff
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - name: Check out source and history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Export current OpenAPI document
+        run: make gradle ARGS=':services:kairos-api:openApiExport'
+      - name: Export base document and write diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$PWD/build/ci-openapi"
+          base_checkout="$RUNNER_TEMP/kairos-openapi-base"
+          mkdir -p "$output"
+          cp services/kairos-api/build/openapi/kairos-v1.json "$output/head.json"
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            cp "$output/head.json" "$output/base.json"
+          else
+            git worktree add --detach "$base_checkout" "$BASE_SHA"
+            make -C "$base_checkout" gradle ARGS=':services:kairos-api:openApiExport'
+            cp "$base_checkout/services/kairos-api/build/openapi/kairos-v1.json" "$output/base.json"
+          fi
+          jq --sort-keys . "$output/base.json" > "$output/base.sorted.json"
+          jq --sort-keys . "$output/head.json" > "$output/head.sorted.json"
+          diff --unified --label base --label head "$output/base.sorted.json" "$output/head.sorted.json" \
+            > "$output/kairos-v1.diff" || true
+          if [[ -s "$output/kairos-v1.diff" ]]; then
+            {
+              echo '### OpenAPI changes'
+              echo '```diff'
+              head -n 200 "$output/kairos-v1.diff"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'OpenAPI document is unchanged.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload OpenAPI documents and diff
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openapi-diff
+          path: build/ci-openapi/
+          if-no-files-found: error
+          retention-days: 14
+
+  images:
+    name: Images, vulnerabilities, and SBOMs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build application images
+        run: make images
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.76.1
+          cache: false
+      - name: Install Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.55.0
+      - name: Scan images and create SBOMs
+        shell: bash
+        run: |
+          set -euo pipefail
+          images=(
+            kairos/kairos-api:dev
+            kairos/kairos-watcher:dev
+            kairos/kairos-executor:dev
+            kairos/kairos-state:dev
+            kairos/kairos-migrations:dev
+            kairos/kairos-maintenance:dev
+            kairos/mock-target:dev
+            kairos/bench-cli:dev
+          )
+          mkdir -p build/sbom
+          for image in "${images[@]}"; do
+            trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+            name="${image#kairos/}"
+            name="${name%:dev}"
+            "${{ steps.syft.outputs.cmd }}" "$image" --output "spdx-json=build/sbom/$name.spdx.json"
+          done
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image-sboms
+          path: build/sbom/*.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  helm:
+    name: Helm validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Detect Helm chart
+        id: chart
+        shell: bash
+        run: |
+          if [[ -f deploy/helm/kairos/Chart.yaml ]]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo 'Helm checks activate when T-401 adds deploy/helm/kairos.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Install Helm
+        if: steps.chart.outputs.present == 'true'
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v3.22.1
+      - name: Lint and render chart
+        if: steps.chart.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/helm
+          helm lint deploy/helm/kairos --strict --values deploy/helm/kairos/values-kind.yaml
+          helm template kairos deploy/helm/kairos --values deploy/helm/kairos/values-kind.yaml \
+            > build/helm/rendered.yaml
+      - name: Validate rendered resources
+        if: steps.chart.outputs.present == 'true'
+        run: |
+          docker run --rm --volume "$PWD/build/helm:/work:ro" \
+            ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e \
+            -strict -summary -ignore-missing-schemas /work/rendered.yaml
+
+  terraform:
+    name: Terraform validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TF_IN_AUTOMATION: true
+      TF_INPUT: false
+      TF_VAR_project_id: kairos-ci-dummy
+      TF_VAR_region: us-central1
+      GOOGLE_OAUTH_ACCESS_TOKEN: ci-placeholder-no-cloud-access
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Detect Terraform root
+        id: terraform
+        shell: bash
+        run: |
+          if compgen -G 'deploy/terraform/*.tf' > /dev/null; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo 'Terraform checks activate when T-402 adds deploy/terraform.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Install Terraform
+        if: steps.terraform.outputs.present == 'true'
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.0
+          terraform_wrapper: false
+      - name: Install TFLint
+        if: steps.terraform.outputs.present == 'true'
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.65.0
+      - name: Validate Terraform
+        if: steps.terraform.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive deploy/terraform
+          terraform -chdir=deploy/terraform init -backend=false
+          terraform -chdir=deploy/terraform validate
+          tflint --chdir=deploy/terraform --init
+          tflint --chdir=deploy/terraform --recursive --format=compact
+          terraform -chdir=deploy/terraform plan -refresh=false -lock=false -input=false \
+            -out="$RUNNER_TEMP/kairos-ci.tfplan"
