@@ -6,6 +6,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.web.bind.annotation.*;
 
@@ -90,6 +93,10 @@ public final class BehaviorController {
             response.setStatus(401);
             return;
         }
+        if (!matchesAssertions(request, body)) {
+            response.setStatus(422);
+            return;
+        }
         try {
             if (behavior.latencyMs() > 0) Thread.sleep(behavior.latencyMs());
         } catch (InterruptedException interrupted) {
@@ -112,6 +119,29 @@ public final class BehaviorController {
         }
         for (int remaining = length; remaining > 0; remaining -= Math.min(remaining, CHUNK.length))
             response.getOutputStream().write(CHUNK, 0, Math.min(remaining, CHUNK.length));
+    }
+
+    /** Optional scenario assertions check rendered values without storing or logging request data. */
+    private static boolean matchesAssertions(HttpServletRequest request, byte[] body) {
+        String expectedHeader = header(request, "X-Mock-Expect-Header");
+        if (!expectedHeader.isEmpty()) {
+            int separator = expectedHeader.indexOf('=');
+            if (separator < 1 || separator > 64 || expectedHeader.length() > 256) return false;
+            String name = expectedHeader.substring(0, separator);
+            if (!name.matches("[A-Za-z0-9-]+")) return false;
+            if (!header(request, name).equals(expectedHeader.substring(separator + 1))) return false;
+        }
+        String expectedHash = header(request, "X-Mock-Expect-Body-Sha256");
+        if (!expectedHash.isEmpty()) {
+            if (!expectedHash.matches("[0-9a-fA-F]{64}")) return false;
+            try {
+                byte[] digest = MessageDigest.getInstance("SHA-256").digest(body);
+                if (!HexFormat.of().formatHex(digest).equalsIgnoreCase(expectedHash)) return false;
+            } catch (NoSuchAlgorithmException unavailable) {
+                throw new IllegalStateException("SHA-256 unavailable", unavailable);
+            }
+        }
+        return true;
     }
 
     private static String header(HttpServletRequest request, String name) {

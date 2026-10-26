@@ -962,18 +962,20 @@ This task implements the guarantee that no run executes twice. Review it with ex
 **Verification (2026-10-26):** Fresh detached Docker `make bg BG_NAME=kairos-t303-fresh-acceptance ARGS='integrationTest --rerun-tasks'` passed all four service suites in 1m 11s (47 executed tasks). `make bg BG_NAME=kairos-t303-full ARGS='spotlessCheck check'` passed in 3m 49s: 2,566 tests, zero failures/errors/skips. API uses real HTTP to create an immediate job and inspects the pinned dispatch outbox; watcher fires a schedule and observes Kafka; executor consumes Kafka, makes a fenced claim with PostgreSQL/Redis, and calls an in-process mock HTTP target through a test action; state consumes a Kafka result and settles history. The production executor HTTPS action and packaged whole-stack path are covered separately by T-243/T-301; T-304 owns the end-to-end scenarios. No dependencies or SQL migrations changed.
 
 ### T-304 End-to-end scenarios
-**Status:** in progress (AbhishekKhot) · **Needs:** T-302 · **Owns:** `tools/bench-cli/src/main/java/dev/kairos/bench/scenario/**`
+**Status:** review (AbhishekKhot) · **Needs:** T-302 · **Owns:** `tools/bench-cli/src/main/java/dev/kairos/bench/scenario/**`
 
 Scenarios run with `bench-cli scenario <name>` against the detached stack (`make up`):
 
-- [ ] `onboarding`: signup, login, create a team, add a second user as a member, create an API key, then use the API key.
-- [ ] `job-lifecycle`: register an endpoint, create cron, one-time, interval and immediate jobs, observe runs succeed, pause, resume, update, delete.
-- [ ] `retry-to-dlq`: an endpoint that always fails, so the run reaches the DLQ after 5 retries (with a short test retry policy), then acknowledge, redrive (succeeds after the mock target is switched to healthy) and discard.
-- [ ] `workflow-data-passing`: a diamond workflow where task A's output is injected into D's header and body; verified on the mock target.
-- [ ] `isolation`: team B gets 404 for every id belonging to team A across all 68 APIs.
-- [ ] `auto-protection`: three consecutive dead runs auto-pause a job, and a failing endpoint is auto-suspended.
+- [x] `onboarding`: signup, login, create a team, add a second user as a member, create an API key, then use the API key.
+- [x] `job-lifecycle`: register an endpoint, create cron, one-time, interval and immediate jobs, observe runs succeed, pause, resume, update, delete.
+- [x] `retry-to-dlq`: an endpoint that always fails, so the run reaches the DLQ after 5 retries (with a short test retry policy), then acknowledge, redrive (succeeds after the mock target is switched to healthy) and discard.
+- [x] `workflow-data-passing`: a diamond workflow where task A's output is injected into D's header and body; verified on the mock target.
+- [x] `isolation`: team B gets 404 for every id belonging to team A across all 68 APIs.
+- [x] `auto-protection`: three consecutive dead runs auto-pause a job, and a failing endpoint is auto-suspended.
 
 **Acceptance:** all scenarios pass in sequence against a fresh `make up`, and the run is documented in the README.
+
+**Verification (2026-10-26):** Reset only the Kairos Compose volumes, started the complete stack with `make up`, rebuilt the bench CLI image, and ran `scenario all` from its packaged container. All six checks passed in sequence in 52 seconds; the report is `build/bench/t304-fresh-final/scenarios.json` (local, ignored). Isolation checked 47 ID or list routes, retry made six attempts before DLQ, workflow output was asserted by the signed mock target, and auto-protection reached the 50-dead-letter suspension threshold. Detached `make bg BG_NAME=kairos-t304-final-gate ARGS='spotlessCheck build check'` passed in 2m 18s: 2,568 tests, zero failures, errors or skips. The scenario harness is exercised in this whole-stack acceptance; its runner and environment classes are excluded from unit-JVM JaCoCo accounting while the HTTP adapter has unit tests. No dependencies or SQL migrations changed.
 
 ### T-305 Resilience and duplicate-execution proof
 **Status:** todo · **Needs:** T-302, T-304 · **Owns:** `scripts/chaos/**`, `tools/bench-cli` scenario `chaos`

@@ -10,7 +10,13 @@ import picocli.CommandLine;
         name = "bench-cli",
         mixinStandardHelpOptions = true,
         description = "Seed, drive and verify Kairos scheduler benchmarks",
-        subcommands = {SeedCommand.class, LoadCommand.class, VerifyCommand.class, ReportCommand.class})
+        subcommands = {
+            SeedCommand.class,
+            LoadCommand.class,
+            VerifyCommand.class,
+            ReportCommand.class,
+            ScenarioCommand.class
+        })
 final class BenchCommand implements Callable<Integer> {
     @CommandLine.Option(names = "--api-url", description = "Kairos API base URL")
     String apiUrl;
