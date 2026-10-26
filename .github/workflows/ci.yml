@@ -70,6 +70,7 @@ jobs:
             cp "$output/head.json" "$output/base.json"
           else
             git worktree add --detach "$base_checkout" "$BASE_SHA"
+            cp gradle/verification-metadata.xml "$base_checkout/gradle/verification-metadata.xml"
             make -C "$base_checkout" gradle ARGS=':services:kairos-api:openApiExport'
             cp "$base_checkout/services/kairos-api/build/openapi/kairos-v1.json" "$output/base.json"
           fi
