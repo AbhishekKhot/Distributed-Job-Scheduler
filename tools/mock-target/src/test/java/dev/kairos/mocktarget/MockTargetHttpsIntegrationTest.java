@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Map;
 import java.util.UUID;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -105,22 +106,79 @@ class MockTargetHttpsIntegrationTest {
 
     private HttpResponse<byte[]> request(
             String method, String path, String key, byte[] body, boolean valid, String contentType) throws Exception {
+        return request(method, path, key, body, valid, contentType, Map.of());
+    }
+
+    private HttpResponse<byte[]> request(
+            String method,
+            String path,
+            String key,
+            byte[] body,
+            boolean valid,
+            String contentType,
+            Map<String, String> extraHeaders)
+            throws Exception {
         String timestamp = Long.toString(Instant.now().getEpochSecond());
         String canonical = method + "\n" + path + "\n" + timestamp + "\n" + key + "\n"
                 + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
         var mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(KEY, "HmacSHA256"));
         String signature = "v1=" + HexFormat.of().formatHex(mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8)));
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("https://localhost:" + port + path))
+                .timeout(Duration.ofSeconds(5))
+                .header("Idempotency-Key", key)
+                .header("X-Kairos-Timestamp", timestamp)
+                .header("X-Kairos-Signature", valid ? signature : "v1=00")
+                .header("Content-Type", contentType);
+        extraHeaders.forEach(request::header);
         return client.send(
-                HttpRequest.newBuilder(URI.create("https://localhost:" + port + path))
-                        .timeout(Duration.ofSeconds(5))
-                        .header("Idempotency-Key", key)
-                        .header("X-Kairos-Timestamp", timestamp)
-                        .header("X-Kairos-Signature", valid ? signature : "v1=00")
-                        .header("Content-Type", contentType)
-                        .method(method, HttpRequest.BodyPublishers.ofByteArray(body))
+                request.method(method, HttpRequest.BodyPublishers.ofByteArray(body))
                         .build(),
                 HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    @Test
+    void signedWorkflowAssertionsCheckHeaderAndBodyWithoutEchoingThem() throws Exception {
+        byte[] body = "{\"fromA\":true}".getBytes(StandardCharsets.UTF_8);
+        String hash =
+                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body));
+        Map<String, String> expected = Map.of(
+                "X-From-A", "true",
+                "X-Mock-Expect-Header", "X-From-A=true",
+                "X-Mock-Expect-Body-Sha256", hash);
+        assertThat(request(
+                                "POST",
+                                "/behave/healthy",
+                                UUID.randomUUID().toString(),
+                                body,
+                                true,
+                                "application/json",
+                                expected)
+                        .statusCode())
+                .isEqualTo(200);
+        assertThat(request(
+                                "POST",
+                                "/behave/healthy",
+                                UUID.randomUUID().toString(),
+                                body,
+                                true,
+                                "application/json",
+                                Map.of(
+                                        "X-From-A", "false",
+                                        "X-Mock-Expect-Header", "X-From-A=true",
+                                        "X-Mock-Expect-Body-Sha256", hash))
+                        .statusCode())
+                .isEqualTo(422);
+        assertThat(request(
+                                "POST",
+                                "/behave/healthy",
+                                UUID.randomUUID().toString(),
+                                "{\"fromA\":false}".getBytes(StandardCharsets.UTF_8),
+                                true,
+                                "application/json",
+                                expected)
+                        .statusCode())
+                .isEqualTo(422);
     }
 
     @Test
