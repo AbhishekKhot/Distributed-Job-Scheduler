@@ -28,13 +28,12 @@ jobs:
           cp gradle/verification-metadata.xml "$backup"
           trap 'cp "$backup" gradle/verification-metadata.xml; rm -f "$backup"' EXIT
           perl -0pi -e 's{(<artifact name="guava-33\.7\.2-jre\.jar">\s*<sha256 value=")[0-9a-f]+}{$1 . ("0" x 64)}e' gradle/verification-metadata.xml
-          if make gradle GRADLE_ARGS='--no-daemon --console=plain --max-workers=2' \
-            ARGS=':libs:kairos-domain:compileJava --rerun-tasks'; then
+          if make gradle ARGS=':libs:kairos-domain:compileJava --rerun-tasks'; then
             echo 'Gradle accepted a deliberately invalid dependency checksum' >&2
             exit 1
           fi
       - name: Build
-        run: make build GRADLE_ARGS='--no-daemon --console=plain --max-workers=2'
+        run: make build
 
   integration:
     name: Integration tests
@@ -44,7 +43,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Run all checks with Testcontainers
-        run: make test GRADLE_ARGS='--no-daemon --console=plain --max-workers=2'
+        run: make test
 
   openapi:
     name: OpenAPI export diff
