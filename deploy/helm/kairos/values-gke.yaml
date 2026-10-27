@@ -1,0 +1,141 @@
+# GKE production overlay. Replace every PROJECT, REGION, LOCATION, and CIDR placeholder.
+images:
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+  api:
+    repository: REGION-docker.pkg.dev/PROJECT/kairos/kairos-api
+  watcher:
+    repository: REGION-docker.pkg.dev/PROJECT/kairos/kairos-watcher
+  executor:
+    repository: REGION-docker.pkg.dev/PROJECT/kairos/kairos-executor
+  state:
+    repository: REGION-docker.pkg.dev/PROJECT/kairos/kairos-state
+  migrations:
+    repository: REGION-docker.pkg.dev/PROJECT/kairos/kairos-migrations
+  maintenance:
+    repository: REGION-docker.pkg.dev/PROJECT/kairos/kairos-maintenance
+
+serviceAccounts:
+  api:
+    annotations:
+      iam.gke.io/gcp-service-account: kairos-api@PROJECT.iam.gserviceaccount.com
+  watcher:
+    annotations:
+      iam.gke.io/gcp-service-account: kairos-watcher@PROJECT.iam.gserviceaccount.com
+  executor:
+    annotations:
+      iam.gke.io/gcp-service-account: kairos-executor@PROJECT.iam.gserviceaccount.com
+  state:
+    annotations:
+      iam.gke.io/gcp-service-account: kairos-state@PROJECT.iam.gserviceaccount.com
+  migrations:
+    annotations:
+      iam.gke.io/gcp-service-account: kairos-migrations@PROJECT.iam.gserviceaccount.com
+  maintenance:
+    annotations:
+      iam.gke.io/gcp-service-account: kairos-maintenance@PROJECT.iam.gserviceaccount.com
+  operator:
+    annotations:
+      iam.gke.io/gcp-service-account: kairos-operator@PROJECT.iam.gserviceaccount.com
+
+connections:
+  kekUri: gcp-kms://projects/PROJECT/locations/LOCATION/keyRings/kairos/cryptoKeys/kek
+
+runtimeSecrets:
+  csi:
+    enabled: true
+    provider: gke
+    driver: secrets-store-gke.csi.k8s.io
+    objectsByComponent:
+      api:
+        - resourceName: projects/PROJECT/secrets/kairos-db-password/versions/latest
+          path: KAIROS_DB_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-redis-password/versions/latest
+          path: KAIROS_REDIS_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-api-key-pepper/versions/latest
+          path: KAIROS_API_KEY_PEPPER
+        - resourceName: projects/PROJECT/secrets/kairos-cursor-hmac-key/versions/latest
+          path: KAIROS_CURSOR_HMAC_KEY
+        - resourceName: projects/PROJECT/secrets/kairos-redis-ca/versions/latest
+          path: redis-ca.pem
+      watcher:
+        - resourceName: projects/PROJECT/secrets/kairos-db-password/versions/latest
+          path: KAIROS_DB_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-redis-password/versions/latest
+          path: KAIROS_REDIS_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-username/versions/latest
+          path: KAIROS_KAFKA_USERNAME
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-password/versions/latest
+          path: KAIROS_KAFKA_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-ca/versions/latest
+          path: kafka-ca.pem
+        - resourceName: projects/PROJECT/secrets/kairos-redis-ca/versions/latest
+          path: redis-ca.pem
+      executor:
+        - resourceName: projects/PROJECT/secrets/kairos-db-password/versions/latest
+          path: KAIROS_DB_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-redis-password/versions/latest
+          path: KAIROS_REDIS_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-username/versions/latest
+          path: KAIROS_KAFKA_USERNAME
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-password/versions/latest
+          path: KAIROS_KAFKA_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-ca/versions/latest
+          path: kafka-ca.pem
+        - resourceName: projects/PROJECT/secrets/kairos-redis-ca/versions/latest
+          path: redis-ca.pem
+      state:
+        - resourceName: projects/PROJECT/secrets/kairos-db-password/versions/latest
+          path: KAIROS_DB_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-username/versions/latest
+          path: KAIROS_KAFKA_USERNAME
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-password/versions/latest
+          path: KAIROS_KAFKA_PASSWORD
+        - resourceName: projects/PROJECT/secrets/kairos-kafka-ca/versions/latest
+          path: kafka-ca.pem
+
+ownerSecrets:
+  csi:
+    enabled: true
+    provider: gke
+    driver: secrets-store-gke.csi.k8s.io
+    objects:
+      - resourceName: projects/PROJECT/secrets/kairos-owner-db-password/versions/latest
+        path: KAIROS_DB_PASSWORD
+
+operatorSecrets:
+  csi:
+    enabled: true
+    provider: gke
+    driver: secrets-store-gke.csi.k8s.io
+    objects:
+      - resourceName: projects/PROJECT/secrets/kairos-operator-db-password/versions/latest
+        path: KAIROS_DB_PASSWORD
+
+autoscaling:
+  keda:
+    kafka:
+      # Provision this Secret outside the chart (for example with GKE SecretSync) for KEDA's controller.
+      authenticationSecretName: kairos-keda-kafka
+
+components:
+  executor:
+    targetPolicy:
+      allowedCidrs:
+        - 10.20.0.0/16
+      infrastructureCidrs:
+        - 10.10.0.0/16
+        - 199.36.153.4/30
+
+networkPolicy:
+  infrastructureEgress:
+    cidrs:
+      - 10.10.0.0/16
+      - 199.36.153.4/30
+  executorTargetEgress:
+    cidrs:
+      - 10.20.0.0/16
+
+# Required on GKE Standard node pools that use Workload Identity Federation. Remove on Autopilot.
+nodeSelector:
+  iam.gke.io/gke-metadata-server-enabled: "true"

@@ -1,0 +1,76 @@
+{{- if .Values.maintenance.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "kairos.fullname" . }}-partitions
+  labels:
+    {{- include "kairos.labels" . | nindent 4 }}
+    app.kubernetes.io/component: maintenance
+spec:
+  schedule: {{ .Values.maintenance.schedule | quote }}
+  timeZone: {{ .Values.maintenance.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  suspend: false
+  successfulJobsHistoryLimit: {{ .Values.maintenance.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.maintenance.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.maintenance.startingDeadlineSeconds }}
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: {{ .Values.maintenance.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "kairos.selectorLabels" (dict "root" . "component" "maintenance") | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "kairos.serviceAccountName" (dict "root" . "component" "maintenance") }}
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: partitions
+              image: {{ include "kairos.image" (dict "root" . "component" "maintenance") | quote }}
+              imagePullPolicy: {{ .Values.images.pullPolicy }}
+              securityContext:
+                {{- toYaml .Values.containerSecurityContext | nindent 16 }}
+              {{- if not .Values.ownerSecrets.csi.enabled }}
+              envFrom:
+                - secretRef:
+                    name: {{ include "kairos.ownerSecretName" . }}
+              args: ["partitions"]
+              {{- else }}
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  export KAIROS_DB_PASSWORD="$(cat /var/run/secrets/kairos-owner/KAIROS_DB_PASSWORD)"
+                  exec java org.springframework.boot.loader.launch.JarLauncher partitions
+              {{- end }}
+              env:
+                {{- if .Values.connections.springProfilesActive }}
+                - name: SPRING_PROFILES_ACTIVE
+                  value: {{ .Values.connections.springProfilesActive | quote }}
+                {{- end }}
+                - name: KAIROS_CONTROL_DB_URL
+                  value: {{ .Values.connections.controlDatabaseUrl | quote }}
+                {{- range $index, $url := .Values.connections.cellDatabaseUrls }}
+                - name: {{ printf "KAIROS_CELL_%d_DB_URL" $index }}
+                  value: {{ $url | quote }}
+                {{- end }}
+                - name: KAIROS_DB_USERNAME
+                  value: {{ .Values.connections.ownerDatabaseUsername | quote }}
+              resources:
+                {{- toYaml .Values.maintenance.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+                - name: owner-secrets
+                  mountPath: /var/run/secrets/kairos-owner
+                  readOnly: true
+          volumes:
+            - name: tmp
+              emptyDir: {}
+            {{- include "kairos.ownerSecretVolume" . | nindent 12 }}
+{{- end }}

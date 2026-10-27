@@ -1,0 +1,23 @@
+{{- range $component := list "api" "executor" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kairos.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "kairos.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  type: {{ (index $.Values.service $component).type }}
+  selector:
+    {{- include "kairos.selectorLabels" (dict "root" $ "component" $component) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ (index $.Values.service $component).port }}
+      targetPort: http
+      protocol: TCP
+    - name: management
+      port: 8081
+      targetPort: management
+      protocol: TCP
+{{- end }}

@@ -1,0 +1,17 @@
+{{- if .Values.pdb.enabled }}
+{{- range $component := list "api" "watcher" "executor" "state" }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "kairos.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "kairos.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  maxUnavailable: {{ $.Values.pdb.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "kairos.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}

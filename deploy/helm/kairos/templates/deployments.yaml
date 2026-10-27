@@ -1,0 +1,147 @@
+{{- range $component := list "api" "watcher" "executor" "state" }}
+{{- $settings := index $.Values.components $component }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kairos.componentName" (dict "root" $ "component" $component) }}
+  labels:
+    {{- include "kairos.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  replicas: {{ $settings.replicas }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "kairos.selectorLabels" (dict "root" $ "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kairos.selectorLabels" (dict "root" $ "component" $component) | nindent 8 }}
+      {{- with $.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "kairos.serviceAccountName" (dict "root" $ "component" $component) }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ if eq $component "executor" }}{{ $settings.terminationGracePeriodSeconds }}{{ else }}40{{ end }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $component }}
+          image: {{ include "kairos.image" (dict "root" $ "component" $component) | quote }}
+          imagePullPolicy: {{ $.Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: management
+              containerPort: 8081
+              protocol: TCP
+          {{- if not $.Values.runtimeSecrets.csi.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ include "kairos.runtimeSecretName" $ }}
+          {{- else }}
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              for key in KAIROS_DB_PASSWORD KAIROS_REDIS_PASSWORD KAIROS_KAFKA_USERNAME KAIROS_KAFKA_PASSWORD KAIROS_API_KEY_PEPPER KAIROS_CURSOR_HMAC_KEY; do
+                file="/var/run/secrets/kairos/${key}"
+                if [ -f "${file}" ]; then
+                  value="$(cat "${file}")"
+                  export "${key}=${value}"
+                fi
+              done
+              exec java org.springframework.boot.loader.launch.JarLauncher
+          {{- end }}
+          env:
+            {{- include "kairos.commonEnv" $ | nindent 12 }}
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if eq $component "api" }}
+            - name: KAIROS_SWAGGER_UI_ENABLED
+              value: "false"
+            - name: KAIROS_API_EXECUTOR_INTERNAL_BASE_URL
+              value: {{ $.Values.connections.executorInternalBaseUrl | quote }}
+            {{- end }}
+            {{- if eq $component "watcher" }}
+            - name: KAIROS_VERSION
+              value: {{ $.Chart.AppVersion | quote }}
+            {{- end }}
+            {{- if eq $component "executor" }}
+            - name: KAIROS_TARGET_POLICY_ALLOWED_SUFFIXES
+              value: {{ join "," $settings.targetPolicy.allowedSuffixes | quote }}
+            - name: KAIROS_TARGET_POLICY_ALLOWED_HOSTS
+              value: {{ join "," $settings.targetPolicy.allowedHosts | quote }}
+            - name: KAIROS_TARGET_POLICY_ALLOWED_CIDRS
+              value: {{ join "," $settings.targetPolicy.allowedCidrs | quote }}
+            - name: KAIROS_TARGET_POLICY_ALLOWED_PORTS
+              value: {{ join "," $settings.targetPolicy.allowedPorts | quote }}
+            - name: KAIROS_TARGET_POLICY_INFRASTRUCTURE_HOSTS
+              value: {{ join "," $settings.targetPolicy.infrastructureHosts | quote }}
+            - name: KAIROS_TARGET_POLICY_INFRASTRUCTURE_CIDRS
+              value: {{ join "," $settings.targetPolicy.infrastructureCidrs | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: {{ $.Values.probes.liveness.path }}
+              port: management
+            initialDelaySeconds: {{ $.Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $.Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ $.Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ $.Values.probes.readiness.path }}
+              port: management
+            initialDelaySeconds: {{ $.Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ $.Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ $.Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml $settings.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: runtime-secrets
+              mountPath: /var/run/secrets/kairos
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- include "kairos.secretVolume" (dict "root" $ "component" $component) | nindent 8 }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

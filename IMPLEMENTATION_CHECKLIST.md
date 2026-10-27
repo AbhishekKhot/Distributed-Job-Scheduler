@@ -302,7 +302,7 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-304 | End-to-end scenarios | tools/bench-cli | done |
 | T-305 | Resilience and duplicate-execution proof | tools, scripts | review |
 | T-306 | Per-cell write test and tuning | perf | todo |
-| T-401 | Helm chart | deploy/helm | todo |
+| T-401 | Helm chart | deploy/helm | review |
 | T-402 | Terraform for GCP | deploy/terraform | todo |
 | T-403 | CI pipeline | .github | todo |
 | T-404 | kind validation | deploy/kind | todo |
@@ -1007,18 +1007,20 @@ Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mo
 ## 10. Phase 4: deployment
 
 ### T-401 Helm chart
-**Status:** todo · **Needs:** T-201, T-221, T-241, T-261 · **Owns:** `deploy/helm/kairos/**`
+**Status:** review · **Needs:** T-201, T-221, T-241, T-261 · **Owns:** `deploy/helm/kairos/**`
 
-- [ ] One chart with a Deployment per service (`kairos-api`, `kairos-watcher`, `kairos-executor`, `kairos-state`), a pre-upgrade Job for `kairos-migrations`, and a CronJob for `kairos-maintenance` partitions.
-- [ ] Pod security: `runAsNonRoot`, `runAsUser: 10001`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, the `RuntimeDefault` seccomp profile, and an `emptyDir` for `/tmp`.
-- [ ] Probes on 8081 (`/actuator/health/liveness`, `/actuator/health/readiness`), resource requests and limits, `terminationGracePeriodSeconds` 75 for executors (60s drain), PodDisruptionBudgets.
-- [ ] Autoscaling: HPA for the API on CPU; KEDA for executors on Kafka lag and for state on result-topic lag.
-- [ ] NetworkPolicies: default deny; allow the API from the ingress; allow services to reach Postgres, Kafka and Redis; allow executors egress only to internal target ranges on allowed ports.
-- [ ] Secrets through the Secret Manager CSI driver and Workload Identity (no Kubernetes Secret manifests with values in the chart). Kafka connection settings for production: `KAIROS_KAFKA_SECURITY_PROTOCOL=SASL_SSL`, `KAIROS_KAFKA_SASL_MECHANISM`, `KAIROS_KAFKA_USERNAME`, `KAIROS_KAFKA_PASSWORD` (from Secret Manager) and, when the brokers use a private CA, `KAIROS_KAFKA_TRUST_CERTIFICATE`; compose stays `PLAINTEXT`.
-- [ ] `values.yaml` documented, with `values-kind.yaml` and `values-gke.yaml`.
-- [ ] `helm lint` and `kubeconform` run in CI.
+- [x] One chart with a Deployment per service (`kairos-api`, `kairos-watcher`, `kairos-executor`, `kairos-state`), a pre-upgrade Job for `kairos-migrations`, and a CronJob for `kairos-maintenance` partitions.
+- [x] Pod security: `runAsNonRoot`, `runAsUser: 10001`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, the `RuntimeDefault` seccomp profile, and an `emptyDir` for `/tmp`.
+- [x] Probes on 8081 (`/actuator/health/liveness`, `/actuator/health/readiness`), resource requests and limits, `terminationGracePeriodSeconds` 75 for executors (60s drain), PodDisruptionBudgets.
+- [x] Autoscaling: HPA for the API on CPU; KEDA for executors on Kafka lag and for state on result-topic lag.
+- [x] NetworkPolicies: default deny; allow the API from the ingress; allow services to reach Postgres, Kafka and Redis; allow executors egress only to internal target ranges on allowed ports.
+- [x] Secrets through the Secret Manager CSI driver and Workload Identity (no Kubernetes Secret manifests with values in the chart). Kafka connection settings for production: `KAIROS_KAFKA_SECURITY_PROTOCOL=SASL_SSL`, `KAIROS_KAFKA_SASL_MECHANISM`, `KAIROS_KAFKA_USERNAME`, `KAIROS_KAFKA_PASSWORD` (from Secret Manager) and, when the brokers use a private CA, `KAIROS_KAFKA_TRUST_CERTIFICATE`; compose stays `PLAINTEXT`.
+- [x] `values.yaml` documented, with `values-kind.yaml` and `values-gke.yaml`.
+- [x] `helm lint` and `kubeconform` run in CI through T-403, together with all four render variants and the security policy check.
 
 **Acceptance:** `helm template` output passes `kubeconform` and a policy check (no root, no privilege escalation, limits set).
+
+**Verification (2026-10-27):** Detached Docker validation linted the base, kind and GKE values successfully with Helm 3.17.3. Base, kind, GKE and GKE-with-operator-session renders produced 120 resources in total; kubeconform 0.7.0 reported 101 built-in resources valid, zero invalid and zero errors, with 19 CRD resources skipped because their schemas were intentionally unavailable. The policy test passed all four renders, including non-root UID 10001, RuntimeDefault seccomp, read-only roots, no privilege escalation, dropped capabilities, `/tmp` emptyDir mounts, CPU/memory limits, the executor's 75-second grace period and absence of rendered Secret objects.
 
 ### T-402 Terraform for GCP
 **Status:** todo · **Needs:** none (can start in wave 1) · **Owns:** `deploy/terraform/**`

@@ -1,0 +1,60 @@
+# Local kind overlay. T-404 creates the referenced Secrets and loads the :dev images.
+fullnameOverride: kairos
+
+images:
+  tag: dev
+  pullPolicy: Never
+
+connections:
+  springProfilesActive: local
+  controlDatabaseUrl: jdbc:postgresql://postgres:5432/kairos_control
+  cellDatabaseUrls:
+    - jdbc:postgresql://postgres:5432/kairos_cell0
+    - jdbc:postgresql://postgres:5432/kairos_cell1
+  databaseUsername: sched_app
+  ownerDatabaseUsername: sched_owner
+  kafka:
+    bootstrapServers: kafka:9092
+    securityProtocol: PLAINTEXT
+    saslMechanism: PLAIN
+    trustCertificateFile: ""
+  redis:
+    host: redis-master
+    port: 6379
+    username: default
+    tls: false
+    trustCertificateFile: ""
+  kekUri: ""
+
+components:
+  api:
+    replicas: 1
+  watcher:
+    replicas: 1
+  executor:
+    replicas: 1
+    targetPolicy:
+      allowedSuffixes:
+        - .svc.cluster.local
+      allowedHosts:
+        - mock-target
+      allowedCidrs:
+        - 10.0.0.0/8
+      infrastructureHosts:
+        - postgres
+        - kafka
+        - redis
+  state:
+    replicas: 1
+
+pdb:
+  enabled: false
+
+autoscaling:
+  api:
+    enabled: false
+  keda:
+    enabled: false
+
+networkPolicy:
+  enabled: false

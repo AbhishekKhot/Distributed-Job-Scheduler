@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "images",
+    "connections",
+    "runtimeSecrets",
+    "ownerSecrets",
+    "operatorSecrets",
+    "podSecurityContext",
+    "containerSecurityContext",
+    "components"
+  ],
+  "properties": {
+    "images": {
+      "type": "object",
+      "required": ["tag", "pullPolicy", "api", "watcher", "executor", "state", "migrations", "maintenance"],
+      "properties": {
+        "tag": {"type": "string", "minLength": 1},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]},
+        "api": {"$ref": "#/definitions/image"},
+        "watcher": {"$ref": "#/definitions/image"},
+        "executor": {"$ref": "#/definitions/image"},
+        "state": {"$ref": "#/definitions/image"},
+        "migrations": {"$ref": "#/definitions/image"},
+        "maintenance": {"$ref": "#/definitions/image"}
+      }
+    },
+    "connections": {
+      "type": "object",
+      "required": ["controlDatabaseUrl", "cellDatabaseUrls", "databaseUsername", "ownerDatabaseUsername", "kafka", "redis"],
+      "properties": {
+        "controlDatabaseUrl": {"type": "string", "pattern": "^jdbc:postgresql://"},
+        "cellDatabaseUrls": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "string", "pattern": "^jdbc:postgresql://"}
+        },
+        "databaseUsername": {"type": "string", "minLength": 1},
+        "ownerDatabaseUsername": {"type": "string", "minLength": 1},
+        "kafka": {
+          "type": "object",
+          "required": ["bootstrapServers", "securityProtocol", "saslMechanism"],
+          "properties": {
+            "bootstrapServers": {"type": "string", "minLength": 3},
+            "securityProtocol": {"enum": ["PLAINTEXT", "SSL", "SASL_SSL"]},
+            "saslMechanism": {"enum": ["PLAIN", "SCRAM_SHA_256", "SCRAM_SHA_512"]}
+          }
+        },
+        "redis": {
+          "type": "object",
+          "required": ["host", "port", "username", "tls"],
+          "properties": {
+            "host": {"type": "string", "minLength": 1},
+            "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "username": {"type": "string", "minLength": 1},
+            "tls": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "runtimeSecrets": {"$ref": "#/definitions/secrets"},
+    "ownerSecrets": {"$ref": "#/definitions/secrets"},
+    "operatorSecrets": {"$ref": "#/definitions/secrets"},
+    "podSecurityContext": {
+      "type": "object",
+      "required": ["runAsNonRoot", "runAsUser", "seccompProfile"],
+      "properties": {
+        "runAsNonRoot": {"const": true},
+        "runAsUser": {"const": 10001},
+        "seccompProfile": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {"type": {"const": "RuntimeDefault"}}
+        }
+      }
+    },
+    "containerSecurityContext": {
+      "type": "object",
+      "required": ["allowPrivilegeEscalation", "readOnlyRootFilesystem", "runAsNonRoot", "runAsUser", "capabilities"],
+      "properties": {
+        "allowPrivilegeEscalation": {"const": false},
+        "readOnlyRootFilesystem": {"const": true},
+        "runAsNonRoot": {"const": true},
+        "runAsUser": {"const": 10001},
+        "capabilities": {
+          "type": "object",
+          "required": ["drop"],
+          "properties": {
+            "drop": {"type": "array", "contains": {"const": "ALL"}}
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "required": ["api", "watcher", "executor", "state"],
+      "properties": {
+        "api": {"$ref": "#/definitions/component"},
+        "watcher": {"$ref": "#/definitions/component"},
+        "executor": {"$ref": "#/definitions/component"},
+        "state": {"$ref": "#/definitions/component"}
+      }
+    }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {"repository": {"type": "string", "minLength": 1}}
+    },
+    "secrets": {
+      "type": "object",
+      "required": ["existingSecret", "csi"],
+      "properties": {
+        "existingSecret": {"type": "string", "minLength": 1},
+        "csi": {
+          "type": "object",
+          "required": ["enabled", "provider", "driver"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "provider": {"type": "string", "minLength": 1},
+            "driver": {"type": "string", "minLength": 1},
+            "objects": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["resourceName", "path"],
+                "properties": {
+                  "resourceName": {"type": "string", "minLength": 1},
+                  "path": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"}
+                }
+              }
+            },
+            "objectsByComponent": {"type": "object"}
+          }
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "required": ["replicas", "resources"],
+      "properties": {
+        "replicas": {"type": "integer", "minimum": 1},
+        "resources": {
+          "type": "object",
+          "required": ["requests", "limits"],
+          "properties": {
+            "requests": {"type": "object", "required": ["cpu", "memory"]},
+            "limits": {"type": "object", "required": ["cpu", "memory"]}
+          }
+        }
+      }
+    }
+  }
+}
