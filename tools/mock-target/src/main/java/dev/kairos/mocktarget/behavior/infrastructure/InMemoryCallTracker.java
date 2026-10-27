@@ -13,10 +13,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /** Never evicts keys silently. Snapshot copies briefly exclude writers; serialization happens after release. */
 public final class InMemoryCallTracker implements CallTracker {
-    private final ConcurrentHashMap<String, AtomicLong> counts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Entry> counts = new ConcurrentHashMap<>();
     private final LongAdder calls = new LongAdder(),
             duplicates = new LongAdder(),
             duplicateKeys = new LongAdder(),
+            duplicateEffects = new LongAdder(),
             unkeyed = new LongAdder(),
             signatures = new LongAdder(),
             rejected = new LongAdder(),
@@ -36,30 +37,32 @@ public final class InMemoryCallTracker implements CallTracker {
     }
 
     @Override
-    public boolean record(String key, boolean signatureValid) {
+    public RecordResult record(String key, boolean signatureValid, boolean idempotent) {
         barrier.readLock().lock();
         try {
             calls.increment();
             if (!signatureValid) signatures.increment();
             if (key.isEmpty()) {
                 unkeyed.increment();
-                return true;
+                return RecordResult.FIRST;
             }
-            AtomicLong counter = counts.computeIfAbsent(key, ignored -> {
+            Entry entry = counts.computeIfAbsent(key, ignored -> {
                 if (slots.incrementAndGet() > maxKeys) {
                     slots.decrementAndGet();
                     return null;
                 }
-                return new AtomicLong();
+                return new Entry();
             });
-            if (counter == null) {
+            if (entry == null) {
                 rejected.increment();
-                return false;
+                return RecordResult.REJECTED;
             }
-            long count = counter.incrementAndGet();
+            long count = entry.deliveries.incrementAndGet();
+            long effects = idempotent && count > 1 ? entry.effects.get() : entry.effects.incrementAndGet();
             if (count > 1) duplicates.increment();
             if (count == 2) duplicateKeys.increment();
-            return true;
+            if (effects > 1) duplicateEffects.increment();
+            return count == 1 ? RecordResult.FIRST : RecordResult.DUPLICATE;
         } finally {
             barrier.readLock().unlock();
         }
@@ -83,6 +86,7 @@ public final class InMemoryCallTracker implements CallTracker {
                 counts.size(),
                 duplicateKeys.sum(),
                 duplicates.sum(),
+                duplicateEffects.sum(),
                 unkeyed.sum(),
                 signatures.sum(),
                 rejected.sum(),
@@ -95,8 +99,12 @@ public final class InMemoryCallTracker implements CallTracker {
         barrier.writeLock().lock();
         try {
             Map<String, Long> copy = new HashMap<>();
-            counts.forEach((key, count) -> copy.put(key, count.get()));
-            return new Snapshot(1, clock.instant(), current(), Map.copyOf(copy));
+            Map<String, Long> effects = new HashMap<>();
+            counts.forEach((key, entry) -> {
+                copy.put(key, entry.deliveries.get());
+                effects.put(key, entry.effects.get());
+            });
+            return new Snapshot(2, clock.instant(), current(), Map.copyOf(copy), Map.copyOf(effects));
         } finally {
             barrier.writeLock().unlock();
         }
@@ -105,5 +113,10 @@ public final class InMemoryCallTracker implements CallTracker {
     @Override
     public void snapshotFailed() {
         snapshotFailures.increment();
+    }
+
+    private static final class Entry {
+        private final AtomicLong deliveries = new AtomicLong();
+        private final AtomicLong effects = new AtomicLong();
     }
 }

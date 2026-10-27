@@ -52,6 +52,12 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
             description = "Interval profile warm-up before measurement")
     int warmupSeconds;
 
+    @CommandLine.Option(
+            names = "--interval-drain-seconds",
+            defaultValue = "0",
+            description = "Keep interval jobs active after measurement so materialization can catch up")
+    int intervalDrainSeconds;
+
     @Override
     public Integer call() throws Exception {
         LoadProfile profile = LoadProfile.parse(profileName);
@@ -59,6 +65,8 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
                 || immediateJobs < 0
                 || warmupSeconds < 0
                 || warmupSeconds > 600
+                || intervalDrainSeconds < 0
+                || intervalDrainSeconds > 300
                 || seconds != null && seconds < 1
                 || chaosSeconds != null
                         && (profile != LoadProfile.SMOKE
@@ -181,6 +189,7 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
                 }
                 offered.set(Math.round(expected));
                 accepted.set(offered.get());
+                if (intervalDrainSeconds > 0) Thread.sleep(Duration.ofSeconds(intervalDrainSeconds));
             } else {
                 started = Instant.now();
                 Duration duration = loadDuration;
@@ -268,6 +277,7 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
         Map<String, Object> metadata = new java.util.LinkedHashMap<>();
         metadata.put("profile", profile.cliName());
         metadata.put("warmupSeconds", intervalDriver ? warmupSeconds : 0);
+        metadata.put("intervalDrainSeconds", intervalDriver ? intervalDrainSeconds : 0);
         metadata.put("driver", profile == LoadProfile.BURST ? "cron" : intervalDriver ? "interval" : "api");
         metadata.put("diagnostic", seconds != null || diagnosticRate != null);
         metadata.put("chaosSeconds", chaosSeconds);

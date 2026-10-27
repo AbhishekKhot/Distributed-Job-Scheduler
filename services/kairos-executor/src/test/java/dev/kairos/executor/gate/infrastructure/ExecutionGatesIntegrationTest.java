@@ -20,6 +20,7 @@ import dev.kairos.engine.outbox.OutboxWriter;
 import dev.kairos.executor.gate.application.ExecutionContext;
 import dev.kairos.executor.gate.application.ExecutionGateChain;
 import dev.kairos.executor.gate.application.RunClaimPort;
+import dev.kairos.executor.gate.application.RunLockHeldException;
 import dev.kairos.executor.lifecycle.infrastructure.JdbcDrainRequeuer;
 import dev.kairos.http.client.SendContext;
 import dev.kairos.http.client.SendVetoedException;
@@ -146,7 +147,14 @@ class ExecutionGatesIntegrationTest {
                 tasks.add(workers.submit(() -> {
                     ready.countDown();
                     start.await();
-                    processor.process(dispatch);
+                    while (true) {
+                        try {
+                            processor.process(dispatch);
+                            break;
+                        } catch (RunLockHeldException held) {
+                            Thread.sleep(1);
+                        }
+                    }
                     return null;
                 }));
             }
@@ -164,6 +172,9 @@ class ExecutionGatesIntegrationTest {
                                 .count()
                         + METERS.counter(ExecutionGateChain.METRIC, "gate", "fenced_claim", "outcome", "rejected")
                                 .count())
+                .isGreaterThan(0);
+        assertThat(METERS.counter(ExecutionGateChain.METRIC, "gate", "run_lock", "outcome", "held")
+                        .count())
                 .isGreaterThan(0);
     }
 

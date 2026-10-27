@@ -253,6 +253,36 @@ class MockTargetHttpsIntegrationTest {
     }
 
     @Test
+    void idempotentBehaviorSeparatesRedeliveriesFromEffects() throws Exception {
+        String key = UUID.randomUUID().toString();
+        var before = tracker.stats();
+
+        assertThat(request("POST", "/behave/healthy?idempotent=true", key, new byte[0], true, "application/json")
+                        .statusCode())
+                .isEqualTo(200);
+        assertThat(request("POST", "/behave/healthy?idempotent=true", key, new byte[0], true, "application/json")
+                        .statusCode())
+                .isEqualTo(200);
+
+        var after = tracker.stats();
+        assertThat(after.duplicateCalls() - before.duplicateCalls()).isEqualTo(1);
+        assertThat(after.duplicateEffects() - before.duplicateEffects()).isZero();
+        try (var plain = HttpClient.newHttpClient()) {
+            var snapshot = plain.send(
+                    HttpRequest.newBuilder(URI.create("http://localhost:" + managementPort + "/stats/snapshot"))
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(json.readTree(snapshot.body()).path("counts").path(key).asLong())
+                    .isEqualTo(2);
+            assertThat(json.readTree(snapshot.body())
+                            .path("effectCounts")
+                            .path(key)
+                            .asLong())
+                    .isEqualTo(1);
+        }
+    }
+
+    @Test
     void managementRoutesAreAbsentFromTheHttpsTarget() throws Exception {
         assertThat(request("GET", "/stats", UUID.randomUUID().toString(), new byte[0], true, "application/json")
                         .statusCode())
@@ -325,8 +355,9 @@ class MockTargetHttpsIntegrationTest {
         org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
             assertThat(Files.exists(SNAPSHOT)).isTrue();
             var root = json.readTree(SNAPSHOT.toFile());
-            assertThat(root.path("version").asInt()).isEqualTo(1);
+            assertThat(root.path("version").asInt()).isEqualTo(2);
             assertThat(root.path("stats").path("totalCalls").asLong()).isGreaterThan(0);
+            assertThat(root.path("effectCounts").isObject()).isTrue();
         });
     }
 }

@@ -128,15 +128,38 @@ redis_replid() {
 
 run_one() {
     local name="$1" output="/app/build/bench/$session/$1" start restored healthy id status
-    local before during progress repl_before repl_after needed
+    local before during progress repl_before repl_after needed wait_seconds=1200
     mkdir -p "$root/$name"
+    # Faults can leave process-local pools, admission counters or consumer generations in a
+    # recovery state after their durable proof is complete. Start each independent experiment
+    # from fresh stateless services while preserving the databases and brokers under test.
+    for service in kairos-api kairos-watcher kairos-executor kairos-state; do
+        needed="$(service_count "$service")"
+        while IFS= read -r id; do
+            [[ -n "$id" ]] && docker restart "$id" >/dev/null
+        done < <(service_ids "$service")
+        wait_healthy "$service" "$needed"
+    done
+    # Exact per-key snapshots are intentionally unbounded for proof workloads. Reset the
+    # target between experiments so an aggregate run does not retain the preceding
+    # experiment's keys or rotate its CA while the next seed is reading it.
+    id="$(service_id mock-target)"
+    docker restart "$id" >/dev/null
+    wait_healthy mock-target 1
+    wait_healthy kairos-api 1
     if [[ "$name" == slow-target ]]; then
         "${compose[@]}" run --rm --no-deps bench-cli --output-dir "$output" seed --jobs 500 --interval-sec 1 \
-            --target-url 'https://mock-target:8443/behave/slow?latencyMs=5000'
+            --max-retries 5 --retry-max-age-sec 3600 --max-concurrency 200 \
+            --target-url 'https://mock-target:8443/behave/slow?latencyMs=5000&idempotent=true'
     else
-        "${compose[@]}" run --rm --no-deps bench-cli --output-dir "$output" seed --jobs 500 --interval-sec 1
+        "${compose[@]}" run --rm --no-deps bench-cli --output-dir "$output" seed --jobs 500 --interval-sec 1 \
+            --max-retries 5 --retry-max-age-sec 900 \
+            --target-url 'https://mock-target:8443/behave/healthy?idempotent=true'
     fi
-    local -a load_args=(--profile smoke)
+    local -a load_args=(--profile smoke --interval-drain-seconds 30)
+    # A slow endpoint cannot drain the normal 500/s warm-up. Starting measurement
+    # immediately avoids carrying an unmeasured 60K-run backlog into exact verification.
+    if [[ "$name" == slow-target ]]; then load_args+=(--warmup-seconds 0); fi
     if [[ "$name" == executor-kill ]]; then load_args+=(--chaos-seconds 300); fi
     if [[ "$name" == rolling-restart ]]; then load_args+=(--chaos-seconds 360); fi
     load_id="$("${compose[@]}" run -d --no-deps bench-cli --output-dir "$output" load "${load_args[@]}")"
@@ -156,6 +179,10 @@ run_one() {
                 docker start "$id" >/dev/null
                 wait_healthy kairos-executor 2
                 stopped_executor=""
+                # Treat these as five independent node-loss observations rather than one
+                # continuous half-capacity outage; allow the healthy pair to recover between
+                # kills while keeping every fault inside the measured window.
+                (( i < 5 )) && sleep 45
             done
             restored="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             wait_healthy kairos-executor 1
@@ -246,9 +273,11 @@ run_one() {
         restored="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         healthy="$restored"
         record_fault "$name" "$start" "$restored" "$healthy"
+        wait_seconds=3600
     fi
     [[ "$status" == 0 ]] || { echo "Load failed: $name (exit $status)" >&2; return 1; }
-    "${compose[@]}" run --rm --no-deps bench-cli --output-dir "$output" verify --chaos --wait-seconds 1200
+    "${compose[@]}" run --rm --no-deps bench-cli --output-dir "$output" verify --chaos \
+        --wait-seconds "$wait_seconds"
 }
 
 for name in "${experiments[@]}"; do

@@ -48,6 +48,9 @@ class BenchCommandTest {
         assertThat(VerifyCommand.counts(BenchFiles.JSON.readTree("{\"counts\":{\"a\":2,\"b\":1}}")))
                 .containsEntry("a", 2L)
                 .containsEntry("b", 1L);
+        assertThat(VerifyCommand.effectCounts(
+                        BenchFiles.JSON.readTree("{\"counts\":{\"a\":2},\"effectCounts\":{\"a\":1}}")))
+                .containsEntry("a", 1L);
     }
 
     @Test
@@ -66,11 +69,25 @@ class BenchCommandTest {
                             "3",
                             "--interval-sec",
                             "86400",
+                            "--max-retries",
+                            "5",
+                            "--max-concurrency",
+                            "321",
+                            "--retry-max-age-sec",
+                            "900",
                             "--management-url",
                             root);
             assertThat(seed).isZero();
             BenchFiles files = new BenchFiles(directory);
             assertThat(files.read("session.json").path("reusableJobs").size()).isEqualTo(3);
+            assertThat(api.endpointRequests()).singleElement().satisfies(endpoint -> {
+                assertThat(endpoint.path("retryPolicy").path("maxRetries").asInt())
+                        .isEqualTo(5);
+                assertThat(endpoint.path("retryPolicy").path("maxAgeSec").asInt())
+                        .isEqualTo(900);
+                assertThat(endpoint.path("limits").path("maxConcurrency").asInt())
+                        .isEqualTo(321);
+            });
             assertThat(paths)
                     .contains(
                             "/v1/auth/signup",
@@ -151,6 +168,8 @@ class BenchCommandTest {
     private static final class FakeApi implements AutoCloseable {
         private final HttpServer server;
         private final List<String> paths;
+        private final List<tools.jackson.databind.JsonNode> endpointRequests =
+                java.util.Collections.synchronizedList(new ArrayList<>());
 
         FakeApi(List<String> paths) throws IOException {
             this.paths = paths;
@@ -164,9 +183,16 @@ class BenchCommandTest {
             return "http://127.0.0.1:" + server.getAddress().getPort();
         }
 
+        List<tools.jackson.databind.JsonNode> endpointRequests() {
+            return endpointRequests;
+        }
+
         private void respond(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
             paths.add(path);
+            if (path.equals("/v1/endpoints")) {
+                endpointRequests.add(BenchFiles.JSON.readTree(exchange.getRequestBody()));
+            }
             byte[] body;
             int status = 200;
             if (path.equals("/ca.pem")) {
