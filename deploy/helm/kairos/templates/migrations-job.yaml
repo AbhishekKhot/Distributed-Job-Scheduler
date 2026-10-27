@@ -1,0 +1,72 @@
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "kairos.fullname" . }}-migrations
+  labels:
+    {{- include "kairos.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "kairos.selectorLabels" (dict "root" . "component" "migrations") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "kairos.serviceAccountName" (dict "root" . "component" "migrations") }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrations
+          image: {{ include "kairos.image" (dict "root" . "component" "migrations") | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          {{- if not .Values.ownerSecrets.csi.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ include "kairos.ownerSecretName" . }}
+          {{- else }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              export KAIROS_DB_PASSWORD="$(cat /var/run/secrets/kairos-owner/KAIROS_DB_PASSWORD)"
+              exec java org.springframework.boot.loader.launch.JarLauncher
+          {{- end }}
+          env:
+            {{- if .Values.connections.springProfilesActive }}
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.connections.springProfilesActive | quote }}
+            {{- end }}
+            - name: KAIROS_CONTROL_DB_URL
+              value: {{ .Values.connections.controlDatabaseUrl | quote }}
+            {{- range $index, $url := .Values.connections.cellDatabaseUrls }}
+            - name: {{ printf "KAIROS_CELL_%d_DB_URL" $index }}
+              value: {{ $url | quote }}
+            {{- end }}
+            - name: KAIROS_DB_USERNAME
+              value: {{ .Values.connections.ownerDatabaseUsername | quote }}
+            - name: KAIROS_KEK_URI
+              value: {{ .Values.connections.kekUri | quote }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: owner-secrets
+              mountPath: /var/run/secrets/kairos-owner
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- include "kairos.ownerSecretVolume" . | nindent 8 }}
+{{- end }}
