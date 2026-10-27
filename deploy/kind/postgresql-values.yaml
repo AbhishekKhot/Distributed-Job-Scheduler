@@ -1,0 +1,31 @@
+fullnameOverride: postgres
+
+image:
+  registry: registry-1.docker.io
+  repository: bitnami/postgresql
+  tag: latest
+  digest: sha256:9834b9d958f73a6c79457af08ebdbb8651fcb51e5efbad22b96636637316c26e
+
+architecture: standalone
+
+auth:
+  enablePostgresUser: true
+  existingSecret: kairos-postgres
+  usePasswordFiles: true
+
+primary:
+  initdb:
+    scriptsConfigMap: kairos-postgres-init
+  extraEnvVarsSecret: kairos-postgres-init-credentials
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+metrics:
+  enabled: false

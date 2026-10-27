@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kairos-kafka-topics
+  namespace: kairos
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: topics
+          image: apache/kafka:4.3.1@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837
+          command: ["/bin/bash", "-ec"]
+          args:
+            - |
+              hour=3600000
+              day=$((24 * hour))
+              create() {
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+                  --create --if-not-exists --topic "$1" --partitions "$2" \
+                  --replication-factor 1 --config "retention.ms=$3" \
+                  --config min.insync.replicas=1
+              }
+              create kairos.run.high 24 "$day"
+              create kairos.run.medium 48 "$day"
+              create kairos.run.low 24 "$day"
+              create kairos.run.result 48 "$day"
+              create kairos.run.cancel 6 "$hour"
+              create kairos.run.completed 12 "$((3 * day))"
+              create kairos.run.dead 6 "$((14 * day))"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi

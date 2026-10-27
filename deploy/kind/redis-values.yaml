@@ -1,0 +1,33 @@
+fullnameOverride: redis
+
+image:
+  registry: registry-1.docker.io
+  repository: bitnami/redis
+  tag: latest
+  digest: sha256:37c559e3894161f1b1122353a54938e30299383ae801417debda7d3e7d69490a
+
+architecture: standalone
+
+auth:
+  enabled: true
+  existingSecret: kairos-redis
+  existingSecretPasswordKey: redis-password
+  usePasswordFiles: true
+
+commonConfiguration: |-
+  appendonly no
+  save ""
+
+master:
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+metrics:
+  enabled: false
