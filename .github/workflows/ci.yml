@@ -1,0 +1,256 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HELM_IMAGE: alpine/helm:3.17.3@sha256:d899e6316789fec04ee95300a18e454b7942539cbb3d89bde3e0655d6ca2e895
+  KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.7.0@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
+  PYTHON_IMAGE: python:3.13.2-alpine3.21@sha256:323a717dc4a010fee21e3f1aac738ee10bb485de4e7593ce242b36ee48d6b352
+  TRIVY_IMAGE: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+  SYFT_IMAGE: anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a
+  TERRAFORM_IMAGE: hashicorp/terraform:1.14.6@sha256:47767069b0be3969e5dfaf1c5b01030ce4510002dec43b68380ba7c0799c7f31
+  TFLINT_IMAGE: ghcr.io/terraform-linters/tflint:v0.64.0@sha256:1c595f42d794c32c45a6ea8b58655fd66433d4ca3b1bc631c574a48d120bd19f
+
+jobs:
+  build:
+    name: Build and quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build with strict Gradle dependency verification
+        run: make build GRADLE_ARGS="--no-daemon --console=plain --dependency-verification=strict"
+
+  test:
+    name: Integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Run all checks with Testcontainers
+        run: make test GRADLE_ARGS="--no-daemon --console=plain --dependency-verification=strict"
+
+  openapi:
+    name: OpenAPI export diff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - name: Check out head revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          path: head
+      - name: Check out comparison revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ env.BASE_SHA }}
+          path: base
+      - name: Export base and head OpenAPI documents
+        run: |
+          make -C base gradle ARGS=:services:kairos-api:openApiExport
+          make -C head gradle ARGS=:services:kairos-api:openApiExport
+      - name: Normalize and compare OpenAPI documents
+        run: |
+          mkdir -p head/build/ci-openapi
+          python3 -m json.tool base/services/kairos-api/build/openapi/kairos-v1.json \
+            > head/build/ci-openapi/base.json
+          python3 -m json.tool head/services/kairos-api/build/openapi/kairos-v1.json \
+            > head/build/ci-openapi/head.json
+          status=0
+          diff -u head/build/ci-openapi/base.json head/build/ci-openapi/head.json \
+            > head/build/ci-openapi/openapi.diff || status=$?
+          test "$status" -le 1
+          if test -s head/build/ci-openapi/openapi.diff; then
+            cat head/build/ci-openapi/openapi.diff
+          else
+            echo "OpenAPI document is unchanged."
+          fi
+      - name: Upload OpenAPI document and diff
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: openapi-diff
+          path: head/build/ci-openapi/
+          if-no-files-found: error
+          retention-days: 14
+
+  images:
+    name: Images, vulnerability scan, and SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build every Kairos image
+        run: make images
+      - name: Scan fixable high and critical vulnerabilities
+        run: |
+          images=(
+            kairos/kairos-api:dev
+            kairos/kairos-watcher:dev
+            kairos/kairos-executor:dev
+            kairos/kairos-state:dev
+            kairos/kairos-migrations:dev
+            kairos/kairos-maintenance:dev
+            kairos/mock-target:dev
+            kairos/bench-cli:dev
+          )
+          for image in "${images[@]}"; do
+            docker run --rm \
+              --volume /var/run/docker.sock:/var/run/docker.sock \
+              --volume kairos-trivy-cache:/root/.cache/trivy \
+              "$TRIVY_IMAGE" image \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              --exit-code 1 \
+              "$image"
+          done
+      - name: Generate SPDX SBOMs
+        run: |
+          mkdir -p build/sbom
+          images=(
+            kairos/kairos-api:dev
+            kairos/kairos-watcher:dev
+            kairos/kairos-executor:dev
+            kairos/kairos-state:dev
+            kairos/kairos-migrations:dev
+            kairos/kairos-maintenance:dev
+            kairos/mock-target:dev
+            kairos/bench-cli:dev
+          )
+          for image in "${images[@]}"; do
+            name="${image#kairos/}"
+            name="${name%:dev}"
+            docker run --rm \
+              --volume /var/run/docker.sock:/var/run/docker.sock \
+              --volume "$PWD/build/sbom:/out" \
+              "$SYFT_IMAGE" "$image" \
+              --output "spdx-json=/out/${name}.spdx.json"
+          done
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image-sboms
+          path: build/sbom/*.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  helm:
+    name: Helm lint and manifest policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Lint chart and values overlays
+        run: |
+          for values in "" values-kind.yaml values-gke.yaml; do
+            args=()
+            if test -n "$values"; then
+              args=(-f "deploy/helm/kairos/$values")
+            fi
+            docker run --rm --volume "$PWD:/work" --workdir /work \
+              "$HELM_IMAGE" lint deploy/helm/kairos "${args[@]}"
+          done
+      - name: Render chart variants
+        run: |
+          mkdir -p build/helm
+          docker run --rm --volume "$PWD:/work" --workdir /work \
+            "$HELM_IMAGE" template kairos deploy/helm/kairos \
+            > build/helm/default.yaml
+          docker run --rm --volume "$PWD:/work" --workdir /work \
+            "$HELM_IMAGE" template kairos deploy/helm/kairos \
+            -f deploy/helm/kairos/values-kind.yaml \
+            > build/helm/kind.yaml
+          docker run --rm --volume "$PWD:/work" --workdir /work \
+            "$HELM_IMAGE" template kairos deploy/helm/kairos \
+            -f deploy/helm/kairos/values-gke.yaml \
+            > build/helm/gke.yaml
+          docker run --rm --volume "$PWD:/work" --workdir /work \
+            "$HELM_IMAGE" template kairos deploy/helm/kairos \
+            -f deploy/helm/kairos/values-gke.yaml \
+            --set operatorSession.enabled=true \
+            > build/helm/gke-operator.yaml
+      - name: Validate Kubernetes schemas
+        run: |
+          docker run --rm --volume "$PWD:/work:ro" "$KUBECONFORM_IMAGE" \
+            -strict -summary -ignore-missing-schemas \
+            /work/build/helm/default.yaml \
+            /work/build/helm/kind.yaml \
+            /work/build/helm/gke.yaml \
+            /work/build/helm/gke-operator.yaml
+      - name: Enforce rendered workload policy
+        run: |
+          docker run --rm --volume "$PWD:/work:ro" --workdir /work \
+            "$PYTHON_IMAGE" sh -ec '
+              pip install --quiet --disable-pip-version-check PyYAML==6.0.2
+              for manifest in build/helm/*.yaml; do
+                python deploy/helm/kairos/tests/policy.py < "$manifest"
+              done
+            '
+
+  terraform:
+    name: Terraform validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Detect Terraform configuration
+        id: terraform
+        run: |
+          if find deploy/terraform -name '*.tf' -print -quit 2>/dev/null | grep -q .; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "T-402 has not added deploy/terraform yet; validation is dormant."
+          fi
+      - name: Check formatting, initialize, validate, and plan
+        if: steps.terraform.outputs.present == 'true'
+        run: |
+          test -f deploy/terraform/ci.tfvars
+          docker run --rm --volume "$PWD:/work" --workdir /work/deploy/terraform \
+            "$TERRAFORM_IMAGE" fmt -check -recursive
+          docker run --rm --volume "$PWD:/work" --workdir /work/deploy/terraform \
+            "$TERRAFORM_IMAGE" init -backend=false -input=false
+          docker run --rm --volume "$PWD:/work" --workdir /work/deploy/terraform \
+            "$TERRAFORM_IMAGE" validate
+          docker run --rm --volume "$PWD:/work" --workdir /work/deploy/terraform \
+            --env GOOGLE_OAUTH_ACCESS_TOKEN=kairos-ci-offline \
+            "$TERRAFORM_IMAGE" plan -input=false -lock=false -refresh=false \
+            -var-file=ci.tfvars -out=/tmp/kairos-ci.tfplan
+      - name: Run TFLint
+        if: steps.terraform.outputs.present == 'true'
+        run: |
+          docker run --rm --volume "$PWD:/data" --workdir /data/deploy/terraform \
+            "$TFLINT_IMAGE" --init
+          docker run --rm --volume "$PWD:/data" --workdir /data/deploy/terraform \
+            "$TFLINT_IMAGE" --recursive
