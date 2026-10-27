@@ -28,27 +28,28 @@ class ChaosReportTest {
             fault.put("cell1FinalizedDuringFault", 10);
             part.write("fault.json", fault);
             Map<String, Object> verification = new java.util.HashMap<>(Map.of(
-                            "passed",
-                            true,
-                            "chaos",
-                            true,
-                            "diagnostic",
-                            false,
-                            "profile",
-                            "smoke",
-                            "duplicates",
-                            0,
-                            "missingRuns",
-                            0,
-                            "trackingComplete",
-                            true,
-                            "faultAffectedRuns",
-                            50,
-                            "deliveryRecoverySeconds",
-                            5,
-                            "scheduleLagP99Ms",
-                            40_000));
+                    "passed",
+                    true,
+                    "chaos",
+                    true,
+                    "diagnostic",
+                    false,
+                    "profile",
+                    "smoke",
+                    "duplicates",
+                    0,
+                    "missingRuns",
+                    0,
+                    "trackingComplete",
+                    true,
+                    "faultAffectedRuns",
+                    50,
+                    "deliveryRecoverySeconds",
+                    5,
+                    "scheduleLagP99Ms",
+                    40_000));
             verification.put("faultMaxLagSeconds", 5);
+            verification.put("redeliveries", experiment.equals("executor-kill") ? 3 : 0);
             part.write("verification.json", verification);
         }
         assertThat(new CommandLine(new BenchCommand())
@@ -56,6 +57,12 @@ class ChaosReportTest {
                 .isZero();
         assertThat(files.read("chaos.json").path("passed").asBoolean()).isTrue();
         assertThat(files.read("chaos.json").path("experiments").size()).isEqualTo(7);
+        assertThat(files.read("chaos.json")
+                        .path("experiments")
+                        .get(0)
+                        .path("redeliveries")
+                        .asLong())
+                .isEqualTo(3);
 
         new BenchFiles(directory.resolve("cell-pause"))
                 .write(

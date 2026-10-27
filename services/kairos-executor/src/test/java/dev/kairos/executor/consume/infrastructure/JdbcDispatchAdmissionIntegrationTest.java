@@ -107,6 +107,29 @@ class JdbcDispatchAdmissionIntegrationTest {
         admission.release(first);
     }
 
+    @Test
+    void limitsAreCachedAcrossAnAdmissionBurst() {
+        UUID team = TestIds.teamId().value();
+        UUID endpoint = TestIds.endpointId().value();
+        seedLimits(team, endpoint, 1, 10);
+        Dispatch first = dispatch(team, endpoint, 4);
+        Dispatch second = dispatch(team, endpoint, 4);
+        seed(first);
+        seed(second);
+        LocalDispatchLimiter limiter = new LocalDispatchLimiter();
+        JdbcDispatchAdmission admission = admission(limiter);
+
+        assertThat(admission.acquireOrDefer(first)).isTrue();
+        control.sql("UPDATE scheduler.teams SET quotas = CAST(:quotas AS jsonb) WHERE team_id = :id")
+                .param("id", team)
+                .param("quotas", "{\"maxInflight\":2}")
+                .update();
+
+        assertThat(admission.acquireOrDefer(second)).isFalse();
+        assertDeferred(second);
+        admission.release(first);
+    }
+
     private static JdbcDispatchAdmission admission(LocalDispatchLimiter limiter) {
         return new JdbcDispatchAdmission(
                 control,

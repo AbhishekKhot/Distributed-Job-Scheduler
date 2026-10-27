@@ -85,6 +85,8 @@ It is sized for **20K executions/s sustained and 50K/s at peak**, with a p99 sta
 
 **Unknown outcomes.** If an executor dies, the watcher's lease sweeper checks the run 30s after its lease ends. Without a sent marker the run is safely re-queued. With a marker, the outcome is unknown, and the endpoint's `unknownOutcomePolicy` decides: `RETRY_WITH_IDEMPOTENCY_KEY` (default) or `REVIEW` (dead-letter for a person to decide). Timeouts and connections dropped after sending are treated the same way.
 
+The scheduler cannot promise exactly-once effects after an unknown outcome: the first request may have reached the target even though Kairos did not receive or settle its result. A retry therefore reuses the run id as `Idempotency-Key`; targets that choose the retry policy must deduplicate effects by that key. Resilience reports distinguish repeated HTTP deliveries from duplicate effects and require zero duplicate effects.
+
 If Redis is down, executors stop calling targets (fail closed); work waits in Kafka and the outbox.
 
 ## 7. Teams and access

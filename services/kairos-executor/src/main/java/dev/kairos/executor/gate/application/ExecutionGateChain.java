@@ -63,7 +63,11 @@ public final class ExecutionGateChain {
             try {
                 decision = gate.apply(context);
             } catch (Exception failure) {
-                record(gate.name(), failure instanceof SendVetoedException ? "vetoed" : "unavailable");
+                record(
+                        gate.name(),
+                        failure instanceof RunLockHeldException
+                                ? "held"
+                                : failure instanceof SendVetoedException ? "vetoed" : "unavailable");
                 throw failure;
             }
             record(gate.name(), decision == GateResult.CONTINUE ? "passed" : "rejected");

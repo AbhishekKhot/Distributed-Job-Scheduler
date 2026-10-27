@@ -44,8 +44,8 @@ final class ChaosReport {
         StringBuilder markdown = new StringBuilder("# T-305 resilience and duplicate execution proof\n\n");
         markdown.append("Result: **").append(passed ? "PASS" : "FAIL").append("**\n\n");
         markdown.append(
-                "| Experiment | Result | Duplicates | Missing runs | Readiness (s) | Latest delivery (s) | Max fault lag (s) | Limit (s) |\n");
-        markdown.append("|---|---|---:|---:|---:|---:|---:|---:|\n");
+                "| Experiment | Result | Duplicate effects | Redeliveries | Missing runs | Readiness (s) | Latest delivery (s) | Max fault lag (s) | Limit (s) |\n");
+        markdown.append("|---|---|---:|---:|---:|---:|---:|---:|---:|\n");
         for (Map<String, Object> row : experiments) {
             markdown.append("| ")
                     .append(row.get("name"))
@@ -53,6 +53,8 @@ final class ChaosReport {
                     .append(Boolean.TRUE.equals(row.get("passed")) ? "PASS" : "FAIL")
                     .append(" | ")
                     .append(row.getOrDefault("duplicates", "—"))
+                    .append(" | ")
+                    .append(row.getOrDefault("redeliveries", "—"))
                     .append(" | ")
                     .append(row.getOrDefault("missingRuns", "—"))
                     .append(" | ")
@@ -66,8 +68,10 @@ final class ChaosReport {
                     .append(" |\n");
         }
         markdown.append("\nReadiness is measured from fault restoration to service health. ")
-                .append("Latest delivery is the latest start of a run due during the fault, measured from restoration. ")
-                .append("The 20-second HLD node target applies to maximum start lag during executor and watcher faults.\n");
+                .append(
+                        "Latest delivery is the latest start of a run due during the fault, measured from restoration. ")
+                .append(
+                        "The 20-second HLD node target applies to maximum start lag during executor and watcher faults.\n");
         files.writeText("chaos.md", markdown.toString());
         System.out.println("T-305 chaos: " + (passed ? "PASS" : "FAIL") + "; " + files.path("chaos.md"));
         return passed ? 0 : 1;
@@ -129,6 +133,7 @@ final class ChaosReport {
         row.put("recoverySeconds", recovery);
         row.put("recoveryLimitSeconds", limit);
         row.put("duplicates", verification.path("duplicates").asLong());
+        row.put("redeliveries", verification.path("redeliveries").asLong());
         row.put("missingRuns", verification.path("missingRuns").asLong());
         row.put("scheduleLagP99Ms", verification.path("scheduleLagP99Ms").asDouble());
         row.put("faultAffectedRuns", verification.path("faultAffectedRuns").asLong());

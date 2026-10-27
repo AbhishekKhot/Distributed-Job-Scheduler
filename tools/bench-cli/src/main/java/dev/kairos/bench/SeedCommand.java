@@ -43,9 +43,31 @@ final class SeedCommand implements Callable<Integer> {
     @CommandLine.Option(names = "--management-url", defaultValue = "http://mock-target:8081")
     String managementUrl;
 
+    @CommandLine.Option(names = "--max-retries", defaultValue = "0", description = "Endpoint retry limit")
+    int maxRetries;
+
+    @CommandLine.Option(names = "--max-concurrency", defaultValue = "10000", description = "Endpoint concurrency limit")
+    int maxConcurrency;
+
+    @CommandLine.Option(
+            names = "--retry-max-age-sec",
+            defaultValue = "60",
+            description = "Endpoint retry-series maximum age")
+    int retryMaxAgeSec;
+
     @Override
     public Integer call() throws Exception {
-        if (jobs < 0 || cronPercent < 0 || cronPercent > 100 || intervalSec < 1 || intervalSec > 31_622_400) {
+        if (jobs < 0
+                || cronPercent < 0
+                || cronPercent > 100
+                || intervalSec < 1
+                || intervalSec > 31_622_400
+                || maxRetries < 0
+                || maxRetries > 20
+                || maxConcurrency < 1
+                || maxConcurrency > 10_000
+                || retryMaxAgeSec < 60
+                || retryMaxAgeSec > 604_800) {
             throw new IllegalArgumentException("Invalid job count, cron percent or interval");
         }
         if (jobs == 50_000 && cronPercent == 100 && burstAt == null) {
@@ -102,12 +124,17 @@ final class SeedCommand implements Callable<Integer> {
         endpointBody.put(
                 "retryPolicy",
                 Map.of(
-                        "maxRetries", 0,
-                        "strategy", "FIXED",
-                        "baseDelaySec", 1,
-                        "maxDelaySec", 1,
-                        "maxAgeSec", 60));
-        endpointBody.put("limits", Map.of("maxConcurrency", 10_000, "ratePerSec", 0));
+                        "maxRetries",
+                        maxRetries,
+                        "strategy",
+                        "FIXED",
+                        "baseDelaySec",
+                        1,
+                        "maxDelaySec",
+                        1,
+                        "maxAgeSec",
+                        retryMaxAgeSec));
+        endpointBody.put("limits", Map.of("maxConcurrency", maxConcurrency, "ratePerSec", 0));
         api.post("v1/endpoints", endpointBody, apiKey, false);
         Map<String, Object> session = new LinkedHashMap<>();
         session.put("createdAt", Instant.now().toString());

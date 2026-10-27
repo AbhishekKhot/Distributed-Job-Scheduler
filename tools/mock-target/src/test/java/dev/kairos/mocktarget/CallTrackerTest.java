@@ -2,6 +2,7 @@ package dev.kairos.mocktarget;
 
 import static org.assertj.core.api.Assertions.*;
 
+import dev.kairos.mocktarget.behavior.application.CallTracker;
 import dev.kairos.mocktarget.behavior.infrastructure.InMemoryCallTracker;
 import dev.kairos.mocktarget.behavior.infrastructure.SnapshotWriter;
 import java.nio.file.Files;
@@ -33,8 +34,23 @@ class CallTrackerTest {
         assertThat(stats.uniqueKeys()).isEqualTo(500);
         assertThat(stats.duplicateKeys()).isEqualTo(500);
         assertThat(stats.duplicateCalls()).isEqualTo(9500);
+        assertThat(stats.duplicateEffects()).isEqualTo(9500);
         assertThat(stats.trackingComplete()).isTrue();
         assertThat(tracker.snapshot().counts().values()).allMatch(count -> count == 20);
+        assertThat(tracker.snapshot().effectCounts().values()).allMatch(count -> count == 20);
+    }
+
+    @Test
+    void idempotentCallsTrackRedeliveryWithoutRepeatingTheEffect() {
+        var tracker = new InMemoryCallTracker(10, Clock.systemUTC());
+
+        assertThat(tracker.record("run", true, true)).isEqualTo(CallTracker.RecordResult.FIRST);
+        assertThat(tracker.record("run", true, true)).isEqualTo(CallTracker.RecordResult.DUPLICATE);
+
+        assertThat(tracker.stats().duplicateCalls()).isEqualTo(1);
+        assertThat(tracker.stats().duplicateEffects()).isZero();
+        assertThat(tracker.snapshot().counts()).containsEntry("run", 2L);
+        assertThat(tracker.snapshot().effectCounts()).containsEntry("run", 1L);
     }
 
     @Test
@@ -47,6 +63,7 @@ class CallTrackerTest {
         assertThat(tracker.stats().trackingComplete()).isFalse();
         assertThat(tracker.stats().duplicateCalls()).isEqualTo(1);
         assertThat(tracker.snapshot().counts()).containsOnlyKeys("first");
+        assertThat(tracker.snapshot().effectCounts()).containsOnlyKeys("first");
     }
 
     @Test
@@ -74,6 +91,7 @@ class CallTrackerTest {
                                 .sum())
                         .isEqualTo(snapshot.stats().totalCalls());
                 assertThat(snapshot.counts().size()).isEqualTo(snapshot.stats().uniqueKeys());
+                assertThat(snapshot.effectCounts()).isEqualTo(snapshot.counts());
             }
             writer.get();
         }
@@ -89,10 +107,11 @@ class CallTrackerTest {
         tracker.record("first", true);
         writer.write();
         var json = JsonMapper.builder().build().readTree(path.toFile());
-        assertThat(json.path("version").asInt()).isEqualTo(1);
+        assertThat(json.path("version").asInt()).isEqualTo(2);
         assertThat(json.path("counts").path("first").asLong()).isEqualTo(2);
         assertThat(json.path("stats").path("instanceId").asString())
                 .isEqualTo(tracker.stats().instanceId());
+        assertThat(json.path("effectCounts").path("first").asLong()).isEqualTo(2);
         try (var files = Files.list(path.getParent())) {
             assertThat(files.count()).isEqualTo(1);
         }

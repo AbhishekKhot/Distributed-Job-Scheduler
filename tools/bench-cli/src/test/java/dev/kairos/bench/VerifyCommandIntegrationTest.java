@@ -25,7 +25,7 @@ class VerifyCommandIntegrationTest {
     Path directory;
 
     @Test
-    void matchesCellHistoryToTargetAndRejectsACrossReplicaDuplicate(KairosPostgres postgres) throws Exception {
+    void usesFirstStartAndSeparatesRedeliveriesFromDuplicateEffects(KairosPostgres postgres) throws Exception {
         for (int cell = 0; cell < 2; cell++) createTables(postgres.cellOwnerDataSource(cell));
         UUID team = UUID.randomUUID();
         UUID run = UUID.randomUUID();
@@ -36,19 +36,26 @@ class VerifyCommandIntegrationTest {
         try (Connection connection = postgres.cellOwnerDataSource(0).getConnection();
                 var insert = connection.prepareStatement("INSERT INTO scheduler.run_history "
                         + "(run_id, definition_id, team_id, outcome, final, scheduled_at, started_at) "
-                        + "VALUES (?, ?, ?, 1, true, ?, ?)")) {
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?)")) {
             insert.setObject(1, run);
             insert.setObject(2, job);
             insert.setObject(3, team);
-            insert.setTimestamp(4, Timestamp.from(scheduled));
-            insert.setTimestamp(5, Timestamp.from(scheduled.plusMillis(150)));
+            insert.setInt(4, 7);
+            insert.setBoolean(5, false);
+            insert.setTimestamp(6, Timestamp.from(scheduled));
+            insert.setTimestamp(7, Timestamp.from(scheduled.plusMillis(50)));
+            insert.executeUpdate();
+            insert.setInt(4, 1);
+            insert.setBoolean(5, true);
+            insert.setTimestamp(7, Timestamp.from(scheduled.plusMillis(150)));
             insert.executeUpdate();
         }
         AtomicLong targetCount = new AtomicLong(1);
+        AtomicLong effectCount = new AtomicLong(1);
         HttpServer target = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         target.createContext("/stats/snapshot", exchange -> {
             byte[] response = BenchFiles.JSON.writeValueAsBytes(Map.of(
-                    "version", 1,
+                    "version", 2,
                     "stats",
                             Map.of(
                                     "instanceId",
@@ -59,7 +66,8 @@ class VerifyCommandIntegrationTest {
                                     0,
                                     "capacityRejected",
                                     0),
-                    "counts", Map.of(run.toString(), targetCount.get())));
+                    "counts", Map.of(run.toString(), targetCount.get()),
+                    "effectCounts", Map.of(run.toString(), effectCount.get())));
             exchange.sendResponseHeaders(200, response.length);
             try (var stream = exchange.getResponseBody()) {
                 stream.write(response);
@@ -96,7 +104,7 @@ class VerifyCommandIntegrationTest {
             files.write(
                     "baseline.json",
                     List.of(Map.of(
-                            "version", 1,
+                            "version", 2,
                             "stats",
                                     Map.of(
                                             "instanceId",
@@ -107,7 +115,8 @@ class VerifyCommandIntegrationTest {
                                             0,
                                             "capacityRejected",
                                             0),
-                            "counts", Map.of())));
+                            "counts", Map.of(),
+                            "effectCounts", Map.of())));
             files.writeText("expected.ndjson", "RUN " + run + "\n");
             BenchCommand parent = new BenchCommand();
             parent.outputDir = directory;
@@ -122,8 +131,14 @@ class VerifyCommandIntegrationTest {
             assertThat(files.read("verification.json").path("passed").asBoolean())
                     .isTrue();
             assertThat(files.read("verification.json").path("scheduleLagP99Ms").asDouble())
-                    .isEqualTo(150);
+                    .isEqualTo(50);
             targetCount.set(2);
+            assertThat(verify.call()).isZero();
+            assertThat(files.read("verification.json").path("redeliveries").asLong())
+                    .isEqualTo(1);
+            assertThat(files.read("verification.json").path("duplicates").asLong())
+                    .isZero();
+            effectCount.set(2);
             assertThat(verify.call()).isEqualTo(1);
             assertThat(files.read("verification.json").path("duplicates").asLong())
                     .isEqualTo(1);

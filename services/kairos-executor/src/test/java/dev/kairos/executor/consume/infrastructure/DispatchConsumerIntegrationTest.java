@@ -199,13 +199,59 @@ class DispatchConsumerIntegrationTest {
         }
     }
 
+    @Test
+    void retryReleasesAdmissionBeforeBackingOffAndReacquiresForTheNextAttempt() throws Exception {
+        String groupPrefix = groupPrefix();
+        Dispatch dispatch = dispatch(
+                TestIds.runId(11),
+                TestIds.teamId().value(),
+                TestIds.endpointId().value(),
+                TestIds.jobId(11).value());
+        UUID targetRun = uuid(dispatch.getRunId());
+        publish(List.of(dispatch));
+        AtomicInteger attempts = new AtomicInteger();
+        AtomicInteger acquisitions = new AtomicInteger();
+        AtomicInteger releases = new AtomicInteger();
+        CountDownLatch firstRelease = new CountDownLatch(1);
+        CountDownLatch completed = new CountDownLatch(1);
+        DispatchAdmission admission = new DispatchAdmission() {
+            @Override
+            public boolean acquireOrDefer(Dispatch candidate) {
+                if (uuid(candidate.getRunId()).equals(targetRun)) acquisitions.incrementAndGet();
+                return true;
+            }
+
+            @Override
+            public void release(Dispatch candidate) {
+                if (uuid(candidate.getRunId()).equals(targetRun) && releases.incrementAndGet() == 1)
+                    firstRelease.countDown();
+            }
+        };
+        DispatchProcessor processor = candidate -> {
+            if (!uuid(candidate.getRunId()).equals(targetRun)) return;
+            if (attempts.incrementAndGet() == 1) throw new IllegalStateException("transient database failure");
+            completed.countDown();
+        };
+        DispatchCapacity capacity = new DispatchCapacity(CAPACITY);
+        DispatchConsumerRunner runner = runner(groupPrefix, processor, admission, capacity);
+
+        runner.start();
+        try {
+            assertThat(firstRelease.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(completed.await(10, TimeUnit.SECONDS)).isTrue();
+            await(() -> releases.get() == 2, WAIT);
+            assertThat(attempts).hasValue(2);
+            assertThat(acquisitions).hasValue(2);
+            assertThat(releases).hasValue(2);
+        } finally {
+            runner.stop();
+            runner.join(Duration.ofSeconds(30));
+        }
+    }
+
     private DispatchConsumerRunner runner(String groupPrefix, DispatchProcessor processor, DispatchCapacity capacity) {
-        ExecutorConsumerProperties properties =
-                new ExecutorConsumerProperties(CAPACITY, 3_000, Duration.ofSeconds(1), Duration.ofMillis(100));
-        return new DispatchConsumerRunner(
-                DispatchTier.HIGH,
+        return runner(
                 groupPrefix,
-                factory,
                 processor,
                 new DispatchAdmission() {
                     @Override
@@ -216,6 +262,19 @@ class DispatchConsumerIntegrationTest {
                     @Override
                     public void release(Dispatch dispatch) {}
                 },
+                capacity);
+    }
+
+    private DispatchConsumerRunner runner(
+            String groupPrefix, DispatchProcessor processor, DispatchAdmission admission, DispatchCapacity capacity) {
+        ExecutorConsumerProperties properties =
+                new ExecutorConsumerProperties(CAPACITY, 3_000, Duration.ofSeconds(1), Duration.ofMillis(100));
+        return new DispatchConsumerRunner(
+                DispatchTier.HIGH,
+                groupPrefix,
+                factory,
+                processor,
+                admission,
                 new PoisonMessages(meters),
                 capacity,
                 new PartitionFlowControl(CAPACITY, 3_000),

@@ -72,11 +72,13 @@ final class VerifyCommand implements Callable<Integer> {
             Thread.sleep(2_000);
         } while (true);
         if (history == null) throw new IllegalStateException("History could not be read");
+        History verifiedHistory = history;
         List<JsonNode> baselines = new ArrayList<>();
         for (JsonNode node : files.read("baseline.json")) baselines.add(node);
         JsonNode urls = load.path("managementUrls");
         if (urls.size() != baselines.size()) throw new IllegalStateException("Snapshot replica count changed");
         Map<String, Long> calls = new HashMap<>();
+        Map<String, Long> effects = new HashMap<>();
         long signatureFailures = 0;
         long capacityRejected = 0;
         boolean trackingComplete = true;
@@ -98,6 +100,12 @@ final class VerifyCommand implements Callable<Integer> {
                 if (difference < 0) throw new IllegalStateException("Target count went backwards");
                 if (difference > 0) calls.merge(key, difference, Long::sum);
             });
+            Map<String, Long> previousEffects = effectCounts(before);
+            effectCounts(after).forEach((key, value) -> {
+                long difference = value - previousEffects.getOrDefault(key, 0L);
+                if (difference < 0) throw new IllegalStateException("Target effect count went backwards");
+                if (difference > 0) effects.merge(key, difference, Long::sum);
+            });
         }
         Set<String> expected = new HashSet<>(runIds);
         int missingHistory = 0;
@@ -116,9 +124,12 @@ final class VerifyCommand implements Callable<Integer> {
                 intervalJobs, session.path("intervalSec").asInt(), started, ended, expected);
         int missingTarget = 0;
         for (String id : expected) {
-            if (history.rows.containsKey(id) && !calls.containsKey(id)) missingTarget++;
+            if (history.rows.containsKey(id) && !effects.containsKey(id)) missingTarget++;
         }
-        long duplicates = calls.values().stream()
+        long redeliveries = calls.values().stream()
+                .mapToLong(count -> Math.max(0L, count - 1))
+                .sum();
+        long duplicates = effects.values().stream()
                 .mapToLong(count -> Math.max(0L, count - 1))
                 .sum();
         Set<String> historyIds = history.rows.keySet();
@@ -138,9 +149,11 @@ final class VerifyCommand implements Callable<Integer> {
         }
         List<Long> lags = history.rows.values().stream()
                 .filter(row -> expected.contains(row.runId()))
-                .filter(row -> row.startedAt() != null)
+                .filter(row -> verifiedHistory.startedAt(row) != null)
                 .map(row -> Math.max(
-                        0L, Duration.between(row.scheduledAt(), row.startedAt()).toMillis()))
+                        0L,
+                        Duration.between(row.scheduledAt(), verifiedHistory.startedAt(row))
+                                .toMillis()))
                 .sorted()
                 .toList();
         double p50 = percentile(lags, .50);
@@ -176,6 +189,7 @@ final class VerifyCommand implements Callable<Integer> {
         report.put("lagSamples", lags.size());
         report.put("outcomeMix", outcomeMix);
         report.put("duplicates", duplicates);
+        report.put("redeliveries", redeliveries);
         report.put("missingRuns", missing);
         report.put("unexpectedTargetKeys", unexpected);
         report.put("dlqCount", history.dlqCount);
@@ -191,15 +205,19 @@ final class VerifyCommand implements Callable<Integer> {
                             && !row.scheduledAt().isAfter(faultRestored))
                     .toList();
             long recoverySeconds = affected.stream()
-                    .filter(row -> row.startedAt() != null)
+                    .filter(row -> verifiedHistory.startedAt(row) != null)
                     .mapToLong(row -> Math.max(
-                            0, Duration.between(faultRestored, row.startedAt()).toSeconds()))
+                            0,
+                            Duration.between(faultRestored, verifiedHistory.startedAt(row))
+                                    .toSeconds()))
                     .max()
                     .orElse(-1);
             long maxFaultLagSeconds = affected.stream()
-                    .filter(row -> row.startedAt() != null)
+                    .filter(row -> verifiedHistory.startedAt(row) != null)
                     .mapToLong(row -> Math.max(
-                            0, Duration.between(row.scheduledAt(), row.startedAt()).toSeconds()))
+                            0,
+                            Duration.between(row.scheduledAt(), verifiedHistory.startedAt(row))
+                                    .toSeconds()))
                     .max()
                     .orElse(-1);
             report.put("faultAffectedRuns", affected.size());
@@ -209,21 +227,30 @@ final class VerifyCommand implements Callable<Integer> {
         files.write("verification.json", report);
         ReportCommand.render(files, report);
         System.out.printf(
-                "%s: %s; %,d/s, lag p99 %.0f ms, duplicates %d, missing %d, DLQ %d%n",
+                "%s: %s; %,d/s, lag p99 %.0f ms, duplicate effects %d, redeliveries %d, missing %d, DLQ %d%n",
                 load.path("profile").asString(),
                 passed ? "PASS" : "FAIL",
                 report.get("achievedExecutionsPerSecond"),
                 p99,
                 duplicates,
+                redeliveries,
                 missing,
                 history.dlqCount);
         return passed ? 0 : 1;
     }
 
     static Map<String, Long> counts(JsonNode snapshot) {
+        return countMap(snapshot.path("counts"));
+    }
+
+    static Map<String, Long> effectCounts(JsonNode snapshot) {
+        JsonNode effects = snapshot.path("effectCounts");
+        return effects.isObject() ? countMap(effects) : counts(snapshot);
+    }
+
+    private static Map<String, Long> countMap(JsonNode counts) {
         Map<String, Long> result = new HashMap<>();
-        snapshot.path("counts")
-                .properties()
+        counts.properties()
                 .forEach(entry -> result.put(entry.getKey(), entry.getValue().asLong()));
         return result;
     }
@@ -248,9 +275,9 @@ final class VerifyCommand implements Callable<Integer> {
             try (Connection connection = DriverManager.getConnection(url, parent.dbUser(), parent.dbPassword())) {
                 connection.setReadOnly(true);
                 connection.setAutoCommit(false);
-                try (PreparedStatement query =
-                        connection.prepareStatement("SELECT run_id, definition_id, outcome, scheduled_at, started_at "
-                                + "FROM scheduler.run_history WHERE team_id = ?::uuid AND final = true "
+                try (PreparedStatement query = connection.prepareStatement(
+                        "SELECT run_id, definition_id, outcome, scheduled_at, started_at, final "
+                                + "FROM scheduler.run_history WHERE team_id = ?::uuid "
                                 + "AND scheduled_at >= ? AND scheduled_at < ?")) {
                     query.setString(1, team);
                     query.setTimestamp(2, Timestamp.from(from));
@@ -258,14 +285,23 @@ final class VerifyCommand implements Callable<Integer> {
                     query.setFetchSize(2_000);
                     try (ResultSet rows = query.executeQuery()) {
                         while (rows.next()) {
+                            String runId = rows.getString(1);
+                            Instant startedAt = rows.getTimestamp(5) == null
+                                    ? null
+                                    : rows.getTimestamp(5).toInstant();
+                            if (startedAt != null) {
+                                history.firstStartedAt.merge(
+                                        runId,
+                                        startedAt,
+                                        (first, candidate) -> first.isBefore(candidate) ? first : candidate);
+                            }
+                            if (!rows.getBoolean(6)) continue;
                             History.Row row = new History.Row(
-                                    rows.getString(1),
+                                    runId,
                                     rows.getString(2),
                                     rows.getInt(3),
                                     rows.getTimestamp(4).toInstant(),
-                                    rows.getTimestamp(5) == null
-                                            ? null
-                                            : rows.getTimestamp(5).toInstant());
+                                    startedAt);
                             history.rows.put(row.runId(), row);
                             history.byJob
                                     .computeIfAbsent(row.definitionId(), ignored -> new ArrayList<>())
@@ -320,11 +356,16 @@ final class VerifyCommand implements Callable<Integer> {
 
     private static final class History {
         final Map<String, Row> rows = new HashMap<>();
+        final Map<String, Instant> firstStartedAt = new HashMap<>();
         final Map<String, List<Row>> byJob = new HashMap<>();
         final Map<String, Row> byOccurrence = new HashMap<>();
         final Map<String, Instant> jobAnchors = new HashMap<>();
         final Map<String, Instant> jobCreated = new HashMap<>();
         long dlqCount;
+
+        Instant startedAt(Row row) {
+            return firstStartedAt.getOrDefault(row.runId(), row.startedAt());
+        }
 
         boolean contains(Set<String> runIds, Set<String> immediateJobs, Set<String> cronJobs) {
             if (!rows.keySet().containsAll(runIds)) return false;

@@ -1,5 +1,7 @@
 package dev.kairos.executor.consume.infrastructure;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import dev.kairos.executor.consume.application.DispatchAdmission;
 import dev.kairos.executor.consume.application.DispatchIds;
 import dev.kairos.executor.consume.application.DispatchLimits;
@@ -9,6 +11,7 @@ import dev.kairos.proto.v1.Dispatch;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -19,6 +22,8 @@ public final class JdbcDispatchAdmission implements DispatchAdmission {
 
     private static final int DEFAULT_TEAM_MAX_INFLIGHT = 2_000;
     private static final int DEFAULT_ENDPOINT_MAX_CONCURRENCY = 200;
+    private static final Duration LIMIT_CACHE_TTL = Duration.ofSeconds(30);
+    private static final long LIMIT_CACHE_SIZE = 20_000;
 
     private final JdbcClient control;
     private final CellRouter cells;
@@ -26,6 +31,10 @@ public final class JdbcDispatchAdmission implements DispatchAdmission {
     private final ExecutorConsumerProperties properties;
     private final Clock clock;
     private final MeterRegistry meters;
+    private final Cache<LimitKey, DispatchLimits> limitCache = Caffeine.newBuilder()
+            .maximumSize(LIMIT_CACHE_SIZE)
+            .expireAfterWrite(LIMIT_CACHE_TTL)
+            .build();
 
     /** Creates the admission adapter. */
     public JdbcDispatchAdmission(
@@ -48,7 +57,8 @@ public final class JdbcDispatchAdmission implements DispatchAdmission {
         UUID teamId = DispatchIds.uuid(dispatch.getTeamId());
         UUID endpointId = DispatchIds.uuid(dispatch.getEndpointId());
         UUID runId = DispatchIds.uuid(dispatch.getRunId());
-        DispatchLimits limits = limits(teamId, endpointId, dispatch.getEndpointVersion());
+        DispatchLimits limits =
+                limitCache.get(new LimitKey(teamId, endpointId, dispatch.getEndpointVersion()), this::loadLimits);
         LocalDispatchLimiter.Result result = limiter.acquire(teamId, endpointId, limits);
         if (result == LocalDispatchLimiter.Result.ACQUIRED) {
             return true;
@@ -69,7 +79,7 @@ public final class JdbcDispatchAdmission implements DispatchAdmission {
         limiter.release(DispatchIds.uuid(dispatch.getTeamId()), DispatchIds.uuid(dispatch.getEndpointId()));
     }
 
-    private DispatchLimits limits(UUID teamId, UUID endpointId, int endpointVersion) {
+    private DispatchLimits loadLimits(LimitKey key) {
         return control.sql("""
                         SELECT COALESCE((t.quotas ->> 'maxInflight')::integer, :teamFallback) AS team_limit,
                                COALESCE((v.spec #>> '{limits,maxConcurrency}')::integer, :endpointFallback)
@@ -80,13 +90,15 @@ public final class JdbcDispatchAdmission implements DispatchAdmission {
                         """)
                 .param("teamFallback", DEFAULT_TEAM_MAX_INFLIGHT)
                 .param("endpointFallback", DEFAULT_ENDPOINT_MAX_CONCURRENCY)
-                .param("teamId", teamId)
-                .param("endpointId", endpointId)
-                .param("version", endpointVersion)
+                .param("teamId", key.teamId())
+                .param("endpointId", key.endpointId())
+                .param("version", key.endpointVersion())
                 .query((rs, _) -> new DispatchLimits(rs.getInt("team_limit"), rs.getInt("endpoint_limit")))
                 .optional()
                 .orElse(new DispatchLimits(DEFAULT_TEAM_MAX_INFLIGHT, DEFAULT_ENDPOINT_MAX_CONCURRENCY));
     }
+
+    private record LimitKey(UUID teamId, UUID endpointId, int endpointVersion) {}
 
     private boolean defer(Dispatch dispatch, UUID runId) {
         UUID targetId = DispatchIds.uuid(dispatch.getTargetId());

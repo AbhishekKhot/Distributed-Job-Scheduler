@@ -4,6 +4,7 @@ import dev.kairos.executor.cancel.infrastructure.InFlightCalls;
 import dev.kairos.executor.consume.application.DispatchAdmission;
 import dev.kairos.executor.consume.application.DispatchIds;
 import dev.kairos.executor.consume.application.DispatchProcessor;
+import dev.kairos.executor.gate.application.RunLockHeldException;
 import dev.kairos.executor.lifecycle.infrastructure.JdbcDrainRequeuer;
 import dev.kairos.messaging.client.KafkaClientFactory;
 import dev.kairos.messaging.client.KairosConsumer;
@@ -384,11 +385,17 @@ public final class DispatchConsumerRunner implements Runnable {
                     queueCompletion(offsets, new Completion(partition, record.offset(), token), slot);
                     return;
                 } catch (Exception failure) {
-                    LOG.log(
-                            System.Logger.Level.WARNING,
-                            "Dispatch processing did not reach a durable outcome; retrying: tier=" + tier.label()
-                                    + ", partition=" + record.partition() + ", offset=" + record.offset()
-                                    + ", error=" + failure.getClass().getSimpleName());
+                    if (acquired) {
+                        acquired = false;
+                        admission.release(dispatch);
+                    }
+                    if (!(failure instanceof RunLockHeldException)) {
+                        LOG.log(
+                                System.Logger.Level.WARNING,
+                                "Dispatch processing did not reach a durable outcome; retrying: tier=" + tier.label()
+                                        + ", partition=" + record.partition() + ", offset=" + record.offset()
+                                        + ", error=" + failure.getClass().getSimpleName());
+                    }
                     Thread.sleep(retryDelayMillis);
                     retryDelayMillis = Math.min(retryDelayMillis * 2, MAX_RETRY_DELAY_MILLIS);
                 }

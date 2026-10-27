@@ -85,7 +85,8 @@ public final class BehaviorController {
                 body,
                 header(request, "X-Kairos-Timestamp"),
                 header(request, "X-Kairos-Signature"));
-        if (!tracker.record(key, valid)) {
+        CallTracker.RecordResult tracking = tracker.record(key, valid, behavior.idempotent());
+        if (tracking == CallTracker.RecordResult.REJECTED) {
             response.setStatus(503);
             return;
         }
@@ -98,7 +99,10 @@ public final class BehaviorController {
             return;
         }
         try {
-            if (behavior.latencyMs() > 0) Thread.sleep(behavior.latencyMs());
+            if (behavior.latencyMs() > 0
+                    && !(behavior.idempotent() && tracking == CallTracker.RecordResult.DUPLICATE)) {
+                Thread.sleep(behavior.latencyMs());
+            }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             response.setStatus(503);

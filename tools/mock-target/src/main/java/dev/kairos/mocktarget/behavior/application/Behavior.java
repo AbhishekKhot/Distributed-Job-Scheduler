@@ -4,8 +4,10 @@ import java.util.Map;
 import java.util.Set;
 
 /** Immutable bounded behavior, resolved from a named profile plus explicit per-request overrides. */
-public record Behavior(int status, int latencyMs, double failRate, Integer bodyBytes, String profile) {
-    private static final Set<String> FIELDS = Set.of("profile", "status", "latencyMs", "failRate", "bodyBytes");
+public record Behavior(
+        int status, int latencyMs, double failRate, Integer bodyBytes, String profile, boolean idempotent) {
+    private static final Set<String> FIELDS =
+            Set.of("profile", "status", "latencyMs", "failRate", "bodyBytes", "idempotent");
 
     public static Behavior resolve(String pathProfile, Map<String, String[]> query) {
         if (!FIELDS.containsAll(query.keySet())
@@ -17,17 +19,18 @@ public record Behavior(int status, int latencyMs, double failRate, Integer bodyB
         if (pathProfile != null && query.containsKey("profile"))
             throw new IllegalArgumentException("Profile specified twice.");
         Behavior base = switch (selected) {
-            case "healthy" -> new Behavior(200, 0, 0, null, selected);
-            case "retryable" -> new Behavior(503, 0, 0, null, selected);
-            case "client-error" -> new Behavior(400, 0, 0, null, selected);
-            case "slow" -> new Behavior(200, 250, 0, null, selected);
-            case "mixed" -> new Behavior(200, 20, 0.1, null, selected);
+            case "healthy" -> new Behavior(200, 0, 0, null, selected, false);
+            case "retryable" -> new Behavior(503, 0, 0, null, selected, false);
+            case "client-error" -> new Behavior(400, 0, 0, null, selected, false);
+            case "slow" -> new Behavior(200, 250, 0, null, selected, false);
+            case "mixed" -> new Behavior(200, 20, 0.1, null, selected, false);
             default -> throw new IllegalArgumentException("Unknown behavior profile.");
         };
         int status = integer(query, "status", base.status), latency = integer(query, "latencyMs", base.latencyMs);
         double failure = query.containsKey("failRate") ? Double.parseDouble(query.get("failRate")[0]) : base.failRate;
         Integer body =
                 query.containsKey("bodyBytes") ? Integer.valueOf(integer(query, "bodyBytes", 0)) : base.bodyBytes;
+        boolean idempotent = query.containsKey("idempotent") ? bool(query.get("idempotent")[0]) : base.idempotent;
         if (status < 200
                 || status > 599
                 || latency < 0
@@ -35,9 +38,9 @@ public record Behavior(int status, int latencyMs, double failRate, Integer bodyB
                 || !Double.isFinite(failure)
                 || failure < 0
                 || failure > 1
-                || (body != null && (body < 0 || body > 1_048_576)))
-            throw new IllegalArgumentException("Behavior parameter out of range.");
-        return new Behavior(status, latency, failure, body, selected);
+                || (body != null && (body < 0 || body > 1_048_576))
+                || (idempotent && failure != 0)) throw new IllegalArgumentException("Behavior parameter out of range.");
+        return new Behavior(status, latency, failure, body, selected, idempotent);
     }
 
     /** Decode only the URL query; form bodies remain untouched for signature verification. */
@@ -60,5 +63,11 @@ public record Behavior(int status, int latencyMs, double failRate, Integer bodyB
 
     private static int integer(Map<String, String[]> query, String key, int fallback) {
         return query.containsKey(key) ? Integer.parseInt(query.get(key)[0]) : fallback;
+    }
+
+    private static boolean bool(String value) {
+        if (value.equals("true")) return true;
+        if (value.equals("false")) return false;
+        throw new IllegalArgumentException("Invalid boolean behavior parameter.");
     }
 }

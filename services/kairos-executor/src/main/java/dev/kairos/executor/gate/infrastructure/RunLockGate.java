@@ -5,6 +5,7 @@ import dev.kairos.engine.lock.RunLockPort;
 import dev.kairos.executor.gate.application.ExecutionContext;
 import dev.kairos.executor.gate.application.ExecutionGate;
 import dev.kairos.executor.gate.application.ExecutionGateUnavailableException;
+import dev.kairos.executor.gate.application.RunLockHeldException;
 import java.util.Objects;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -32,14 +33,14 @@ public final class RunLockGate implements ExecutionGate {
     }
 
     @Override
-    public GateResult apply(ExecutionContext context) {
+    public GateResult apply(ExecutionContext context) throws RunLockHeldException {
         AcquireResult result = locks.acquire(context.runId(), context.dispatchFence(), context.lockTtl());
         if (result instanceof AcquireResult.Acquired acquired) {
             context.acquired(acquired.lock());
             return GateResult.CONTINUE;
         }
         if (result instanceof AcquireResult.Held) {
-            return GateResult.DROP;
+            throw new RunLockHeldException();
         }
         throw new ExecutionGateUnavailableException("The Redis run lock is unavailable");
     }
