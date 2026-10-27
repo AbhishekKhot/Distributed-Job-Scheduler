@@ -28,7 +28,7 @@ GRADLE := docker run --rm --tty $(GRADLE_OPTS_DOCKER) $(JDK_IMAGE) $(GRADLE_ARGS
 BG_NAME := kairos-gradle
 GRADLE_BG := docker run --detach --name $(BG_NAME) $(GRADLE_OPTS_DOCKER) $(JDK_IMAGE) $(GRADLE_ARGS)
 
-.PHONY: help env build test gradle bg bg-logs bg-wait locks images up up-all down ps logs clean partitions
+.PHONY: help env build test gradle bg bg-logs bg-wait locks images up up-all down ps logs clean partitions kind-up kind-test kind-down
 
 help: ## List the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
@@ -70,6 +70,15 @@ up-all: env ## Same as up, plus Prometheus (127.0.0.1:9090) and Grafana (127.0.0
 
 partitions: env ## Run UTC partition creation and retention once with schema-owner credentials
 	$(COMPOSE) --profile maintenance run --build --rm kairos-partitions
+
+kind-up: ## Build and install Kairos plus pinned dependencies in a local kind cluster
+	@bash deploy/kind/kind.sh up
+
+kind-test: ## Run the smoke benchmark and E2E scenarios as Kubernetes Jobs
+	@bash deploy/kind/kind.sh test
+
+kind-down: ## Delete the local Kairos kind cluster and its generated credentials
+	@bash deploy/kind/kind.sh down
 
 down: ## Stop the stack and keep the data volumes
 	$(COMPOSE) --profile observability --profile bench --profile maintenance --profile tools down

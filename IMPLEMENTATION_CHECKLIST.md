@@ -300,12 +300,12 @@ Test names describe behaviour (`claimFailsWhenFenceIsStale`). Tests never sleep 
 | T-302 | Benchmark CLI | tools/bench-cli | done |
 | T-303 | Cross-module integration suites | tests | done |
 | T-304 | End-to-end scenarios | tools/bench-cli | done |
-| T-305 | Resilience and duplicate-execution proof | tools, scripts | review |
+| T-305 | Resilience and duplicate-execution proof | tools, scripts | in progress (Codex) |
 | T-306 | Per-cell write test and tuning | perf | todo |
 | T-401 | Helm chart | deploy/helm | review |
 | T-402 | Terraform for GCP | deploy/terraform | todo |
-| T-403 | CI pipeline | .github | todo |
-| T-404 | kind validation | deploy/kind | todo |
+| T-403 | CI pipeline | .github | review (PR #54) |
+| T-404 | kind validation | deploy/kind | in progress (Codex) |
 
 ---
 
@@ -978,9 +978,9 @@ Scenarios run with `bench-cli scenario <name>` against the detached stack (`make
 **Verification (2026-10-26):** Reset only the Kairos Compose volumes, started the complete stack with `make up`, rebuilt the bench CLI image, and ran `scenario all` from its packaged container. All six checks passed in sequence in 52 seconds; the report is `build/bench/t304-fresh-final/scenarios.json` (local, ignored). Isolation checked 47 ID or list routes, retry made six attempts before DLQ, workflow output was asserted by the signed mock target, and auto-protection reached the 50-dead-letter suspension threshold. Detached `make bg BG_NAME=kairos-t304-final-gate ARGS='spotlessCheck build check'` passed in 2m 18s: 2,568 tests, zero failures, errors or skips. The scenario harness is exercised in this whole-stack acceptance; its runner and environment classes are excluded from unit-JVM JaCoCo accounting while the HTTP adapter has unit tests. No dependencies or SQL migrations changed.
 
 ### T-305 Resilience and duplicate-execution proof
-**Status:** review (PR #53) · **Needs:** T-302, T-304 · **Owns:** `scripts/chaos/**`, `tools/bench-cli` scenario `chaos`
+**Status:** in progress (Codex; PR #53 harness merged, acceptance follow-up) · **Needs:** T-302, T-304 · **Owns:** `scripts/chaos/**`, `tools/bench-cli` scenario `chaos`; acceptance follow-up in executor replay and mock-target idempotency paths
 
-Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mock-target `/stats`) and 0 missing runs (`verify`).
+Each experiment runs during `load --profile smoke`, then checks 0 duplicate effects (mock-target `/stats/snapshot`) and 0 missing runs (`verify`). Repeated HTTP deliveries after an unknown outcome are reported separately and must retain the same idempotency key; the chaos endpoint models target-side idempotent effect handling.
 
 - [x] Kill an executor (`docker kill`) mid-load, repeated 5 times.
 - [x] Kill a watcher during lease handover.
@@ -990,7 +990,7 @@ Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mo
 - [x] Slow target (5s latency) at full load; the breaker and back-pressure hold.
 - [x] Rolling restart of every service under load.
 
-**Acceptance:** a report listing each experiment with duplicates = 0 and missing = 0, and recovery times within the HLD targets.
+**Acceptance:** a report listing each experiment with duplicate effects = 0, missing = 0, repeated deliveries reported, and recovery times within the HLD targets.
 
 ### T-306 Per-cell write test and tuning
 **Status:** todo · **Needs:** T-305, T-401, T-402 · **Owns:** `perf/**`, tuning changes in the owning modules (agreed per change)
@@ -1020,7 +1020,7 @@ Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mo
 
 **Acceptance:** `helm template` output passes `kubeconform` and a policy check (no root, no privilege escalation, limits set).
 
-**Verification (2026-10-27):** Detached Docker validation linted the base, kind and GKE values successfully with Helm 3.17.3. Base, kind, GKE and GKE-with-operator-session renders produced 120 resources in total; kubeconform 0.7.0 reported 101 built-in resources valid, zero invalid and zero errors, with 19 CRD resources skipped because their schemas were intentionally unavailable. The policy test passed all four renders, including non-root UID 10001, RuntimeDefault seccomp, read-only roots, no privilege escalation, dropped capabilities, `/tmp` emptyDir mounts, CPU/memory limits, the executor's 75-second grace period and absence of rendered Secret objects.
+**Verification (2026-10-27):** Detached Docker validation linted the base, kind and GKE values successfully with Helm 3.17.3. Base, kind, GKE and GKE-with-operator-session renders produced 120 resources in total; kubeconform 0.7.0 reported 101 built-in resources valid, zero invalid and zero errors, with 19 CRD resources skipped because their schemas were intentionally unavailable. The policy test passed all four renders (29, 15, 37 and 39 objects), including non-root UID 10001, RuntimeDefault seccomp, read-only roots, no privilege escalation, dropped capabilities, `/tmp` emptyDir mounts, CPU/memory limits, the executor's 75-second grace period and absence of rendered Secret objects. T-403 remains responsible for invoking these checks in CI.
 
 ### T-402 Terraform for GCP
 **Status:** todo · **Needs:** none (can start in wave 1) · **Owns:** `deploy/terraform/**`
@@ -1032,19 +1032,23 @@ Each experiment runs during `load --profile smoke`, then checks 0 duplicates (mo
 **Acceptance:** `terraform validate` and `tflint` pass, and `terraform plan` succeeds with a dummy project id in CI (offline providers mocked where needed).
 
 ### T-403 CI pipeline
-**Status:** todo · **Needs:** T-002 · **Owns:** `.github/workflows/**`, `.github/dependabot.yml`
+**Status:** review (PR #54) · **Needs:** T-002 · **Owns:** `.github/workflows/**`, `.github/dependabot.yml`
 
-- [ ] Workflow on pull requests and on `develop`: `make build`, `make test` (Testcontainers on the runner's Docker), the OpenAPI export diff, `make images`, a Trivy scan of the images (fail on high or critical vulnerabilities with a fix available), an SBOM (Syft) uploaded as an artefact, `helm lint`, and the Terraform checks.
-- [ ] Every third-party action pinned by full commit SHA with the version in a comment; `permissions` set to the minimum per job; no long-lived cloud credentials.
-- [ ] Gradle dependency verification enforced in CI (the build fails on a checksum mismatch).
-- [ ] Dependabot for Gradle, GitHub Actions and Docker base images; every update PR passes the same pipeline and refreshes lockfiles and checksums.
+- [x] Workflow on pull requests and on `develop`: `make build`, `make test` (Testcontainers on the runner's Docker), the OpenAPI export diff, `make images`, a Trivy scan of the images (fail on high or critical vulnerabilities with a fix available), an SBOM (Syft) uploaded as an artefact, `helm lint`, and the Terraform checks. Terraform/TFLint detection is dormant until T-402 creates `deploy/terraform`, then requires formatting, initialization, validation, an offline dummy plan and TFLint.
+- [x] Every third-party action pinned by full commit SHA with the version in a comment; workflow permissions are read-only, checkout credentials are not persisted, and no long-lived cloud credentials are used.
+- [x] Gradle dependency verification is explicitly strict in CI, so a checksum mismatch fails both `make build` and `make test`.
+- [x] Dependabot for Gradle, GitHub Actions, Docker base images and Compose images; every update PR enters the same pipeline, whose strict dependency verification requires refreshed lockfiles and checksums.
 
 **Acceptance:** a pull request shows all checks; a tampered checksum in `verification-metadata.xml` fails the build.
 
-### T-404 kind validation
-**Status:** todo · **Needs:** T-401 · **Owns:** `deploy/kind/**`, `make kind-*` targets
+**Verification (2026-10-28):** Detached Docker actionlint 1.7.12 passed the workflow with no findings. A separate pinned Python container parsed the workflow and Dependabot configuration successfully. A local policy check confirmed all nine third-party action uses are pinned to 40-character commit SHAs, permissions remain read-only, checkout credentials are not persisted, and neither `pull_request_target` nor write permissions are present. T-401's detached Helm/kubeconform/policy results exercise the exact chart commands now wired into CI. Full `make build`, `make test`, image scanning/SBOM generation and the PR check display require the first hosted GitHub Actions run; Terraform execution remains intentionally dormant until T-402 supplies its configuration and `ci.tfvars`.
 
-- [ ] A kind cluster config and a script that installs Postgres, Kafka and Redis in-cluster (charts pinned by version and digest), loads the locally built images, and installs the Kairos chart with `values-kind.yaml`.
-- [ ] `make kind-up`, `make kind-test` (runs the `smoke` profile and the end-to-end scenarios as a Kubernetes Job), `make kind-down`.
+### T-404 kind validation
+**Status:** in progress (Codex) · **Needs:** T-401 · **Owns:** `deploy/kind/**`, `make kind-*` targets
+
+- [x] A kind cluster config and a script that installs Postgres, Kafka and Redis in-cluster (charts pinned by version and digest), loads the locally built images, and installs the Kairos chart with `values-kind.yaml`.
+- [x] `make kind-up`, `make kind-test` (runs the `smoke` profile and the end-to-end scenarios as a Kubernetes Job), `make kind-down`.
 
 **Acceptance:** on kind, all pods become ready, the migrations Job completes, and the smoke profile passes with 0 duplicates.
+
+**Checkpoint (2026-10-28):** Tool and chart checksums/digests verified and the two-node Kubernetes 1.37 cluster plus namespace/secrets were created. Three bounded `kind-up` attempts stopped in the Bitnami PostgreSQL custom init script: first `POSTGRES_USER` was absent, then password authentication was required, and finally `POSTGRES_PASSWORD_FILE` was absent from the script environment. The current pod mounts the admin password at `/opt/bitnami/postgresql/secrets/postgres-password`; use that explicit path for `PGPASSWORD` or adjust local init authentication before retrying. Kafka, Redis, the Kairos migration/readiness checks, smoke verification and E2E Job have not run, so acceptance remains pending. The cluster remains available for debugging.

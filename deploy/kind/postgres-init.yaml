@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kairos-postgres-init
+  namespace: kairos
+data:
+  01-init-kairos.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export PGPASSWORD="$(cat "$POSTGRES_PASSWORD_FILE")"
+    psql=(psql --no-psqlrc -v ON_ERROR_STOP=1 --username postgres)
+    "${psql[@]}" --dbname postgres \
+      -v owner_password="$KAIROS_DB_OWNER_PASSWORD" \
+      -v app_password="$KAIROS_DB_APP_PASSWORD" <<'SQL'
+    CREATE ROLE sched_owner LOGIN PASSWORD :'owner_password';
+    CREATE ROLE sched_app LOGIN PASSWORD :'app_password';
+    SQL
+
+    for db in kairos_control kairos_cell0 kairos_cell1; do
+      "${psql[@]}" --dbname postgres -v db="$db" <<'SQL'
+    CREATE DATABASE :"db" OWNER sched_owner;
+    REVOKE ALL ON DATABASE :"db" FROM PUBLIC;
+    GRANT CONNECT, TEMPORARY ON DATABASE :"db" TO sched_app;
+    SQL
+      "${psql[@]}" --dbname "$db" <<'SQL'
+    REVOKE ALL ON SCHEMA public FROM PUBLIC;
+    CREATE SCHEMA scheduler AUTHORIZATION sched_owner;
+    GRANT USAGE ON SCHEMA scheduler TO sched_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE sched_owner IN SCHEMA scheduler
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO sched_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE sched_owner IN SCHEMA scheduler
+      GRANT USAGE, SELECT ON SEQUENCES TO sched_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE sched_owner IN SCHEMA scheduler
+      GRANT EXECUTE ON FUNCTIONS TO sched_app;
+    SQL
+      "${psql[@]}" --dbname postgres -v db="$db" <<'SQL'
+    ALTER ROLE sched_app IN DATABASE :"db" SET search_path = scheduler;
+    ALTER ROLE sched_owner IN DATABASE :"db" SET search_path = scheduler;
+    SQL
+    done

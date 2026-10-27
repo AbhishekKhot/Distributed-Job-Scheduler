@@ -1,0 +1,136 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kairos-kind-smoke
+  namespace: kairos
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: seed
+          image: kairos/bench-cli:dev
+          imagePullPolicy: Never
+          args: ["--output-dir", "/results", "seed", "--jobs", "500", "--interval-sec", "1"]
+          env: &bench-env
+            - name: KAIROS_API_URL
+              value: http://kairos-api:8080
+            - name: KAIROS_CELL_0_DB_URL
+              value: jdbc:postgresql://postgres:5432/kairos_cell0
+            - name: KAIROS_CELL_1_DB_URL
+              value: jdbc:postgresql://postgres:5432/kairos_cell1
+            - name: KAIROS_BENCH_DB_USER
+              value: postgres
+            - name: KAIROS_BENCH_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kairos-bench
+                  key: postgres-password
+          securityContext: &container-security
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts: &bench-mounts
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+        - name: load
+          image: kairos/bench-cli:dev
+          imagePullPolicy: Never
+          args:
+            - --output-dir
+            - /results
+            - load
+            - --profile
+            - smoke
+            - --warmup-seconds
+            - "5"
+            - --seconds
+            - "30"
+          env: *bench-env
+          securityContext: *container-security
+          volumeMounts: *bench-mounts
+        - name: verify
+          image: kairos/bench-cli:dev
+          imagePullPolicy: Never
+          args: ["--output-dir", "/results", "verify", "--wait-seconds", "180"]
+          env: *bench-env
+          securityContext: *container-security
+          volumeMounts: *bench-mounts
+      containers:
+        - name: report
+          image: kairos/bench-cli:dev
+          imagePullPolicy: Never
+          args: ["--output-dir", "/results", "report"]
+          env: *bench-env
+          securityContext: *container-security
+          volumeMounts: *bench-mounts
+      volumes:
+        - name: results
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kairos-kind-scenarios
+  namespace: kairos
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1200
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: scenarios
+          image: kairos/bench-cli:dev
+          imagePullPolicy: Never
+          args: ["--output-dir", "/results", "scenario", "all"]
+          env:
+            - name: KAIROS_API_URL
+              value: http://kairos-api:8080
+            - name: KAIROS_CELL_0_DB_URL
+              value: jdbc:postgresql://postgres:5432/kairos_cell0
+            - name: KAIROS_CELL_1_DB_URL
+              value: jdbc:postgresql://postgres:5432/kairos_cell1
+            - name: KAIROS_BENCH_DB_USER
+              value: postgres
+            - name: KAIROS_BENCH_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kairos-bench
+                  key: postgres-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: results
+              mountPath: /results
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: results
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
