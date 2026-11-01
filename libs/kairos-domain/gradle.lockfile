@@ -3,6 +3,7 @@
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :libs:kairos-domain:dependencies --write-locks
 com.cronutils:cron-utils:9.2.1=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson:jackson-bom:2.22.3=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.0.5=testAnnotationProcessor
 com.github.ben-manes.caffeine:caffeine:3.2.4=annotationProcessor
 com.github.kevinstern:software-and-algorithms:1.0=annotationProcessor,testAnnotationProcessor
@@ -57,4 +58,5 @@ org.pcollections:pcollections:4.0.1=annotationProcessor,testAnnotationProcessor
 org.slf4j:slf4j-api:2.0.18=compileClasspath,runtimeClasspath
 org.slf4j:slf4j-api:2.0.19=testCompileClasspath,testRuntimeClasspath
 org.springframework.boot:spring-boot-dependencies:4.1.1=annotationProcessor,compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+tools.jackson:jackson-bom:3.1.7=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 empty=

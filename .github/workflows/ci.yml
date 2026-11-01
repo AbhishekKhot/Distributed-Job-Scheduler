@@ -33,7 +33,7 @@ jobs:
             exit 1
           fi
       - name: Build
-        run: make build
+        run: make gradle ARGS='build --max-workers=2'
 
   integration:
     name: Integration tests
@@ -43,7 +43,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Run all checks with Testcontainers
-        run: make test
+        run: make gradle ARGS='check --max-workers=2'
 
   openapi:
     name: OpenAPI export diff

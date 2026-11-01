@@ -2,6 +2,7 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :libs:kairos-proto:dependencies --write-locks
+com.fasterxml.jackson:jackson-bom:2.22.3=compileClasspath,compileProtoPath,runtimeClasspath,testCompileClasspath,testCompileProtoPath,testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.0.5=testAnnotationProcessor
 com.github.ben-manes.caffeine:caffeine:3.2.4=annotationProcessor
 com.github.kevinstern:software-and-algorithms:1.0=annotationProcessor,testAnnotationProcessor
@@ -51,4 +52,5 @@ org.ow2.asm:asm:9.10.1=jacocoAnt
 org.pcollections:pcollections:4.0.1=annotationProcessor,testAnnotationProcessor
 org.slf4j:slf4j-api:2.0.19=testCompileClasspath,testCompileProtoPath,testRuntimeClasspath
 org.springframework.boot:spring-boot-dependencies:4.1.1=annotationProcessor,compileClasspath,compileProtoPath,runtimeClasspath,testCompileClasspath,testCompileProtoPath,testRuntimeClasspath
+tools.jackson:jackson-bom:3.1.7=compileClasspath,compileProtoPath,runtimeClasspath,testCompileClasspath,testCompileProtoPath,testRuntimeClasspath
 empty=protobuf,testProtobuf

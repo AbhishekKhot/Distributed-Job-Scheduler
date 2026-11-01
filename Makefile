@@ -5,7 +5,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-JDK_IMAGE := eclipse-temurin:25.0.4.1_1-jdk-noble@sha256:589ff4cc3f71aab462e7048a47a0d10edf57fbccde3fceea2281e610bf5880b4
+JDK_IMAGE := eclipse-temurin:25.0.4.1_1-jdk-noble@sha256:a9c5ddd386f629518bd500ecfabf7d1e5d32d7ffed735d5c3b1604ae92c830f4
 COMPOSE   := docker compose --file deploy/compose/docker-compose.yml --env-file deploy/compose/.env
 
 # Gradle in a container. The Gradle home (distribution and dependency cache) lives in a named
