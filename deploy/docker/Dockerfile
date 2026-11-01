@@ -6,8 +6,8 @@
 # image built from the same sources. Gradle checks each dependency against
 # gradle/verification-metadata.xml, and the gradle.lockfile files fix the versions.
 
-ARG JDK_IMAGE=eclipse-temurin:25.0.4.1_1-jdk-noble@sha256:589ff4cc3f71aab462e7048a47a0d10edf57fbccde3fceea2281e610bf5880b4
-ARG JRE_IMAGE=eclipse-temurin:25.0.4.1_1-jre-noble@sha256:d9a39a23634650173f1e2bbc176227af9728587ecf0f4b62d53e9355cd7a19ab
+ARG JDK_IMAGE=eclipse-temurin:25.0.4.1_1-jdk-noble@sha256:a9c5ddd386f629518bd500ecfabf7d1e5d32d7ffed735d5c3b1604ae92c830f4
+ARG JRE_IMAGE=eclipse-temurin:25.0.4.1_1-jre-noble@sha256:ce8543ddd3070ccbeaac2106a74c9387ddeb8d47a1c43348345715c1ef245c7f
 
 # ---------------------------------------------------------------------------------------------
 FROM ${JDK_IMAGE} AS build

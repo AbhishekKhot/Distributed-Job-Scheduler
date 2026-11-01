@@ -2,11 +2,12 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :libs:kairos-test-support:dependencies --write-locks
-at.yawk.lz4:lz4-java:1.10.1=testRuntimeClasspath
+at.yawk.lz4:lz4-java:1.11.4=testRuntimeClasspath
 ch.qos.logback:logback-classic:1.5.38=testRuntimeClasspath
 ch.qos.logback:logback-core:1.5.38=testRuntimeClasspath
 com.cronutils:cron-utils:9.2.1=runtimeClasspath,testRuntimeClasspath
-com.fasterxml.jackson.core:jackson-annotations:2.21=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson.core:jackson-annotations:2.22=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson:jackson-bom:2.22.3=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.0.5=testAnnotationProcessor
 com.github.ben-manes.caffeine:caffeine:3.2.4=annotationProcessor
 com.github.docker-java:docker-java-api:3.7.1=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
@@ -100,6 +101,7 @@ org.testcontainers:testcontainers-jdbc:2.0.5=compileClasspath,runtimeClasspath,t
 org.testcontainers:testcontainers-kafka:2.0.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.testcontainers:testcontainers-postgresql:2.0.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 org.testcontainers:testcontainers:2.0.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
-org.xerial.snappy:snappy-java:1.1.10.7=testRuntimeClasspath
+org.xerial.snappy:snappy-java:1.1.10.9=testRuntimeClasspath
 redis.clients.authentication:redis-authx-core:0.1.1-beta2=testCompileClasspath,testRuntimeClasspath
+tools.jackson:jackson-bom:3.1.7=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 empty=

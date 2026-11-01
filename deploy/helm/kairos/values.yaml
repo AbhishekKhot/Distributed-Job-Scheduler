@@ -1,0 +1,318 @@
+# Production-neutral defaults. Use values-gke.yaml for GKE and values-kind.yaml for local kind.
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+images:
+  tag: latest
+  pullPolicy: IfNotPresent
+  api:
+    repository: kairos/kairos-api
+  watcher:
+    repository: kairos/kairos-watcher
+  executor:
+    repository: kairos/kairos-executor
+  state:
+    repository: kairos/kairos-state
+  migrations:
+    repository: kairos/kairos-migrations
+  maintenance:
+    repository: kairos/kairos-maintenance
+
+serviceAccounts:
+  api:
+    annotations: {}
+  watcher:
+    annotations: {}
+  executor:
+    annotations: {}
+  state:
+    annotations: {}
+  migrations:
+    annotations: {}
+  maintenance:
+    annotations: {}
+  operator:
+    annotations: {}
+
+# Non-secret application connection settings. Passwords and API cryptographic material
+# come from runtimeSecrets.existingSecret or Secret Manager CSI.
+connections:
+  springProfilesActive: ""
+  controlDatabaseUrl: jdbc:postgresql://pgbouncer-control.database.svc.cluster.local:5432/kairos_control
+  cellDatabaseUrls:
+    - jdbc:postgresql://pgbouncer-cell0.database.svc.cluster.local:5432/kairos_cell0
+    - jdbc:postgresql://pgbouncer-cell1.database.svc.cluster.local:5432/kairos_cell1
+  databaseUsername: sched_app
+  ownerDatabaseUsername: sched_owner
+  kafka:
+    bootstrapServers: kafka.kafka.svc.cluster.local:9093
+    securityProtocol: SASL_SSL
+    saslMechanism: PLAIN
+    trustCertificateFile: kafka-ca.pem
+  redis:
+    host: redis.redis.svc.cluster.local
+    port: 6379
+    username: sched_app
+    tls: true
+    trustCertificateFile: redis-ca.pem
+  kekUri: gcp-kms://projects/PROJECT/locations/LOCATION/keyRings/kairos/cryptoKeys/kek
+  executorInternalBaseUrl: http://kairos-executor:8080
+
+runtimeSecrets:
+  # The referenced Secret is managed outside this chart. Required keys are documented in README.md.
+  existingSecret: kairos-runtime
+  csi:
+    enabled: false
+    provider: gke
+    driver: secrets-store-gke.csi.k8s.io
+    # Separate lists preserve least-privilege Secret Manager IAM per service account.
+    objectsByComponent:
+      api: []
+      watcher: []
+      executor: []
+      state: []
+    # Example object:
+    # - resourceName: projects/PROJECT/secrets/kairos-db-password/versions/latest
+    #   path: KAIROS_DB_PASSWORD
+
+ownerSecrets:
+  existingSecret: kairos-owner
+  csi:
+    enabled: false
+    provider: gke
+    driver: secrets-store-gke.csi.k8s.io
+    objects: []
+
+# DML-only control-database credentials for an on-demand interactive operator session.
+operatorSecrets:
+  existingSecret: kairos-operator
+  csi:
+    enabled: false
+    provider: gke
+    driver: secrets-store-gke.csi.k8s.io
+    objects: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop:
+      - ALL
+
+components:
+  api:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 1Gi
+  watcher:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 1Gi
+  executor:
+    replicas: 2
+    terminationGracePeriodSeconds: 75
+    targetPolicy:
+      allowedSuffixes:
+        - .internal
+      allowedHosts: []
+      allowedCidrs: []
+      allowedPorts:
+        - 443
+        - 8443
+      infrastructureHosts: []
+      infrastructureCidrs: []
+    resources:
+      requests:
+        cpu: 500m
+        memory: 768Mi
+      limits:
+        cpu: "4"
+        memory: 2Gi
+  state:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 1Gi
+
+probes:
+  liveness:
+    path: /actuator/health/liveness
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    path: /actuator/health/readiness
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+service:
+  api:
+    type: ClusterIP
+    port: 8080
+  executor:
+    type: ClusterIP
+    port: 8080
+
+migrations:
+  enabled: true
+  backoffLimit: 1
+  activeDeadlineSeconds: 900
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+maintenance:
+  enabled: true
+  schedule: "17 2 * * *"
+  timeZone: Etc/UTC
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 1800
+  activeDeadlineSeconds: 1800
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+operatorSession:
+  enabled: false
+  databaseUsername: sched_app
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 300
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+autoscaling:
+  api:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  keda:
+    enabled: true
+    pollingInterval: 15
+    cooldownPeriod: 60
+    kafka:
+      authenticationRef: ""
+      authenticationSecretName: ""
+      lagThreshold: "100"
+      offsetResetPolicy: earliest
+      tls: enable
+      sasl: plaintext
+    executor:
+      minReplicas: 2
+      maxReplicas: 50
+      topics:
+        - name: kairos.run.high
+          consumerGroup: kairos-executor-high
+        - name: kairos.run.medium
+          consumerGroup: kairos-executor-medium
+        - name: kairos.run.low
+          consumerGroup: kairos-executor-low
+    state:
+      minReplicas: 2
+      maxReplicas: 30
+      topic: kairos.run.result
+      consumerGroup: kairos-state-results
+
+networkPolicy:
+  enabled: true
+  workloadIdentityEgress:
+    enabled: true
+    endpoints:
+      # GKE Dataplane V2.
+      - cidr: 169.254.169.254/32
+        ports:
+          - 80
+          - 8080
+      # GKE network policy provider; retaining both avoids disruption during a Dataplane V2 migration.
+      - cidr: 169.254.169.252/32
+        ports:
+          - 987
+          - 988
+  apiIngress:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: ingress-nginx
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: ingress-nginx
+  monitoringIngress:
+    enabled: true
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: monitoring
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus
+  # CIDRs must be the resolved private ranges for Cloud SQL/PgBouncer, Kafka, Redis,
+  # Google APIs/KMS, and any other required infrastructure.
+  infrastructureEgress:
+    cidrs: []
+    ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 5432
+      - protocol: TCP
+        port: 6379
+      - protocol: TCP
+        port: 9093
+  executorTargetEgress:
+    cidrs: []
+    ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 8443
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []

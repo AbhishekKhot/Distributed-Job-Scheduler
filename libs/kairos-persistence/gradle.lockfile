@@ -5,7 +5,8 @@
 ch.qos.logback:logback-classic:1.5.38=testRuntimeClasspath
 ch.qos.logback:logback-core:1.5.38=testRuntimeClasspath
 com.cronutils:cron-utils:9.2.1=runtimeClasspath,testRuntimeClasspath
-com.fasterxml.jackson.core:jackson-annotations:2.21=compileClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson.core:jackson-annotations:2.22=compileClasspath,testCompileClasspath,testRuntimeClasspath
+com.fasterxml.jackson:jackson-bom:2.22.3=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 com.fasterxml:classmate:1.7.3=testRuntimeClasspath
 com.github.ben-manes.caffeine:caffeine:3.0.5=testAnnotationProcessor
 com.github.ben-manes.caffeine:caffeine:3.2.4=annotationProcessor
@@ -108,4 +109,5 @@ org.testcontainers:testcontainers-kafka:2.0.5=testRuntimeClasspath
 org.testcontainers:testcontainers-postgresql:2.0.5=testRuntimeClasspath
 org.testcontainers:testcontainers:2.0.5=testRuntimeClasspath
 org.yaml:snakeyaml:2.6=testRuntimeClasspath
+tools.jackson:jackson-bom:3.1.7=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 empty=

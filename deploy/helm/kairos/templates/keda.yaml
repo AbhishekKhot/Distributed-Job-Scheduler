@@ -1,0 +1,84 @@
+{{- if .Values.autoscaling.keda.enabled }}
+{{- if .Values.autoscaling.keda.kafka.authenticationSecretName }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "kairos.fullname" . }}-kafka
+  labels:
+    {{- include "kairos.labels" . | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: username
+      name: {{ .Values.autoscaling.keda.kafka.authenticationSecretName }}
+      key: KAIROS_KAFKA_USERNAME
+    - parameter: password
+      name: {{ .Values.autoscaling.keda.kafka.authenticationSecretName }}
+      key: KAIROS_KAFKA_PASSWORD
+{{- end }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "kairos.fullname" . }}-executor
+  labels:
+    {{- include "kairos.labels" . | nindent 4 }}
+    app.kubernetes.io/component: executor
+spec:
+  scaleTargetRef:
+    name: {{ include "kairos.fullname" . }}-executor
+  pollingInterval: {{ .Values.autoscaling.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.autoscaling.keda.cooldownPeriod }}
+  minReplicaCount: {{ .Values.autoscaling.keda.executor.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.keda.executor.maxReplicas }}
+  fallback:
+    failureThreshold: 3
+    replicas: {{ .Values.autoscaling.keda.executor.minReplicas }}
+  triggers:
+    {{- range .Values.autoscaling.keda.executor.topics }}
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ $.Values.connections.kafka.bootstrapServers | quote }}
+        consumerGroup: {{ .consumerGroup | quote }}
+        topic: {{ .name | quote }}
+        lagThreshold: {{ $.Values.autoscaling.keda.kafka.lagThreshold | quote }}
+        offsetResetPolicy: {{ $.Values.autoscaling.keda.kafka.offsetResetPolicy | quote }}
+        tls: {{ $.Values.autoscaling.keda.kafka.tls | quote }}
+        sasl: {{ $.Values.autoscaling.keda.kafka.sasl | quote }}
+      {{- if or $.Values.autoscaling.keda.kafka.authenticationRef $.Values.autoscaling.keda.kafka.authenticationSecretName }}
+      authenticationRef:
+        name: {{ default (printf "%s-kafka" (include "kairos.fullname" $)) $.Values.autoscaling.keda.kafka.authenticationRef }}
+      {{- end }}
+    {{- end }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "kairos.fullname" . }}-state
+  labels:
+    {{- include "kairos.labels" . | nindent 4 }}
+    app.kubernetes.io/component: state
+spec:
+  scaleTargetRef:
+    name: {{ include "kairos.fullname" . }}-state
+  pollingInterval: {{ .Values.autoscaling.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.autoscaling.keda.cooldownPeriod }}
+  minReplicaCount: {{ .Values.autoscaling.keda.state.minReplicas }}
+  maxReplicaCount: {{ .Values.autoscaling.keda.state.maxReplicas }}
+  fallback:
+    failureThreshold: 3
+    replicas: {{ .Values.autoscaling.keda.state.minReplicas }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.connections.kafka.bootstrapServers | quote }}
+        consumerGroup: {{ .Values.autoscaling.keda.state.consumerGroup | quote }}
+        topic: {{ .Values.autoscaling.keda.state.topic | quote }}
+        lagThreshold: {{ .Values.autoscaling.keda.kafka.lagThreshold | quote }}
+        offsetResetPolicy: {{ .Values.autoscaling.keda.kafka.offsetResetPolicy | quote }}
+        tls: {{ .Values.autoscaling.keda.kafka.tls | quote }}
+        sasl: {{ .Values.autoscaling.keda.kafka.sasl | quote }}
+      {{- if or .Values.autoscaling.keda.kafka.authenticationRef .Values.autoscaling.keda.kafka.authenticationSecretName }}
+      authenticationRef:
+        name: {{ default (printf "%s-kafka" (include "kairos.fullname" .)) .Values.autoscaling.keda.kafka.authenticationRef }}
+      {{- end }}
+{{- end }}

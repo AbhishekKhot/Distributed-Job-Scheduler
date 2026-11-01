@@ -16,7 +16,12 @@ bouncycastle = "1.86"
 nimbus-jose-jwt = "10.10"
 guava = "33.7.2-jre"
 caffeine = "3.3.1"
+jackson2 = "2.22.3"
+jackson3 = "3.1.7"
+lz4 = "1.11.4"
 picocli = "4.7.7"
+snappy = "1.1.10.9"
+tomcat = "11.0.25"
 jqwik = "1.10.2"
 archunit = "1.5.1"
 jmh = "1.37"
@@ -50,7 +55,12 @@ bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = 
 nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+jackson2-bom = { module = "com.fasterxml.jackson:jackson-bom", version.ref = "jackson2" }
+jackson3-bom = { module = "tools.jackson:jackson-bom", version.ref = "jackson3" }
+lz4-java = { module = "at.yawk.lz4:lz4-java", version.ref = "lz4" }
 picocli = { module = "info.picocli:picocli", version.ref = "picocli" }
+snappy-java = { module = "org.xerial.snappy:snappy-java", version.ref = "snappy" }
+tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcat" }
 jqwik = { module = "net.jqwik:jqwik", version.ref = "jqwik" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 jmh-core = { module = "org.openjdk.jmh:jmh-core", version.ref = "jmh" }
