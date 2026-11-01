@@ -38,6 +38,11 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
     @CommandLine.Option(names = "--seconds", description = "Short diagnostic duration override")
     Integer seconds;
 
+    @CommandLine.Option(
+            names = "--chaos-seconds",
+            description = "Extend a full smoke load so every fault completes during measurement")
+    Integer chaosSeconds;
+
     @CommandLine.Option(names = "--diagnostic-rate", description = "Requests/s for a short diagnostic run")
     Integer diagnosticRate;
 
@@ -55,9 +60,18 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
                 || warmupSeconds < 0
                 || warmupSeconds > 600
                 || seconds != null && seconds < 1
+                || chaosSeconds != null
+                        && (profile != LoadProfile.SMOKE
+                                || chaosSeconds < 120
+                                || chaosSeconds > 600
+                                || seconds != null
+                                || diagnosticRate != null)
                 || diagnosticRate != null && (seconds == null || diagnosticRate < 1)) {
             throw new IllegalArgumentException("Invalid load limits");
         }
+        Duration loadDuration = chaosSeconds != null
+                ? Duration.ofSeconds(chaosSeconds)
+                : seconds == null ? profile.duration() : Duration.ofSeconds(seconds);
         BenchFiles files = parent.files();
         if (Files.exists(files.path("load.json")) || Files.exists(files.path("expected.ndjson"))) {
             throw new IllegalStateException("Load already exists; use a new --output-dir for another run");
@@ -125,7 +139,7 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
                 accepted.set(cron.size());
             } else if (intervalDriver) {
                 started = Instant.now();
-                Duration duration = seconds == null ? profile.duration() : Duration.ofSeconds(seconds);
+                Duration duration = loadDuration;
                 if (profile == LoadProfile.RAMP_50K) {
                     long until = System.nanoTime() + duration.toNanos();
                     while (System.nanoTime() < until) {
@@ -169,7 +183,7 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
                 accepted.set(offered.get());
             } else {
                 started = Instant.now();
-                Duration duration = seconds == null ? profile.duration() : Duration.ofSeconds(seconds);
+                Duration duration = loadDuration;
                 Semaphore permits = new Semaphore(maxInflight);
                 try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
                     long origin = System.nanoTime();
@@ -256,6 +270,7 @@ final class LoadCommand implements java.util.concurrent.Callable<Integer> {
         metadata.put("warmupSeconds", intervalDriver ? warmupSeconds : 0);
         metadata.put("driver", profile == LoadProfile.BURST ? "cron" : intervalDriver ? "interval" : "api");
         metadata.put("diagnostic", seconds != null || diagnosticRate != null);
+        metadata.put("chaosSeconds", chaosSeconds);
         metadata.put("startedAt", started.toString());
         metadata.put("endedAt", ended.toString());
         metadata.put("durationSeconds", Duration.between(started, ended).toSeconds());

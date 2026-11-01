@@ -33,3 +33,17 @@ docker compose -f deploy/compose/docker-compose.yml --env-file deploy/compose/.e
 ```
 
 The six checks run in order: `onboarding`, `job-lifecycle`, `retry-to-dlq`, `workflow-data-passing`, `isolation`, and `auto-protection`. Run one with `scenario <name>` in place of `scenario all`. `scenarios.json` records each result and elapsed time under the selected output directory without storing credentials. A failed check stops the sequence and exits nonzero. The workflow scenario uses signed mock-target assertion headers to verify that A's output appears in D's header and JSON body; the target returns 422 if either value differs. The isolation scenario checks cross-team access to ID-based APIs and team-filtered lists. The protection scenario uses the default threshold of 50 dead letters in five minutes, so leave the stack running until its endpoint suspension is observed.
+
+## Resilience and duplicate execution (T-305)
+
+Build and start the stack, including the current bench CLI image. Run the fault suite from the host with Docker access:
+
+```sh
+make up
+docker compose -f deploy/compose/docker-compose.yml --env-file deploy/compose/.env --profile bench build bench-cli
+bash scripts/chaos/run.sh all
+```
+
+The runner requires at least 10 GiB of free host disk before starting. It gives each experiment a private smoke session with 500 one-second interval jobs and a 120-second warm-up. Executor kills use a 300-second measured window and rolling restarts use 360 seconds, keeping every restart inside the load; other experiments use the standard 120 seconds. It starts the load in a detached container, waits for the target baseline, injects the fault, waits for recovery, and runs `verify --chaos --wait-seconds 1200`. The chaos verifier retains the full per-key duplicate, missing-run, dead-letter, capacity, signature and replica-continuity checks. It records schedule lag without imposing the steady-state two-second lag limit during an outage. `scenario chaos` combines the seven fault and verification records into `build/bench/<session>/chaos.json` and `chaos.md`; the private `session.json` files remain under each experiment directory. Use `bash scripts/chaos/run.sh executor-kill <session>` to run only one experiment. A full `all` run uses a fresh session name by default.
+
+The experiments kill one executor five times, kill a watcher during lease handover, pause Kafka for 60 seconds, restart Redis, block cell 0 connections for 30 seconds while cell 1 stays available, run a five-second target at the smoke rate, and restart API, watcher, executor and state services under load. The runner restores a paused Kafka container and cell 0 connection access on interruption. The report measures restoration to service readiness, the latest start of a run due during the fault, and the maximum start lag for those runs. Executor and watcher faults must keep that lag within the HLD's approximately 20-second node target. Infrastructure readiness is limited to 120 seconds; rolling restart and slow target have a 300-second readiness allowance. Final verification waits for accepted runs to settle and records schedule lag in each experiment's `verification.json`.
