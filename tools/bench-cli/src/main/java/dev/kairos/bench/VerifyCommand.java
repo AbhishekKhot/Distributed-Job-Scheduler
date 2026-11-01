@@ -199,7 +199,8 @@ final class VerifyCommand implements Callable<Integer> {
             long maxFaultLagSeconds = affected.stream()
                     .filter(row -> row.startedAt() != null)
                     .mapToLong(row -> Math.max(
-                            0, Duration.between(row.scheduledAt(), row.startedAt()).toSeconds()))
+                            0,
+                            Duration.between(row.scheduledAt(), row.startedAt()).toSeconds()))
                     .max()
                     .orElse(-1);
             report.put("faultAffectedRuns", affected.size());

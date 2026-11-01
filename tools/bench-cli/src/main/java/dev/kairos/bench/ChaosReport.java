@@ -66,8 +66,10 @@ final class ChaosReport {
                     .append(" |\n");
         }
         markdown.append("\nReadiness is measured from fault restoration to service health. ")
-                .append("Latest delivery is the latest start of a run due during the fault, measured from restoration. ")
-                .append("The 20-second HLD node target applies to maximum start lag during executor and watcher faults.\n");
+                .append(
+                        "Latest delivery is the latest start of a run due during the fault, measured from restoration. ")
+                .append(
+                        "The 20-second HLD node target applies to maximum start lag during executor and watcher faults.\n");
         files.writeText("chaos.md", markdown.toString());
         System.out.println("T-305 chaos: " + (passed ? "PASS" : "FAIL") + "; " + files.path("chaos.md"));
         return passed ? 0 : 1;

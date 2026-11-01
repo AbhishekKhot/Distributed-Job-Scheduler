@@ -24,8 +24,17 @@ java {
 dependencies {
     // All modules share the Spring Boot BOM so library versions never drift between services.
     implementation(platform(lib("spring-boot-bom")))
+    implementation(platform(lib("jackson2-bom")))
+    implementation(platform(lib("jackson3-bom")))
+    constraints {
+        implementation(lib("lz4-java"))
+        implementation(lib("snappy-java"))
+        implementation(lib("tomcat-embed-core"))
+    }
     annotationProcessor(platform(lib("spring-boot-bom")))
     testImplementation(platform(lib("spring-boot-bom")))
+    testImplementation(platform(lib("jackson2-bom")))
+    testImplementation(platform(lib("jackson3-bom")))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.assertj:assertj-core")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
