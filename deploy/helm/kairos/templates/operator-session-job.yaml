@@ -1,0 +1,66 @@
+{{- if .Values.operatorSession.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "kairos.fullname" . }}-operator
+  labels:
+    {{- include "kairos.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.operatorSession.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.operatorSession.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "kairos.selectorLabels" (dict "root" . "component" "operator") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "kairos.serviceAccountName" (dict "root" . "component" "operator") }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: operator
+          image: {{ printf "%s:%s" .Values.images.maintenance.repository .Values.images.tag | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              echo "operator session ready; use kubectl exec -it and delete this Job when finished"
+              sleep {{ .Values.operatorSession.activeDeadlineSeconds }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          {{- if not .Values.operatorSecrets.csi.enabled }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.operatorSecrets.existingSecret }}
+          {{- end }}
+          env:
+            - name: KAIROS_CONTROL_DB_URL
+              value: {{ .Values.connections.controlDatabaseUrl | quote }}
+            - name: KAIROS_DB_USERNAME
+              value: {{ .Values.operatorSession.databaseUsername | quote }}
+          resources:
+            {{- toYaml .Values.operatorSession.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.operatorSecrets.csi.enabled }}
+            - name: operator-secrets
+              mountPath: /var/run/secrets/kairos-operator
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.operatorSecrets.csi.enabled }}
+        - name: operator-secrets
+          csi:
+            driver: {{ .Values.operatorSecrets.csi.driver }}
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "kairos.fullname" . }}-operator
+        {{- end }}
+{{- end }}
